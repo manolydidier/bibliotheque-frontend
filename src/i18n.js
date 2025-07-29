@@ -1,0 +1,154 @@
+import i18n from 'i18next';
+import { initReactI18next } from 'react-i18next';
+
+i18n
+  .use(initReactI18next)
+  .init({
+    resources: {
+      en: {
+        translation: {
+          // Main menu
+          "home": "Home",
+          "platform": "Platform",
+          "genre": "Genre",
+          "about": "About",
+          
+          // Platform submenu
+          "summary": "Summary",
+          "video": "Video",
+          "podcast": "Podcast",
+          
+          // Genre submenu
+          "playdoier": "Playdoier",
+          "fundraising": "Fundraising",
+          "technical": "Technical",
+          
+          // About submenu
+          "structure": "Structure",
+          "goals": "Goals",
+          "members": "Members",
+          "contact": "Contact",
+          
+          // User section
+          "search": "Search",
+          "profile": "Profile",
+          "settings": "Settings",
+          "notifications": "Notifications",
+          "logout": "Logout",
+          
+          // Auth
+        "login": "Login",
+        "signup": "Sign Up",
+        "welcome_back": "Welcome back",
+        "login_to_account": "Login to your account",
+        "create_account": "Create your account",
+        "join_community": "Join our community now",
+        "email": "Email address",
+        "password": "Password",
+        "remember_me": "Remember me",
+        "forgot_password": "Forgot password?",
+        "no_account": "Don't have an account?",
+        "have_account": "Already have an account?",
+        "first_name": "First name",
+        "last_name": "Last name",
+        "to connect": "To connect",
+        "confirm_password": "Confirm password",
+        "accept_terms": "I accept the terms and conditions",
+        "login_with": "Or login with",
+        "signup_with": "Or sign up with",
+        "password_strength": "Password strength",
+        "continue_with_google": "Continue with Google",
+        "connect": "Connect",
+        "register": "Register",
+
+          // Auth errors
+         "required": "This field is required",
+          "invalidEmail": "Invalid email",
+          "passwordMinLength": "Minimum 8 characters",
+          "passwordMismatch": "Passwords don't match",
+        // errerur
+          "an_error_has_occurred":'an error has occurred',
+          "incorrect_credentials":'incorrect credentials',
+          "failed_to_register":'Failed to register',
+          // Language
+          "language": "Language"
+        }
+      },
+      fr: {
+        translation: {
+          // Menu principal
+          "home": "Accueil",
+          "platform": "Plateforme",
+          "genre": "Genre",
+          "about": "À propos",
+          
+          // Sous-menu Plateforme
+          "summary": "Résumé",
+          "video": "Vidéo",
+          "podcast": "Podcast",
+          
+          // Sous-menu Genre
+          "playdoier": "Playdoier",
+          "fundraising": "Fundraising",
+          "technical": "Technique",
+          
+          // Sous-menu À propos
+          "structure": "Structure",
+          "goals": "Objectifs",
+          "members": "Membres",
+          "contact": "Contact",
+          
+          // Section utilisateur
+          "search": "Rechercher",
+          "profile": "Profil",
+          "settings": "Paramètres",
+          "notifications": "Notifications",
+          "logout": "Déconnexion",
+          
+          // Authentification
+          "login": "Connexion",
+          "signup": "Inscription",
+          "welcome_back": "Content de vous revoir",
+          "login_to_account": "Connectez-vous à votre compte",
+          "create_account": "Créez votre compte",
+          "join_community": "Rejoignez notre communauté dès maintenant",
+          "email": "Adresse email",
+          "password": "Mot de passe",
+          "remember_me": "Se souvenir de moi",
+          "forgot_password": "Mot de passe oublié ?",
+          "no_account": "Pas encore de compte ?",
+          "have_account": "Déjà un compte ?",
+          "first_name": "Prénom",
+          "last_name": "Nom",
+          "connect": "Se connecter",
+          "register": "S'inscrire",
+          "confirm_password": "Confirmez le mot de passe",
+          "accept_terms": "J'accepte les conditions d'utilisation",
+          "login_with": "Ou connectez-vous avec",
+          "signup_with": "Ou inscrivez-vous avec",
+          "password_strength": "Force du mot de passe",
+          "continue_with_google": "Continuer avec Google",
+          
+          // Auth errors
+           "required": "Ce champ est obligatoire",
+          "invalidEmail": "Email invalide",
+          "passwordMinLength": "8 caractères minimum",
+          "passwordMismatch": "Les mots de passe ne correspondent pas",
+          
+          // errerur
+          "an_error_has_occurred":'Une erreur est survenue',
+          "incorrect_credentials":'Identifiants incorrects',
+          "failed_to_register":"Échec de l'inscription",
+          // Langue
+          "language": "Langue"
+        }
+      }
+    },
+    lng: "fr", // Langue par défaut
+    fallbackLng: "fr", // Langue de repli
+    interpolation: {
+      escapeValue: false // Permet le HTML dans les traductions si besoin
+    }
+  });
+
+export default i18n;

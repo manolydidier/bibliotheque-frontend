@@ -1,0 +1,51 @@
+import { createSlice } from '@reduxjs/toolkit';
+
+const initialState = {
+  auth: {
+    loading: false,
+    isAuthenticated: false,
+    user: null, 
+    error: null,
+    roles: [],
+    permissions: [],
+  },
+};
+
+export const librarySlice = createSlice({
+  name: 'library',
+  initialState,
+  reducers: {
+    // Reducers pour l'authentification
+    loginStart: (state) => {
+      state.auth.loading = true;
+      state.auth.error = null;
+    },
+    loginSuccess: (state, action) => {
+      state.auth.isAuthenticated = true;
+      state.auth.user = action.payload.user;
+      state.auth.roles = action.payload.roles || [];
+      state.auth.permissions = action.payload.permissions || [];
+      state.auth.loading = false;
+      state.auth.error = null;
+    },
+    loginFailure: (state, action) => {
+      state.auth.loading = false;
+      state.auth.error = action.payload;
+    },
+    logout: (state) => {
+      state.auth.isAuthenticated = false;
+      state.auth.user = null;
+      state.auth.roles = [];
+      state.auth.permissions = [];
+    }
+  },
+});
+
+export const {
+  loginStart,
+  loginSuccess,
+  loginFailure,
+  logout
+} = librarySlice.actions;
+
+export default librarySlice.reducer;
