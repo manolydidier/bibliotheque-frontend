@@ -1,9 +1,11 @@
 import { createSlice } from '@reduxjs/toolkit';
 
 const initialState = {
+  langue:'fr',
   auth: {
     loading: false,
-    isAuthenticated: false,
+    isAuthenticated: !!localStorage.getItem('auth_token'),
+    token: localStorage.getItem('auth_token') || null,
     user: null, 
     error: null,
     roles: [],
@@ -15,7 +17,6 @@ export const librarySlice = createSlice({
   name: 'library',
   initialState,
   reducers: {
-    // Reducers pour l'authentification
     loginStart: (state) => {
       state.auth.loading = true;
       state.auth.error = null;
@@ -32,12 +33,17 @@ export const librarySlice = createSlice({
       state.auth.loading = false;
       state.auth.error = action.payload;
     },
-    logout: (state) => {
+    logoutUser: (state) => {
+      localStorage.removeItem('auth_token');
       state.auth.isAuthenticated = false;
       state.auth.user = null;
       state.auth.roles = [];
       state.auth.permissions = [];
+    },
+    language :(state, action) => {
+      state.langue = action.payload.langue;
     }
+
   },
 });
 
@@ -45,7 +51,8 @@ export const {
   loginStart,
   loginSuccess,
   loginFailure,
-  logout
+  logoutUser,
+  language
 } = librarySlice.actions;
 
 export default librarySlice.reducer;

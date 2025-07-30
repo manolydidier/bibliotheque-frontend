@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faSearch, 
@@ -7,7 +7,6 @@ import {
   faUserPlus, 
   faUserCircle, 
   faCog, 
-  faBell, 
   faSignOutAlt,
   faFileAlt,
   faVideo,
@@ -19,98 +18,33 @@ import {
   faChevronDown
 } from '@fortawesome/free-solid-svg-icons';
 import { useTranslation } from 'react-i18next';
+import { useDispatch, useSelector } from 'react-redux';
+import { logoutUser } from '../../features/auth/authActions';
 import LanguageSwitcher from '../langue/LanguageSwitcher';
 
 const Navbar = () => {
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
+  
+  // Récupération de l'état d'authentification depuis Redux
+  const authState = useSelector(state => state.library?.auth || {});
+  const { isAuthenticated, user } = authState;
+  
+  // États pour la gestion de l'UI
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [activeSubmenu, setActiveSubmenu] = useState(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(window.innerWidth > 1024);
   
+  // Références
   const searchRef = useRef(null);
   const userProfileRef = useRef(null);
   const navRef = useRef(null);
   const burgerRef = useRef(null);
 
-  const { t, i18n } = useTranslation();
-  const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
-  const langMenuRef = useRef(null);
-
-  const changeLanguage = (lng) => {
-    i18n.changeLanguage(lng);
-    setIsLangMenuOpen(false);
-    if (!isDesktop) setIsMenuOpen(false);
-  };
-
-  useEffect(() => {
-    const handleResize = () => {
-      const isNowDesktop = window.innerWidth > 1024;
-      setIsDesktop(isNowDesktop);
-      
-      if (isNowDesktop) {
-        setIsMenuOpen(false);
-        setActiveSubmenu(null);
-        setIsProfileOpen(false);
-      }
-    };
-
-    const handleClickOutside = (event) => {
-      if (langMenuRef.current && !langMenuRef.current.contains(event.target)) {
-        setIsLangMenuOpen(false);
-      }
-      if (searchRef.current && !searchRef.current.contains(event.target)) {
-        setIsSearchOpen(false);
-      }
-      if (userProfileRef.current && !userProfileRef.current.contains(event.target)) {
-        setIsProfileOpen(false);
-      }
-      if (isMenuOpen && navRef.current && !navRef.current.contains(event.target)) {
-        if (burgerRef.current && !burgerRef.current.contains(event.target)) {
-          setIsMenuOpen(false);
-        }
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-    document.addEventListener('mousedown', handleClickOutside);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isMenuOpen]);
-
-  const toggleMenu = () => {
-    setIsMenuOpen(!isMenuOpen);
-    if (!isMenuOpen) {
-      setActiveSubmenu(null);
-      setIsProfileOpen(false);
-    }
-  };
-
-  const toggleProfile = () => {
-    setIsProfileOpen(!isProfileOpen);
-  };
-
-  const toggleSearch = () => {
-    setIsSearchOpen(!isSearchOpen);
-    if (!isSearchOpen && searchRef.current) {
-      searchRef.current.focus();
-    }
-  };
-
-  const toggleSubmenu = (index) => {
-    if (isDesktop) return;
-    setActiveSubmenu(activeSubmenu === index ? null : index);
-  };
-
-  const handleNavLinkClick = () => {
-    if (!isDesktop) {
-      setIsMenuOpen(false);
-    }
-  };
-
+  // Navigation links
   const navLinks = [
     { 
       name: t('home'), 
@@ -146,6 +80,92 @@ const Navbar = () => {
       ] 
     }
   ];
+
+  // Gestion du changement de langue
+  const changeLanguage = (lng) => {
+    i18n.changeLanguage(lng);
+    if (!isDesktop) setIsMenuOpen(false);
+  };
+
+  // Effets pour la gestion des événements
+  useEffect(() => {
+    const handleResize = () => {
+      const isNowDesktop = window.innerWidth > 1024;
+      setIsDesktop(isNowDesktop);
+      
+      if (isNowDesktop) {
+        setIsMenuOpen(false);
+        setActiveSubmenu(null);
+        setIsProfileOpen(false);
+      }
+    };
+
+    const handleClickOutside = (event) => {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setIsSearchOpen(false);
+      }
+      if (userProfileRef.current && !userProfileRef.current.contains(event.target)) {
+        setIsProfileOpen(false);
+      }
+      if (isMenuOpen && navRef.current && !navRef.current.contains(event.target)) {
+        if (burgerRef.current && !burgerRef.current.contains(event.target)) {
+          setIsMenuOpen(false);
+        }
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMenuOpen]);
+
+  // Fonctions de gestion d'UI
+  const toggleMenu = () => {
+    setIsMenuOpen(!isMenuOpen);
+    if (!isMenuOpen) {
+      setActiveSubmenu(null);
+      setIsProfileOpen(false);
+    }
+  };
+
+  const toggleProfile = () => {
+    setIsProfileOpen(!isProfileOpen);
+  };
+
+  const toggleSearch = () => {
+    setIsSearchOpen(!isSearchOpen);
+    if (!isSearchOpen && searchRef.current) {
+      searchRef.current.focus();
+    }
+  };
+
+  const toggleSubmenu = (index) => {
+    if (isDesktop) return;
+    setActiveSubmenu(activeSubmenu === index ? null : index);
+  };
+
+  const handleNavLinkClick = () => {
+    if (!isDesktop) {
+      setIsMenuOpen(false);
+    }
+  };
+
+  // Gestion de la déconnexion
+  const handleLogout = async () => {
+    try {
+      await dispatch(logoutUser(i18n.language));
+      setIsProfileOpen(false);
+      setIsMenuOpen(false);
+      navigate('/');
+      
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
 
   return (
     <nav className="fixed top-0 left-0 w-full bg-gradient-to-r from-blue-900 to-blue-700 shadow-md flex justify-between items-center px-6 h-20 z-50">
@@ -265,29 +285,6 @@ const Navbar = () => {
                 )}
               </li>
             ))}
-
-            {/* Language Switcher */}
-            <LanguageSwitcher isMobile />
-
-            {/* Mobile Auth Buttons */}
-            <div className="mobile-actions w-full mt-8">
-              <div className="mobile-auth-buttons flex flex-col gap-3 w-full">
-                <Link 
-                  to="/login" 
-                  className="mobile-login-btn border border-blue-600 text-blue-600 rounded-md py-3 text-center font-medium"
-                  onClick={handleNavLinkClick}
-                >
-                  {t('login')} 
-                </Link>
-                <Link 
-                  to="/signup" 
-                  className="mobile-signup-btn bg-blue-600 text-white rounded-md py-3 text-center font-medium"
-                  onClick={handleNavLinkClick}
-                >
-                  {t('signup')} 
-                </Link>
-              </div>
-            </div>
           </ul>
 
           {/* Overlay for mobile */}
@@ -300,12 +297,12 @@ const Navbar = () => {
         </>
       )}
 
-      {/* User Section */}
+      {/* User Section - Toujours visible */}
       <div className="user-section flex items-center gap-6">
-        {isDesktop && <LanguageSwitcher />}
+        
 
         {/* Search */}
-        <div className="search-container relative">
+        <div className="search-container relative mt-2">
           <button 
             className="search-btn text-white text-lg cursor-pointer hover:text-blue-400 transition-all"
             onClick={toggleSearch}
@@ -321,24 +318,26 @@ const Navbar = () => {
             placeholder={t('search')}
           />
         </div>
+            {/* Language Switcher - Toujours visible */}
+        <LanguageSwitcher />
 
-        {/* Auth Buttons - Desktop */}
-        {isDesktop && (
+        {/* Auth Buttons - Toujours visible */}
+        {!isAuthenticated && (
           <div className="auth-buttons flex gap-3">
-            <Link to="/login" className="auth-btn login-btn border border-white border-opacity-30 rounded-md px-2 py-1 text-white hover:bg-white hover:bg-opacity-10 hover:border-opacity-50 transition-all">
+            <Link to="/auth" className="auth-btn login-btn border border-white border-opacity-30 rounded-md px-2 py-1 text-white hover:bg-white hover:bg-opacity-10 hover:border-opacity-50 transition-all">
               <FontAwesomeIcon icon={faSignInAlt} />
             </Link>
-            <Link to="/signup" className="auth-btn signup-btn bg-blue-500 text-white rounded-md px-2 py-1 hover:bg-blue-600 transition-all">
+            <Link to="/auth" className="auth-btn signup-btn bg-blue-500 text-white rounded-md px-2 py-1 hover:bg-blue-600 transition-all">
               <FontAwesomeIcon icon={faUserPlus} />
             </Link>
           </div>
         )}
 
-        {/* User Profile - Desktop */}
-        {isDesktop && (
+        {/* User Profile - Toujours visible si authentifié */}
+        {isAuthenticated && (
           <div className="user-profile relative" ref={userProfileRef}>
             <img 
-              src="https://randomuser.me/api/portraits/women/44.jpg" 
+              src={user?.avatar || "https://randomuser.me/api/portraits/women/44.jpg"} 
               alt="User" 
               className="user-avatar w-10 h-10 rounded-full border-2 border-white border-opacity-30 hover:border-blue-500 transition-all cursor-pointer"
               onClick={toggleProfile}
@@ -364,19 +363,18 @@ const Navbar = () => {
                 <FontAwesomeIcon icon={faCog} className="mr-3 text-blue-600" />
                 {t('settings')} 
               </Link>
-              <Link 
-                to="/logout" 
-                className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-500 hover:bg-blue-50 transition-all"
-                onClick={toggleProfile}
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center px-6 py-3 text-gray-800 hover:text-blue-500 hover:bg-blue-50 transition-all text-left"
               >
                 <FontAwesomeIcon icon={faSignOutAlt} className="mr-3 text-blue-600" />
                 {t('logout')} 
-              </Link>
+              </button>
             </div>
           </div>
         )}
 
-        {/* Burger Menu */}
+        {/* Burger Menu - Mobile seulement */}
         {!isDesktop && (
           <div 
             ref={burgerRef}

@@ -2,11 +2,14 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faGlobe, faChevronDown } from '@fortawesome/free-solid-svg-icons';
+import { language } from '../../store/slices/Slice';
+import { useDispatch } from 'react-redux';
 
 const LanguageSwitcher = ({ isMobile = false }) => {
   const { i18n } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const currentLanguage = i18n.language || 'fr';
+  const dispatch = useDispatch();
 
   const languages = [
     { code: 'fr', name: 'Français' },
@@ -16,6 +19,10 @@ const LanguageSwitcher = ({ isMobile = false }) => {
 const changeLanguage = (lng) => {
     if (i18n && typeof i18n.changeLanguage === 'function') {
       i18n.changeLanguage(lng);
+      dispatch(language({
+        langue: lng,
+          }));
+      
     } else {
       console.error('i18n not properly initialized');
     }

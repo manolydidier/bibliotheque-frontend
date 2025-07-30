@@ -8,6 +8,8 @@ import AuthPage from './pages/auth/AuthPage'
 
 import { Provider } from 'react-redux'
 import { store } from './store/store'
+import { toast } from './component/toast/toast'
+import Toaster from './component/toast/Toaster'
 
 
 
@@ -63,7 +65,29 @@ function App() {
           } />
         </Routes>
       </Router>
-       
+       <Toaster />
+  <div className="p-8 space-y-4">
+        <button
+          className="px-4 py-2 bg-green-600 text-white rounded"
+          onClick={() => toast.success('Succès ! ✅')}
+        >
+          Toast succès
+        </button>
+
+        <button
+          className="px-4 py-2 bg-red-600 text-white rounded"
+          onClick={() => toast.error('Erreur ❌', { duration: null })}
+        >
+          Toast erreur (manuel)
+        </button>
+
+        <button
+          className="px-4 py-2 bg-blue-600 text-white rounded"
+          onClick={() => toast.loading('Chargement...')}
+        >
+          Toast loading
+        </button>
+      </div>
     </Provider>
     </I18nextProvider>
   )

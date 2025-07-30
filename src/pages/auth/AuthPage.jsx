@@ -6,6 +6,8 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { loginUser, registerUser } from '../../features/auth/authActions';
 import './auth.css';
+import LoadingComponent from '../../component/loading/LoadingComponent';
+import Toaster from '../../component/toast/Toaster';
 
 const AuthPage = () => {
   const GoogleIcon = () => (
@@ -21,11 +23,12 @@ const AuthPage = () => {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const navigate = useNavigate();
-   const { isAuthenticated, loading, error: authError } = useSelector(state => state.library.auth);
-console.log('isAuthenticated:', isAuthenticated);
+  const { isAuthenticated, loading, error: authError } = useSelector(state => state.library.auth);
+  const langue = useSelector(state => state.library.langue);
 
   const [isLoginActive, setIsLoginActive] = useState(false);
   const [formData, setFormData] = useState({
+    username: '', // Champ ajouté
     firstName: '',
     lastName: '',
     email: '',
@@ -43,7 +46,7 @@ console.log('isAuthenticated:', isAuthenticated);
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/dashboard'); // Rediriger vers le tableau de bord après connexion
+      navigate('/dashboard');
     }
   }, [isAuthenticated, navigate]);
 
@@ -59,7 +62,6 @@ console.log('isAuthenticated:', isAuthenticated);
       [name]: type === 'checkbox' ? checked : value
     }));
     
-    // Clear error when user starts typing
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
@@ -68,6 +70,7 @@ console.log('isAuthenticated:', isAuthenticated);
   const validateForm = () => {
     const newErrors = {};
     
+    // Validation pour le login
     if (!formData.email.trim()) {
       newErrors.email = t('required');
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
@@ -80,7 +83,16 @@ console.log('isAuthenticated:', isAuthenticated);
       newErrors.password = t('passwordMinLength');
     }
 
+    // Validation spécifique à l'inscription
     if (!isLoginActive) {
+      if (!formData.username.trim()) {
+        newErrors.username = t('username_required');
+      } else if (formData.username.length < 3) {
+        newErrors.username = t('username_too_short');
+      } else if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
+        newErrors.username = t('username_invalid');
+      }
+
       if (!formData.firstName.trim()) {
         newErrors.firstName = t('required');
       }
@@ -98,31 +110,29 @@ console.log('isAuthenticated:', isAuthenticated);
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
-
+    
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log(formData);
     
     if (!validateForm()) return;
 
     if (isLoginActive) {
-      console.log(isLoginActive);
-      
       await dispatch(loginUser({
         email: formData.email,
         password: formData.password,
-        rememberMe: formData.rememberMe
+        rememberMe: formData.rememberMe,
+        langue: langue
       }));
     } else {
       await dispatch(registerUser({
-        username: 'ravaka28',
+        username: formData.username, // Utilisation de la valeur du formulaire
         first_name: formData.firstName,
         last_name: formData.lastName,
         email: formData.email,
         password: formData.password,
         password_confirmation: formData.confirmPassword,
-        acceptTerms: formData.acceptTerms 
-
+        acceptTerms: formData.acceptTerms,
+        langue: langue,
       }));
     }
   };
@@ -134,276 +144,307 @@ console.log('isAuthenticated:', isAuthenticated);
     }));
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-bleu-pale">
-      <div className="auth-container">
-        <button
-          onClick={toggleAuthMode}
-          className="floating-btn"
-          title={isLoginActive ? t("signup") : t("login")}
-          disabled={loading}
-        >
-          <FontAwesomeIcon 
-            icon={isLoginActive ? faUserPlus : faSignInAlt} 
-            className="text-xl" 
-          />
-        </button>
 
-        {/* Page de Connexion */}
-        <div className={`auth-page login-page ${isLoginActive ? 'active' : ''}`}>
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-bleu-fonce mb-2">
-              {t(isLoginActive ? 'welcome_back' : 'create_account')}
-            </h1>
-            <p className="text-bleu-moyen">{t(isLoginActive ? 'login_to_account' : 'join_community')}</p>
+  return (
+    <>
+    <Toaster />
+      <div className="min-h-screen flex items-center justify-center p-4 bg-bleu-pale">
+        <div className="auth-container">
+          <button
+            onClick={toggleAuthMode}
+            className="floating-btn"
+            title={isLoginActive ? t("signup") : t("login")}
+            disabled={loading}
+          >
+            <FontAwesomeIcon 
+              icon={isLoginActive ? faUserPlus : faSignInAlt} 
+              className="text-xl" 
+            />
+          </button>
+
+          {/* Page de Connexion */}
+          <div className={`auth-page login-page ${isLoginActive ? 'active' : ''}`}>
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold text-bleu-fonce mb-2">
+                {t(isLoginActive ? 'welcome_back' : 'create_account')}
+              </h1>
+              <p className="text-bleu-moyen">{t(isLoginActive ? 'login_to_account' : 'join_community')}</p>
+            </div>
+
+             {authError && (
+              <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">
+                {authError&& t('invalid_credentials')}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="input-group">
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  placeholder=" "
+                  className={errors.email ? 'invalid' : ''}
+                  disabled={loading}
+                />
+                <label>{t("email")}</label>
+                {errors.email && <span className="error-message">{errors.email}</span>}
+              </div>
+
+              <div className="input-group">
+                <input
+                  type={showPassword.login ? "text" : "password"}
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  placeholder=" "
+                  className={errors.password ? 'invalid' : ''}
+                  disabled={loading}
+                />
+                <label>{t("password")}</label>
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => togglePasswordVisibility('login')}
+                  disabled={loading}
+                >
+                  <FontAwesomeIcon icon={showPassword.login ? faEyeSlash : faEye} />
+                </button>
+                {errors.password && <span className="error-message">{errors.password}</span>}
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="rememberMe"
+                    name="rememberMe"
+                    checked={formData.rememberMe}
+                    onChange={handleChange}
+                    className="w-4 h-4 text-bleu-accent rounded focus:ring-bleu-accent border-bleu-pale"
+                    disabled={loading}
+                  />
+                  <label htmlFor="rememberMe" className="ml-2 text-sm text-bleu-moyen">
+                    {t("remember_me")}
+                  </label>
+                </div>
+                <button 
+                  type="button" 
+                  className="text-sm text-bleu-accent hover:text-bleu-fonce transition-all"
+                  disabled={loading}
+                >
+                  {t("forgot_password")}
+                </button>
+              </div>
+
+              <button 
+                  type="submit" 
+                  className="submit-btn"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <div className='flex items-center justify-center gap-4'>
+                    <LoadingComponent size={5} color="border-white"/>  {t("loading")} 
+                    </div>
+                  ) : (
+                    t("connect")
+                  )}
+                </button>
+            </form>
+
+            <div className="mt-6 text-center">
+              <p className="text-bleu-moyen">
+                {t("no_account")}{' '}
+                <button
+                  onClick={toggleAuthMode}
+                  className="text-bleu-accent font-medium hover:text-bleu-fonce transition-all"
+                  disabled={loading}
+                >
+                  {t("register")}?
+                </button>
+              </p>
+            </div>
+
+            <div className="flex items-center my-6 text-[#3b5998] text-sm">
+              <div className="flex-grow border-t border-gray-300 opacity-50"></div>
+              <span className="mx-4">{t("login_with")}</span>
+              <div className="flex-grow border-t border-gray-300 opacity-50"></div>
+            </div>
+
+            <button 
+              className="google-btn"
+              disabled={loading}
+            >
+              <GoogleIcon />
+              <span>{t("continue_with_google")}</span>
+            </button>
           </div>
 
-          {authError && (
-            <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">
-              {authError}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="input-group">
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder=" "
-                className={errors.email ? 'invalid' : ''}
-                disabled={loading}
-              />
-              <label>{t("email")}</label>
-              {errors.email && <span className="error-message">{errors.email}</span>}
+          {/* Page d'Inscription */}
+          <div className={`auth-page register-page ${!isLoginActive ? 'active' : ''}`}>
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold text-bleu-fonce mb-2">{t("create_account")}</h1>
+              <p className="text-bleu-moyen">{t("join_community")}</p>
             </div>
 
-            <div className="input-group">
-              <input
-                type={showPassword.login ? "text" : "password"}
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                placeholder=" "
-                className={errors.password ? 'invalid' : ''}
-                disabled={loading}
-              />
-              <label>{t("password")}</label>
-              <button
-                type="button"
-                className="password-toggle"
-                onClick={() => togglePasswordVisibility('login')}
-                disabled={loading}
-              >
-                <FontAwesomeIcon icon={showPassword.login ? faEyeSlash : faEye} />
-              </button>
-              {errors.password && <span className="error-message">{errors.password}</span>}
-            </div>
+            {authError && (
+              <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">
+                {authError}
+              </div>
+            )}
 
-            <div className="flex items-center justify-between">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="input-group">
+                <input
+                  type="text"
+                  name="username"
+                  value={formData.username}
+                  onChange={handleChange}
+                  placeholder=" "
+                  className={errors.username ? 'invalid' : ''}
+                  disabled={loading}
+                />
+                <label>{t("username")}</label>
+                {errors.username && <span className="error-message">{errors.username}</span>}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
+                
+                <div className="input-group">
+                  <input
+                    type="text"
+                    name="firstName"
+                    value={formData.firstName}
+                    onChange={handleChange}
+                    placeholder=" "
+                    className={errors.firstName ? 'invalid' : ''}
+                    disabled={loading}
+                  />
+                  <label>{t("first_name")}</label>
+                  {errors.firstName && <span className="error-message">{errors.firstName}</span>}
+                </div>
+
+                <div className="input-group">
+                  <input
+                    type="text"
+                    name="lastName"
+                    value={formData.lastName}
+                    onChange={handleChange}
+                    placeholder=" "
+                    className={errors.lastName ? 'invalid' : ''}
+                    disabled={loading}
+                  />
+                  <label>{t("last_name")}</label>
+                  {errors.lastName && <span className="error-message">{errors.lastName}</span>}
+                </div>
+              </div>
+
+              <div className="input-group">
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  placeholder=" "
+                  className={errors.email ? 'invalid' : ''}
+                  disabled={loading}
+                />
+                <label>{t("email")}</label>
+                {errors.email && <span className="error-message">{errors.email}</span>}
+              </div>
+
+              <div className="input-group">
+                <input
+                  type={showPassword.register ? "text" : "password"}
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  placeholder=" "
+                  className={errors.password ? 'invalid' : ''}
+                  disabled={loading}
+                />
+                <label>{t("password")}</label>
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => togglePasswordVisibility('register')}
+                  disabled={loading}
+                >
+                  <FontAwesomeIcon icon={showPassword.register ? faEyeSlash : faEye} />
+                </button>
+                {errors.password && <span className="error-message">{errors.password}</span>}
+              </div>
+
+              <div className="input-group">
+                <input
+                  type={showPassword.confirm ? "text" : "password"}
+                  name="confirmPassword"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  placeholder=" "
+                  className={errors.confirmPassword ? 'invalid' : ''}
+                  disabled={loading}
+                />
+                <label>{t("confirm_password")}</label>
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => togglePasswordVisibility('confirm')}
+                  disabled={loading}
+                >
+                  <FontAwesomeIcon icon={showPassword.confirm ? faEyeSlash : faEye} />
+                </button>
+                {errors.confirmPassword && <span className="error-message">{errors.confirmPassword}</span>}
+              </div>
+
               <div className="flex items-center">
                 <input
                   type="checkbox"
-                  id="rememberMe"
-                  name="rememberMe"
-                  checked={formData.rememberMe}
+                  id="acceptTerms"
+                  name="acceptTerms"
+                  checked={formData.acceptTerms}
                   onChange={handleChange}
                   className="w-4 h-4 text-bleu-accent rounded focus:ring-bleu-accent border-bleu-pale"
                   disabled={loading}
                 />
-                <label htmlFor="rememberMe" className="ml-2 text-sm text-bleu-moyen">
-                  {t("remember_me")}
+                <label htmlFor="acceptTerms" className="ml-2 text-sm text-bleu-moyen">
+                  {t("accept_terms")}
                 </label>
               </div>
+              {errors.terms && <div className="error-message mt-2">{errors.terms}</div>}
+
               <button 
-                type="button" 
-                className="text-sm text-bleu-accent hover:text-bleu-fonce transition-all"
+                type="submit" 
+                className="submit-btn"
                 disabled={loading}
               >
-                {t("forgot_password")}
+                {loading ? (
+                    <div className='flex items-center justify-center gap-4'>
+                      <LoadingComponent size={10} color="border-white"/> {t("loading")}
+                    </div>
+                  ) : (
+                    t("register")
+                  )}
               </button>
-            </div>
+            </form>
 
-            <button 
-              type="submit" 
-              className="submit-btn"
-              disabled={loading}
-            >
-              {loading ? t("loading") : t("connect")}
-            </button>
-          </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-bleu-moyen">
-              {t("no_account")}{' '}
-              <button
-                onClick={toggleAuthMode}
-                className="text-bleu-accent font-medium hover:text-bleu-fonce transition-all"
-                disabled={loading}
-              >
-                {t("register")}?
-              </button>
-            </p>
-          </div>
-
-          <div className="flex items-center my-6 text-[#3b5998] text-sm">
-            <div className="flex-grow border-t border-gray-300 opacity-50"></div>
-            <span className="mx-4">{t("login_with")}</span>
-            <div className="flex-grow border-t border-gray-300 opacity-50"></div>
-          </div>
-
-          <button 
-            className="google-btn"
-            disabled={loading}
-          >
-            <GoogleIcon />
-            <span>{t("continue_with_google")}</span>
-          </button>
-        </div>
-
-        {/* Page d'Inscription */}
-        <div className={`auth-page register-page ${!isLoginActive ? 'active' : ''}`}>
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-bleu-fonce mb-2">{t("create_account")}</h1>
-            <p className="text-bleu-moyen">{t("join_community")}</p>
-          </div>
-
-          {authError && (
-            <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">
-              {authError}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
-              <div className="input-group">
-                <input
-                  type="text"
-                  name="firstName"
-                  value={formData.firstName}
-                  onChange={handleChange}
-                  placeholder=" "
-                  className={errors.firstName ? 'invalid' : ''}
+            <div className="mt-6 text-center">
+              <p className="text-bleu-moyen">
+                {t("have_account")}{' '}
+                <button
+                  onClick={toggleAuthMode}
+                  className="text-bleu-accent font-medium hover:text-bleu-fonce transition-all"
                   disabled={loading}
-                />
-                <label>{t("first_name")}</label>
-                {errors.firstName && <span className="error-message">{errors.firstName}</span>}
-              </div>
-
-              <div className="input-group">
-                <input
-                  type="text"
-                  name="lastName"
-                  value={formData.lastName}
-                  onChange={handleChange}
-                  placeholder=" "
-                  className={errors.lastName ? 'invalid' : ''}
-                  disabled={loading}
-                />
-                <label>{t("last_name")}</label>
-                {errors.lastName && <span className="error-message">{errors.lastName}</span>}
-              </div>
+                >
+                  {t("connect")}
+                </button>
+              </p>
             </div>
-
-            <div className="input-group">
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder=" "
-                className={errors.email ? 'invalid' : ''}
-                disabled={loading}
-              />
-              <label>{t("email")}</label>
-              {errors.email && <span className="error-message">{errors.email}</span>}
-            </div>
-
-            <div className="input-group">
-              <input
-                type={showPassword.register ? "text" : "password"}
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                placeholder=" "
-                className={errors.password ? 'invalid' : ''}
-                disabled={loading}
-              />
-              <label>{t("password")}</label>
-              <button
-                type="button"
-                className="password-toggle"
-                onClick={() => togglePasswordVisibility('register')}
-                disabled={loading}
-              >
-                <FontAwesomeIcon icon={showPassword.register ? faEyeSlash : faEye} />
-              </button>
-              {errors.password && <span className="error-message">{errors.password}</span>}
-            </div>
-
-            <div className="input-group">
-              <input
-                type={showPassword.confirm ? "text" : "password"}
-                name="confirmPassword"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                placeholder=" "
-                className={errors.confirmPassword ? 'invalid' : ''}
-                disabled={loading}
-              />
-              <label>{t("confirm_password")}</label>
-              <button
-                type="button"
-                className="password-toggle"
-                onClick={() => togglePasswordVisibility('confirm')}
-                disabled={loading}
-              >
-                <FontAwesomeIcon icon={showPassword.confirm ? faEyeSlash : faEye} />
-              </button>
-              {errors.confirmPassword && <span className="error-message">{errors.confirmPassword}</span>}
-            </div>
-
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="acceptTerms"
-                name="acceptTerms"
-                checked={formData.acceptTerms}
-                onChange={handleChange}
-                className="w-4 h-4 text-bleu-accent rounded focus:ring-bleu-accent border-bleu-pale"
-                disabled={loading}
-              />
-              <label htmlFor="acceptTerms" className="ml-2 text-sm text-bleu-moyen">
-                {t("accept_terms")}
-              </label>
-            </div>
-            {errors.terms && <div className="error-message mt-2">{errors.terms}</div>}
-
-            <button 
-              type="submit" 
-              className="submit-btn"
-              disabled={loading}
-            >
-              {loading ? t("loading") : t("register")}
-            </button>
-          </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-bleu-moyen">
-              {t("have_account")}{' '}
-              <button
-                onClick={toggleAuthMode}
-                className="text-bleu-accent font-medium hover:text-bleu-fonce transition-all"
-                disabled={loading}
-              >
-                {t("connect")}
-              </button>
-            </p>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 
