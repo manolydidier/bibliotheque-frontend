@@ -6,7 +6,7 @@ const initialState = {
     loading: false,
     isAuthenticated: !!localStorage.getItem('auth_token'),
     token: localStorage.getItem('auth_token') || null,
-    user: null, 
+    user: localStorage.getItem('user') ||null, 
     error: null,
     roles: [],
     permissions: [],
@@ -26,6 +26,8 @@ export const librarySlice = createSlice({
       state.auth.user = action.payload.user;
       state.auth.roles = action.payload.roles || [];
       state.auth.permissions = action.payload.permissions || [];
+     
+      
       state.auth.loading = false;
       state.auth.error = null;
     },
@@ -35,6 +37,7 @@ export const librarySlice = createSlice({
     },
     logoutUser: (state) => {
       localStorage.removeItem('auth_token');
+      localStorage.removeItem('user');
       state.auth.isAuthenticated = false;
       state.auth.user = null;
       state.auth.roles = [];

@@ -1,8 +1,27 @@
 import { configureStore } from '@reduxjs/toolkit';
-import libraryReducer from '../store/slices/Slice'; // Ajustez le chemin selon votre structure
+import { persistReducer, persistStore } from 'redux-persist';
+import storage from 'redux-persist/lib/storage';
+import libraryReducer from '../store/slices/Slice';
+import { combineReducers } from 'redux';
+
+const persistConfig = {
+  key: 'library',
+  storage,
+  whitelist: ['auth']
+};
+
+const rootReducer = combineReducers({
+  library: persistReducer(persistConfig, libraryReducer)
+});
 
 export const store = configureStore({
-  reducer: {
-    library: libraryReducer, // Ce nom ('library') doit correspondre à votre slice
-  },
+  reducer: rootReducer,
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware({
+      serializableCheck: {
+        ignoredActions: ['persist/PERSIST']
+      }
+    })
 });
+
+export const persistor = persistStore(store);

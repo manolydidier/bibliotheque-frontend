@@ -40,3 +40,75 @@
 .read-the-docs {
   color: #888;
 }
+/* user management */
+/* Animation des onglets */
+.tab-content {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Style des compétences */
+.skill-tag {
+  transition: all 0.2s;
+}
+
+.skill-tag:hover {
+  transform: scale(1.05);
+}
+
+/* Style des cases à cocher */
+.permission-checkbox {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.permission-checkbox:checked {
+  background-color: #4698e5;
+  border-color: #4698e5;
+}
+
+.permission-checkbox:checked::after {
+  content: "✓";
+  position: absolute;
+  color: white;
+  font-size: 12px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* Notification */
+.notification-dot {
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+/* Hover sur les lignes des tableaux */
+.table-row-hover:hover {
+  background-color: rgba(79, 70, 229, 0.05);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out forwards;
+}

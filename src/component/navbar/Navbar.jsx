@@ -44,6 +44,8 @@ const Navbar = () => {
   const navRef = useRef(null);
   const burgerRef = useRef(null);
 
+
+
   // Navigation links
   const navLinks = [
     { 
@@ -80,7 +82,7 @@ const Navbar = () => {
       ] 
     }
   ];
-
+ 
   // Gestion du changement de langue
   const changeLanguage = (lng) => {
     i18n.changeLanguage(lng);

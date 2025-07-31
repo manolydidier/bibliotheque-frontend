@@ -7,7 +7,7 @@ import {
   logoutUser as logoutAction
 } from '../../store/slices/Slice';
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 // Configuration des headers communs
 const commonHeaders = {
@@ -71,6 +71,7 @@ export const loginUser = (credentials) => async (dispatch) => {
     const data = await makeRequest('/login', 'POST', credentials);
     
     localStorage.setItem('auth_token', data.token);  
+    localStorage.setItem('user', data);   
     dispatch(loginSuccess({
       user: data.user,
       token: data.token,
@@ -92,6 +93,7 @@ export const loginUser = (credentials) => async (dispatch) => {
     return data;
   } catch (error) {
     localStorage.removeItem('auth_token');
+    localStorage.removeItem('user');
     const errorMessage = handleAuthError(error);
     dispatch(loginFailure(errorMessage));
     toast.error(errorMessage);
@@ -116,6 +118,7 @@ export const registerUser = (userData) => async (dispatch) => {
   try {
     const data = await makeRequest('/register', 'POST', userData); 
     localStorage.setItem('auth_token', data.token);
+    localStorage.setItem('user', data);
     
     dispatch(loginSuccess({
       user: data.user,
@@ -164,6 +167,7 @@ export const fetchCurrentUser = () => async (dispatch) => {
     return data;
   } catch (error) {
     localStorage.removeItem('auth_token');
+    localStorage.removeItem('user');
     const errorMessage = handleAuthError(error);
     dispatch(loginFailure(errorMessage));
     throw error;
@@ -193,6 +197,7 @@ export const logoutUser = (langue) => async (dispatch) => {
         : 'logout_failed', );
   } finally {
     localStorage.removeItem('auth_token');
+    localStorage.removeItem('user');
     dispatch(logoutAction());
     toast.success(
       langue === 'fr' 

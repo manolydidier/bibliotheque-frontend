@@ -7,9 +7,12 @@ import { I18nextProvider } from 'react-i18next'
 import AuthPage from './pages/auth/AuthPage'
 
 import { Provider } from 'react-redux'
-import { store } from './store/store'
+import { persistor, store } from './store/store'
 import { toast } from './component/toast/toast'
 import Toaster from './component/toast/Toaster'
+import UserManagementDashboard from './pages/UserManagementDashboard/Components/UserManagementDashboard'
+import { PersistGate } from 'redux-persist/integration/react'
+
 
 
 
@@ -18,11 +21,14 @@ function App() {
   return (
     <I18nextProvider>
       <Provider store={store}>
+        <PersistGate loading={null} persistor={persistor}>
+          <Toaster />
       <Router>
         <Navbar/>
        
         <Routes>
           <Route path="/auth" element={<AuthPage />} />
+           <Route path="/settings" element={<UserManagementDashboard />} />
           <Route path="/" element={
             <div className="min-h-screen bg-gray-100 flex items-center justify-center">
               <div className="bg-white p-8 rounded-lg shadow-md">
@@ -65,29 +71,8 @@ function App() {
           } />
         </Routes>
       </Router>
-       <Toaster />
-  <div className="p-8 space-y-4">
-        <button
-          className="px-4 py-2 bg-green-600 text-white rounded"
-          onClick={() => toast.success('Succès ! ✅')}
-        >
-          Toast succès
-        </button>
-
-        <button
-          className="px-4 py-2 bg-red-600 text-white rounded"
-          onClick={() => toast.error('Erreur ❌', { duration: null })}
-        >
-          Toast erreur (manuel)
-        </button>
-
-        <button
-          className="px-4 py-2 bg-blue-600 text-white rounded"
-          onClick={() => toast.loading('Chargement...')}
-        >
-          Toast loading
-        </button>
-      </div>
+     
+        </PersistGate>
     </Provider>
     </I18nextProvider>
   )
