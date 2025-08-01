@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCamera, faEnvelope, faUserPlus } from '@fortawesome/free-solid-svg-icons';
@@ -17,7 +17,17 @@ const ProfileInfo = () => {
       reader.readAsDataURL(file);
     }
   };
-
+  const userLogin = JSON.parse(localStorage.getItem('user'));
+useEffect(() => {
+    
+    if (userLogin?.user?.avatar_url) {
+      const avatar = userLogin.user.avatar_url;
+      const fullAvatarUrl = avatar.startsWith('http')
+        ? avatar
+        : `${import.meta.env.VITE_API_BASE_STORAGE}/storage/${avatar}`;
+      setProfileImage(fullAvatarUrl);
+    } 
+}, [userLogin]);
   return (
     <div className="flex flex-col items-center">
       <div className="profile-pic-upload relative mb-4">

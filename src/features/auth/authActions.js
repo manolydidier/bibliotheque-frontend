@@ -71,13 +71,16 @@ export const loginUser = (credentials) => async (dispatch) => {
     const data = await makeRequest('/login', 'POST', credentials);
     
     localStorage.setItem('auth_token', data.token);  
-    localStorage.setItem('user', data);   
+    localStorage.setItem('user', JSON.stringify(data)); 
+    
+    
     dispatch(loginSuccess({
       user: data.user,
       token: data.token,
       roles: data.user?.roles || [],
       permissions: data.permissions || data.user?.permissions || []
     }));
+
 
     toast.success(
       credentials.langue === 'fr' 
@@ -118,7 +121,8 @@ export const registerUser = (userData) => async (dispatch) => {
   try {
     const data = await makeRequest('/register', 'POST', userData); 
     localStorage.setItem('auth_token', data.token);
-    localStorage.setItem('user', data);
+    localStorage.setItem('user', JSON.stringify(data)); 
+
     
     dispatch(loginSuccess({
       user: data.user,

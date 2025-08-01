@@ -1,53 +1,113 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { 
-  faEdit, 
-  faSave, 
-  faTimes, 
-  faLock, 
+import { useSelector } from 'react-redux';
+import axios from 'axios';
+import {
+  faEdit,
+  faSave,
+  faTimes,
+  faLock,
   faCheckDouble,
-  faShieldAlt
+  faShieldAlt,
+  faSpinner
 } from '@fortawesome/free-solid-svg-icons';
 
 const SecuritySettings = () => {
   const { t } = useTranslation();
   const [isEditingPassword, setIsEditingPassword] = useState(false);
-  const [password, setPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+  console.log('API_BASE_URL:', API_BASE_URL);
+  
+  const authToken = useSelector(state => state?.library?.auth?.token);
+  const userId = useSelector(state => state?.library?.auth?.user?.id);
 
   const handleEditClick = () => {
     setIsEditingPassword(true);
-    setPassword('');
+    setCurrentPassword('');
+    setNewPassword('');
     setConfirmPassword('');
     setPasswordError('');
-  };
-
-  const handleSaveClick = () => {
-    if (password !== confirmPassword) {
-      setPasswordError(t('passwords_do_not_match'));
-      return;
-    }
-    if (password.length < 8) {
-      setPasswordError(t('password_min_length'));
-      return;
-    }
-    
-    // Ici vous pourriez ajouter la logique pour sauvegarder le nouveau mot de passe
-    setIsEditingPassword(false);
+    setSuccessMessage('');
   };
 
   const handleCancelClick = () => {
     setIsEditingPassword(false);
     setPasswordError('');
+    setSuccessMessage('');
+  };
+
+  const handleSaveClick = async () => {
+    setPasswordError('');
+    setSuccessMessage('');
+
+    // Validation côté client
+    if (newPassword !== confirmPassword) {
+      setPasswordError(t('passwords_do_not_match'));
+      return;
+    }
+    if (newPassword.length < 8) {
+      setPasswordError(t('password_min_length'));
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/auth/${userId}/updatepassword`, // Correction de l'URL
+        {
+          current_password: currentPassword,
+          password: newPassword, // Changé de new_password à password
+          password_confirmation: confirmPassword // Changé de new_password_confirmation
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        }
+      );
+
+      setSuccessMessage(response.data.message || t('password_updated'));
+      setIsEditingPassword(false);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error) {
+      console.error('Password update error:', error);
+      
+      // Gestion améliorée des erreurs
+      let errorMessage = t('error_occurred');
+      
+      if (error.response?.status === 422) {
+        // Erreurs de validation Laravel
+        errorMessage = error.response.data.message || errorMessage;
+        if (error.response.data.errors?.current_password) {
+          errorMessage = error.response.data.errors.current_password[0];
+        }
+      } else if (error.response?.status === 403) {
+        errorMessage = t('unauthorized_action');
+      }
+
+      setPasswordError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getPasswordStrength = () => {
-    if (!password) return 0;
-    if (password.length < 4) return 25;
-    if (password.length < 8) return 50;
-    if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) return 75;
+    if (!newPassword) return 0;
+    if (newPassword.length < 4) return 25;
+    if (newPassword.length < 8) return 50;
+    if (!/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) return 75;
     return 100;
   };
 
@@ -57,6 +117,15 @@ const SecuritySettings = () => {
     if (strength < 75) return 'bg-yellow-500';
     return 'bg-green-500';
   };
+
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => {
+        setSuccessMessage('');
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
@@ -93,6 +162,24 @@ const SecuritySettings = () => {
             <div className="space-y-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                  {t('current_password')}
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <FontAwesomeIcon icon={faLock} className="text-gray-400" />
+                  </div>
+                  <input
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    placeholder={t('enter_current_password')}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
                   {t('new_password')}
                 </label>
                 <div className="relative">
@@ -101,8 +188,8 @@ const SecuritySettings = () => {
                   </div>
                   <input
                     type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
                     className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                     placeholder={t('enter_new_password')}
                   />
@@ -127,7 +214,7 @@ const SecuritySettings = () => {
                 </div>
               </div>
               
-              {password && (
+              {newPassword && (
                 <div className="pt-2">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-medium text-gray-500">
@@ -146,20 +233,30 @@ const SecuritySettings = () => {
                 </div>
               )}
               
-              {passwordError && (
-                <div className="text-red-500 text-sm mt-1">{passwordError}</div>
+              {(passwordError || successMessage) && (
+                <div className={`text-sm mt-1 ${
+                  passwordError ? 'text-red-500' : 'text-green-600'
+                }`}>
+                  {passwordError || successMessage}
+                </div>
               )}
               
               <div className="flex space-x-3 pt-2">
                 <button
                   onClick={handleSaveClick}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center flex-1"
+                  disabled={loading}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center flex-1 disabled:opacity-70"
                 >
-                  <FontAwesomeIcon icon={faSave} className="mr-2" /> 
+                  {loading ? (
+                    <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" />
+                  ) : (
+                    <FontAwesomeIcon icon={faSave} className="mr-2" />
+                  )}
                   {t('save_changes')}
                 </button>
                 <button
                   onClick={handleCancelClick}
+                  disabled={loading}
                   className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors duration-200 flex items-center justify-center flex-1"
                 >
                   <FontAwesomeIcon icon={faTimes} className="mr-2" /> 

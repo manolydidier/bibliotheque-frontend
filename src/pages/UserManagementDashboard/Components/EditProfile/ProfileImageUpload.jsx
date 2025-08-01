@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useSelector } from 'react-redux';
-import { 
-  faCamera, 
-  faCheckCircle, 
+import axios from 'axios';
+import {
+  faCheckCircle,
   faTimesCircle,
   faSpinner,
   faSave,
@@ -13,18 +13,54 @@ import {
 
 const ProfileImageUpload = () => {
   const { t } = useTranslation();
-  const [profileImage, setProfileImage] = useState('https://randomuser.me/api/portraits/women/44.jpg');
-  const [newImage, setNewImage] = useState(null);
+  
+  const DEFAULT_AVATAR = "https://avatars.githubusercontent.com/u/583231?v=4";
+  
+  const [profileImage, setProfileImage] = useState(DEFAULT_AVATAR);
+  const [newFile, setNewFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState({ show: false, success: null, message: '' });
-  
-  // Récupération des données utilisateur depuis Redux
-  const userId = useSelector(state => state.library.auth.user.id);
-  const authToken = useSelector(state => state.library.auth.token);
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  const userId = useSelector(state => state?.library?.auth?.user?.id);
+  const authToken = useSelector(state => state?.library?.auth?.token);
+  const userAvatarUrl = useSelector(state => state?.library?.auth?.user?.avatar_url);
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+  const API_BASE_STORAGE = import.meta.env.VITE_API_BASE_STORAGE;
 
-  // Masquer le message après 3 secondes
+  // Charger l'avatar existant au montage
+  useEffect(() => {
+    const loadInitialAvatar = () => {
+      try {
+        // 1. Vérifier l'avatar dans le state Redux
+        if (userAvatarUrl) {
+          const fullUrl = userAvatarUrl.startsWith('http') 
+            ? userAvatarUrl 
+            : `${API_BASE_STORAGE}/storage/${userAvatarUrl}`;
+          setProfileImage(fullUrl);
+          return;
+        }
+
+        // 2. Fallback sur le localStorage
+        const userData = localStorage.getItem('user');
+        if (userData) {
+          const userLogin = JSON.parse(userData);
+          if (userLogin?.user?.avatar_url) {
+            const avatar = userLogin.user.avatar_url;
+            const fullAvatarUrl = avatar.startsWith('http')
+              ? avatar
+              : `${API_BASE_STORAGE}/storage/${avatar}`;
+            setProfileImage(fullAvatarUrl);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading avatar:', error);
+      }
+    };
+
+    loadInitialAvatar();
+  }, [userAvatarUrl, API_BASE_STORAGE]);
+
   useEffect(() => {
     if (status.show) {
       const timer = setTimeout(() => {
@@ -34,44 +70,40 @@ const ProfileImageUpload = () => {
     }
   }, [status.show]);
 
-  const uploadImageToAPI = async (imageData) => {
+  const uploadImageToAPI = async () => {
+    if (!newFile) return;
+
     setIsLoading(true);
-    
+
     try {
-      // Conversion de l'image en Blob
-      const blob = await (await fetch(imageData)).blob();
-      if (userId) {
-     console.log('Envoi à:', `${API_BASE_URL}/user/${userId}/avatar`);
-console.log('User ID:', userId, 'Type:', typeof userId);
-console.log('Token:', authToken ? 'Present' : 'Missing');
-      }
-      // Préparation FormData
       const formData = new FormData();
-      formData.append('avatar', blob, 'profile.jpg');
+      formData.append('avatar_url', newFile);
       
-      // Appel API avec l'ID dans l'URL
-      const response = await fetch(`${API_BASE_URL}/user/${parseInt(userId)}/avatar`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${authToken}`
-        },
-        body: formData
-      });
-    
-      
-      // Gestion des réponses non-OK
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || t('profile.upload_error'));
+      // Utilisation de POST comme dans la version précédente
+      const { data } = await axios.post(
+        `${API_BASE_URL}/user/${parseInt(userId)}/avatar`,
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        }
+      );
+
+      // Mise à jour de l'image avec la méthode qui fonctionnait
+      const userLogin = JSON.parse(localStorage.getItem('user'));
+      if (userLogin?.user?.avatar_url) {
+        const avatar = data.avatar_url || userLogin.user.avatar_url;
+        const fullAvatarUrl = avatar.startsWith('http')
+          ? avatar
+          : `${API_BASE_STORAGE}/storage/${avatar}`;
+        setProfileImage(fullAvatarUrl);
       }
 
-      const data = await response.json();
-      
-      // Mise à jour de l'image
-      setProfileImage(data.avatar_url || URL.createObjectURL(blob));
-      setNewImage(null);
-      
-      // Message de succès
+      setNewFile(null);
+      setPreviewUrl(null);
+
       setStatus({
         show: true,
         success: true,
@@ -80,12 +112,12 @@ console.log('Token:', authToken ? 'Present' : 'Missing');
 
     } catch (error) {
       console.error('Erreur upload:', error);
+      
       setStatus({
         show: true,
         success: false,
-        message: error.message.includes('Failed to fetch') 
-          ? t('profile.connection_error')
-          : error.message || t('profile.upload_error')
+        message: error?.response?.data?.message ||
+          (error.message.includes('Network') ? t('profile.connection_error') : error.message || t('profile.upload_error'))
       });
     } finally {
       setIsLoading(false);
@@ -96,54 +128,37 @@ console.log('Token:', authToken ? 'Present' : 'Missing');
     const file = e.target.files[0];
     if (!file) return;
 
-    // Validation du fichier
     const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
-    const maxSize = 2 * 1024 * 1024; // 2MB
+    const maxSize = 2 * 1024 * 1024;
 
     if (!validTypes.includes(file.type)) {
-      setStatus({
-        show: true,
-        success: false,
-        message: t('profile.invalid_format')
-      });
+      setStatus({ show: true, success: false, message: t('profile.invalid_format') });
       return;
     }
 
     if (file.size > maxSize) {
-      setStatus({
-        show: true,
-        success: false,
-        message: t('profile.file_too_large')
-      });
+      setStatus({ show: true, success: false, message: t('profile.file_too_large') });
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setNewImage(event.target.result);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleSave = () => {
-    if (newImage) {
-      uploadImageToAPI(newImage);
-    }
+    setNewFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
   };
 
   return (
     <div className="profile-upload-container mb-6 mx-auto max-w-[200px]">
       <div className="relative w-32 h-32 mx-auto mb-4">
-        {/* Image de profil */}
-        <img 
-          src={newImage || profileImage} 
-          alt="Profile" 
+        <img
+          src={previewUrl || profileImage}
+          alt="Profile"
           className="w-full h-full rounded-full object-cover border-4 border-blue-100 shadow-md"
+          onError={(e) => {
+            e.target.src = DEFAULT_AVATAR;
+          }}
         />
-        
-        {/* Bouton de téléchargement */}
+
         <label htmlFor="profile-upload" className="block">
-          <div className={`absolute bottom-0 right-0 p-2 rounded-full cursor-pointer transition-all  justify-center items-center flex ${
+          <div className={`absolute bottom-0 right-0 p-2 rounded-full cursor-pointer transition-all justify-center items-center flex ${
             isLoading ? 'bg-white' : 'bg-white hover:bg-gray-100'
           }`}>
             {isLoading ? (
@@ -152,33 +167,27 @@ console.log('Token:', authToken ? 'Present' : 'Missing');
               <FontAwesomeIcon icon={faEdit} className="text-blue-500 hover:scale-125" />
             )}
           </div>
-          <input 
+          <input
             id="profile-upload"
-            type="file" 
-            accept="image/jpeg, image/png, image/gif" 
-            className="hidden" 
+            type="file"
+            accept="image/jpeg, image/png, image/gif"
+            className="hidden"
             onChange={handleImageUpload}
             disabled={isLoading}
           />
         </label>
       </div>
 
-      {/* Bouton de sauvegarde conditionnel */}
-      {newImage && !isLoading && (
-        <button 
-          onClick={handleSave}
-          className="w-full py-2.5 rounded-lg font-medium
-          bg-gradient-to-r from-green-500 to-green-600 
-          text-white shadow-md hover:shadow-lg
-          transform hover:-translate-y-0.5 transition-all
-          flex items-center justify-center"
+      {previewUrl && !isLoading && (
+        <button
+          onClick={uploadImageToAPI}
+          className="w-full py-2.5 rounded-lg font-medium bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all flex items-center justify-center"
         >
           <FontAwesomeIcon icon={faSave} className="mr-2" />
           <span>{t('save')}</span>
         </button>
       )}
 
-      {/* Messages de statut */}
       {status.show && (
         <div className={`mt-3 text-center text-sm rounded-lg p-2 animate-fadeIn ${
           status.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
