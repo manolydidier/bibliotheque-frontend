@@ -2,8 +2,29 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCamera, faEnvelope, faUserPlus } from '@fortawesome/free-solid-svg-icons';
+import axios from 'axios';
+import { useSelector } from 'react-redux';
 
 const ProfileInfo = () => {
+ const [loading, setLoading] = useState(true);
+  const API_BASE_STORAGE = import.meta.env.VITE_API_BASE_STORAGE;
+
+    const [formData, setFormData] = useState({
+       username: '',
+       firstName: '',
+       lastName: '',
+       email: '',
+       phone: '',
+       birthdate: '',
+       roles: [],
+       address: '',
+       isActive: false,
+       emailVerified: false,
+       avatar_url: ''
+     });
+  
+  const [error, setError] = useState(null);
+
   const { t } = useTranslation();
   const [profileImage, setProfileImage] = useState('https://randomuser.me/api/portraits/women/44.jpg');
 
@@ -17,22 +38,66 @@ const ProfileInfo = () => {
       reader.readAsDataURL(file);
     }
   };
-  const userLogin = JSON.parse(localStorage.getItem('user'));
-useEffect(() => {
-    
-    if (userLogin?.user?.avatar_url) {
-      const avatar = userLogin.user.avatar_url;
-      const fullAvatarUrl = avatar.startsWith('http')
-        ? avatar
-        : `${import.meta.env.VITE_API_BASE_STORAGE}/storage/${avatar}`;
-      setProfileImage(fullAvatarUrl);
-    } 
-}, [userLogin]);
+ axios.defaults.headers.common['Accept'] = 'application/json';
+axios.defaults.headers.common['Content-Type'] = 'application/json';
+
+axios.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+  // Récupération des données utilisateur depuis Redux
+  const userId = useSelector(state => state?.library?.auth?.user?.id);
+
+  // Chargement des données utilisateur
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get(`/user/${userId}/profile`);
+
+        setFormData({
+          username: response.data.user.username,
+          firstName: response.data.user.first_name,
+          lastName: response.data.user.last_name,
+          email: response.data.user.email,
+          phone: response.data.user.phone,
+          birthdate: response.data.user.birthdate,
+          roles: response.data.user.roles || [],
+          address: response.data.user.address,
+          isActive: response.data.user.is_active,
+          emailVerified: response.data.user.email_verified_at !== null,
+          avatar_url: response.data.user.avatar_url 
+        });
+        
+      } catch (err) {
+        setError(err.response?.data?.message || t('fetch_error'));
+        console.log(err);
+        
+
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (userId) {
+      fetchUserProfile();
+     
+      
+    }
+  }, [userId, t]);
   return (
     <div className="flex flex-col items-center">
       <div className="profile-pic-upload relative mb-4">
         <img
-          src={profileImage}
+          src={`${API_BASE_STORAGE}/storage/${formData.avatar_url}`|| profileImage}
           alt="Profile"
           className="w-32 h-32 rounded-full object-cover border-4 border-blue-100 shadow-md"
         />
@@ -42,14 +107,26 @@ useEffect(() => {
         </div>
       </div>
       
-      <h2 className="text-2xl font-bold text-gray-800">Sophie Martin</h2>
+      <h2 className="text-2xl font-bold text-gray-800">{formData.firstName} {formData.lastName}</h2>
       <p className="text-gray-500 mb-4 flex items-center">
         <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full mr-2">
-          {t('administrator')}
+          {t('administrator')}?
         </span>
-        <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full flex items-center">
-          <span className="w-2 h-2 bg-green-500 rounded-full mr-1"></span>
-          {t('active')}
+        <span
+          className={`text-xs px-2 py-1 rounded-full flex items-center
+            ${formData.isActive 
+              ? 'text-green-600 bg-green-100' 
+              : 'text-gray-500 bg-gray-100'}
+          `}
+        >
+          <span
+            className={`w-2 h-2 rounded-full mr-1 
+              ${formData.isActive 
+                ? 'bg-green-500' 
+                : 'bg-gray-400'}
+            `}
+          ></span>
+          {formData.isActive ? t('active') : t('inactive')}
         </span>
       </p>
       

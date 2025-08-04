@@ -59,7 +59,7 @@ const ProfileImageUpload = () => {
     };
 
     loadInitialAvatar();
-  }, [userAvatarUrl, API_BASE_STORAGE]);
+  }, [userAvatarUrl]);
 
   useEffect(() => {
     if (status.show) {

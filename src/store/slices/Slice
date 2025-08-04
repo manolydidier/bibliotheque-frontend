@@ -45,7 +45,11 @@ export const librarySlice = createSlice({
     },
     language :(state, action) => {
       state.langue = action.payload.langue;
-    }
+    },
+    updateUser: (state, action) => {
+      state.auth.user = action.payload;
+      localStorage.setItem('user', JSON.stringify(action.payload));
+    },
 
   },
 });
@@ -55,7 +59,8 @@ export const {
   loginSuccess,
   loginFailure,
   logoutUser,
-  language
+  language, 
+  updateUser
 } = librarySlice.actions;
 
 export default librarySlice.reducer;

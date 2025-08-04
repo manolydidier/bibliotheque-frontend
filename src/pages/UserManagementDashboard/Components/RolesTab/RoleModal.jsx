@@ -23,14 +23,14 @@ const RoleModal = ({ show, onClose }) => {
             <label className="block text-sm font-medium text-gray-700 mb-1">{t('role_name')}</label>
             <input
               type="text"
-              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">{t('description')}</label>
             <textarea
               rows="3"
-              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             ></textarea>
           </div>
           <div className="mb-4">
@@ -47,7 +47,7 @@ const RoleModal = ({ show, onClose }) => {
           >
             {t('cancel')}
           </button>
-          <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
             {t('save')}
           </button>
         </div>
