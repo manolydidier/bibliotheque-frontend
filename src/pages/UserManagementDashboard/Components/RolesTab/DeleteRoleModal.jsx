@@ -1,0 +1,97 @@
+// DeleteRoleModal.jsx
+import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faTrashAlt, faTimes, faCheck , faSpinner} from '@fortawesome/free-solid-svg-icons';
+import axios from 'axios';
+
+export const useDeleteRole = (onRoleDeleted) => {
+ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+  // Configuration Axios
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    }
+    axios.defaults.baseURL = API_BASE_URL;
+  }, []);
+
+
+  const { t } = useTranslation();
+  const [roleToDelete, setRoleToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const openDeleteModal = (role) => {
+    setRoleToDelete(role);
+  };
+
+  const closeDeleteModal = () => {
+    setRoleToDelete(null);
+    setIsDeleting(false);
+  };
+
+  const handleDelete = async () => {
+    if (!roleToDelete) return;
+    setIsDeleting(true);
+    try {
+      await axios.delete(`/roles/${roleToDelete.id}/delete`);
+      onRoleDeleted(roleToDelete.id);
+      closeDeleteModal();
+    } catch (error) {
+      console.error('Erreur lors de la suppression du rôle :', error);
+      alert(t('delete_error'));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const DeleteModal = () => {
+    if (!roleToDelete) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 relative">
+          <button
+            onClick={closeDeleteModal}
+            className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+          >
+            <FontAwesomeIcon icon={faTimes} />
+          </button>
+
+          <div className="text-center">
+            <FontAwesomeIcon icon={faTrashAlt} className="text-red-500 text-3xl mb-4" />
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">
+              {t('confirm_delete')}
+            </h3>
+            <p className="text-gray-600 mb-6">
+              {t('delete_role_confirmation', { name: roleToDelete.name })}
+            </p>
+          </div>
+
+          <div className="flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={closeDeleteModal}
+              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              {t('cancel')}
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-70 flex items-center"
+            >
+              {isDeleting && <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" />}
+              <FontAwesomeIcon icon={faCheck} className="mr-2" />
+              {t('confirm')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return { openDeleteModal, DeleteModal };
+};

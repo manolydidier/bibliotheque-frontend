@@ -9,8 +9,17 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import axios from 'axios';
 import ErrorBoundary from '../../../../component/ErrorBoundary/ErrorBoundary';
+import { useDeleteUser } from './DeleteUserModal';
+import DeactivateUserModal from './DeactivateUserModal';
+import EditRoleModal from './EditRoleModal';
+import { useSelector } from 'react-redux';
+
+
+ 
+
 
 const UsersTable = () => {
+   const isRefresh=useSelector(state => state.library.isReredingListeuser)
   const { t } = useTranslation();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,12 +28,30 @@ const UsersTable = () => {
     last_page: 1,
     total: 0
   });
+
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  
+  // États pour contrôler l'affichage des modales
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [showEditRoleModal, setShowEditRoleModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [fresh, setFresh] = useState(false);
+  
   const API_BASE_STORAGE = import.meta.env.VITE_API_BASE_STORAGE;
   
   const cancelToken = useRef(null);
   const debounceTimeout = useRef(null);
+;
+  // Hook pour gérer la suppression
+  const { openDeleteModal, DeleteModal } = useDeleteUser((userId) => {
+    setUsers(prevUsers => prevUsers.filter(user => user.id !== userId));
+    
+    if (users.length === 1 && currentPage > 1) {
+      setCurrentPage(prev => prev - 1);
+    }
+  });
 
   // Configuration axios
   useEffect(() => {
@@ -37,7 +64,6 @@ const UsersTable = () => {
     }
 
     return () => {
-      // Annule la requête en cours si le composant est démonté
       if (cancelToken.current) {
         cancelToken.current.cancel('Component unmounted');
       }
@@ -45,12 +71,10 @@ const UsersTable = () => {
   }, []);
 
   const fetchUsers = async (page = 1, search = '') => {
-    // Annule la requête précédente s'il y en a une
     if (cancelToken.current) {
       cancelToken.current.cancel('New request initiated');
     }
     
-    // Crée un nouveau token d'annulation
     cancelToken.current = axios.CancelToken.source();
     
     setLoading(true);
@@ -84,34 +108,74 @@ const UsersTable = () => {
     }
   };
 
-  // Debounce avancé avec annulation des requêtes
   useEffect(() => {
-    // Efface le timeout précédent
     if (debounceTimeout.current) {
       clearTimeout(debounceTimeout.current);
     }
     
-    // Configure un nouveau timeout
     debounceTimeout.current = setTimeout(() => {
       fetchUsers(currentPage, searchTerm);
-    }, 300); // 300ms de délai
+    }, 300);
     
-    // Nettoyage
     return () => {
       if (debounceTimeout.current) {
         clearTimeout(debounceTimeout.current);
       }
     };
-  }, [currentPage, searchTerm]);
+  }, [currentPage, searchTerm, isRefresh]);
 
   const handleSearch = (e) => {
     const value = e.target.value;
     setSearchTerm(value);
-    setCurrentPage(1); // Reset à la première page lors d'une nouvelle recherche
+    setCurrentPage(1);
   };
 
   const handlePageChange = (page) => {
     setCurrentPage(page);
+  };
+
+  const handleDeleteClick = (user) => {
+    openDeleteModal(user);
+  };
+
+  // Gestionnaires pour les nouvelles modales
+  const handleEditClick = (user) => {
+    setSelectedUser(user);
+    setShowEditRoleModal(true);
+  };
+
+  const handleDeactivateClick = (user) => {
+    setSelectedUser(user);
+    setShowDeactivateModal(true);
+  };
+
+  // Fonction pour fermer les modales
+  const closeModals = () => {
+    setShowDeactivateModal(false);
+    setShowEditRoleModal(false);
+    setSelectedUser(null);
+  };
+const setValueFresh=()=>{
+  setFresh(!fresh)
+}
+  // Callback après modification du rôle
+  const handleRoleUpdated = (updatedUser) => {
+    setUsers(prevUsers => 
+      prevUsers.map(user => 
+        user.id === updatedUser.id ? updatedUser : user
+      )
+    );
+    closeModals();
+  };
+
+  // Callback après désactivation
+  const handleUserDeactivated = (deactivatedUser) => {
+    setUsers(prevUsers => 
+      prevUsers.map(user => 
+        user.id === deactivatedUser.id ? deactivatedUser : user
+      )
+    );
+    closeModals();
   };
 
   if (loading && users.length === 0) {
@@ -213,13 +277,25 @@ const UsersTable = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
-                        <button className="text-blue-600 hover:text-blue-900 p-1 rounded-full hover:bg-blue-50">
+                        <button 
+                          className="text-blue-600 hover:text-blue-900 p-1 rounded-full hover:bg-blue-50"
+                          title={t('edit')}
+                          onClick={() => handleEditClick(user)}
+                        >
                           <FontAwesomeIcon icon={faEdit} />
                         </button>
-                        <button className="text-gray-600 hover:text-gray-900 p-1 rounded-full hover:bg-gray-50">
+                        <button 
+                          className="text-gray-600 hover:text-gray-900 p-1 rounded-full hover:bg-gray-50"
+                          title={t('settings')}
+                          onClick={() => handleDeactivateClick(user)}
+                        >
                           <FontAwesomeIcon icon={faCog} />
                         </button>
-                        <button className="text-red-600 hover:text-red-900 p-1 rounded-full hover:bg-red-50">
+                        <button 
+                          className="text-red-600 hover:text-red-900 p-1 rounded-full hover:bg-red-50"
+                          title={t('delete')}
+                          onClick={() => handleDeleteClick(user)}
+                        >
                           <FontAwesomeIcon icon={faTrashAlt} />
                         </button>
                       </div>
@@ -244,6 +320,28 @@ const UsersTable = () => {
             />
           )}
         </div>
+        
+        {/* Modales avec contrôle conditionnel */}
+        <DeleteModal />
+        
+        {showDeactivateModal && selectedUser && (
+          <DeactivateUserModal
+            user={selectedUser}
+            isOpen={showDeactivateModal}
+            onClose={closeModals}
+            onUserDeactivated={handleUserDeactivated}
+            onFresh={setValueFresh}
+          />
+        )}
+        
+        {showEditRoleModal && selectedUser && (
+          <EditRoleModal
+            user={selectedUser}
+            isOpen={showEditRoleModal}
+            onClose={closeModals}
+            onRoleUpdated={handleRoleUpdated}
+          />
+        )}
       </div>
     </ErrorBoundary>
   );

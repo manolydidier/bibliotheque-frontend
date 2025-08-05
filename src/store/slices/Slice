@@ -1,12 +1,13 @@
 import { createSlice } from '@reduxjs/toolkit';
 
 const initialState = {
-  langue:'fr',
+  langue: 'fr',
+  isReredingListeuser: false,
   auth: {
     loading: false,
     isAuthenticated: !!localStorage.getItem('auth_token'),
     token: localStorage.getItem('auth_token') || null,
-    user: localStorage.getItem('user') ||null, 
+    user: JSON.parse(localStorage.getItem('user')) || null, // Ajout de JSON.parse
     error: null,
     roles: [],
     permissions: [],
@@ -23,34 +24,42 @@ export const librarySlice = createSlice({
     },
     loginSuccess: (state, action) => {
       state.auth.isAuthenticated = true;
+      state.auth.token = action.payload.token; // Ajout du token
       state.auth.user = action.payload.user;
       state.auth.roles = action.payload.roles || [];
       state.auth.permissions = action.payload.permissions || [];
-     
-      
       state.auth.loading = false;
       state.auth.error = null;
     },
     loginFailure: (state, action) => {
       state.auth.loading = false;
       state.auth.error = action.payload;
+      state.auth.isAuthenticated = false;
+      state.auth.user = null;
+      state.auth.token = null;
     },
     logoutUser: (state) => {
       localStorage.removeItem('auth_token');
       localStorage.removeItem('user');
       state.auth.isAuthenticated = false;
       state.auth.user = null;
+      state.auth.token = null;
       state.auth.roles = [];
       state.auth.permissions = [];
     },
-    language :(state, action) => {
+    language: (state, action) => {
       state.langue = action.payload.langue;
     },
     updateUser: (state, action) => {
       state.auth.user = action.payload;
       localStorage.setItem('user', JSON.stringify(action.payload));
     },
-
+    refreshListUser: (state) => {
+      state.isReredingListeuser = !state.isReredingListeuser;
+    },
+    clearAuthError: (state) => {
+      state.auth.error = null;
+    }
   },
 });
 
@@ -60,7 +69,9 @@ export const {
   loginFailure,
   logoutUser,
   language, 
-  updateUser
+  updateUser,
+  refreshListUser,
+  clearAuthError
 } = librarySlice.actions;
 
 export default librarySlice.reducer;

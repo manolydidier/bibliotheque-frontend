@@ -23,12 +23,11 @@ const AuthPage = () => {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { isAuthenticated, loading, error: authError } = useSelector(state => state.library.auth);
-  const langue = useSelector(state => state.library.langue);
-
-  const [isLoginActive, setIsLoginActive] = useState(false);
+  const { auth: { isAuthenticated, loading, error: authError }, langue } = useSelector(state => state.library);
+  
+  const [isLoginActive, setIsLoginActive] = useState(true);
   const [formData, setFormData] = useState({
-    username: '', // Champ ajouté
+    username: '',
     firstName: '',
     lastName: '',
     email: '',
@@ -43,6 +42,7 @@ const AuthPage = () => {
     register: false,
     confirm: false
   });
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -53,6 +53,17 @@ const AuthPage = () => {
   const toggleAuthMode = () => {
     setIsLoginActive(!isLoginActive);
     setErrors({});
+    setFormData({
+      username: '',
+      firstName: '',
+      lastName: '',
+      email: '',
+      password: '',
+      confirmPassword: '',
+      rememberMe: false,
+      acceptTerms: false
+    });
+    setSubmitAttempted(false);
   };
 
   const handleChange = (e) => {
@@ -70,40 +81,36 @@ const AuthPage = () => {
   const validateForm = () => {
     const newErrors = {};
     
-    // Validation pour le login
     if (!formData.email.trim()) {
-      newErrors.email = t('required');
+      newErrors.email = t('email_required');
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = t('invalidEmail');
+      newErrors.email = t('invalid_email');
     }
 
     if (!formData.password.trim()) {
-      newErrors.password = t('required');
-    } else if (formData.password.length < 6) {
-      newErrors.password = t('passwordMinLength');
+      newErrors.password = t('password_required');
+    } else if (formData.password.length < 8) {
+      newErrors.password = t('password_min_length');
     }
 
-    // Validation spécifique à l'inscription
     if (!isLoginActive) {
       if (!formData.username.trim()) {
         newErrors.username = t('username_required');
       } else if (formData.username.length < 3) {
         newErrors.username = t('username_too_short');
-      } else if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
-        newErrors.username = t('username_invalid');
       }
 
       if (!formData.firstName.trim()) {
-        newErrors.firstName = t('required');
+        newErrors.firstName = t('field_required');
       }
       if (!formData.lastName.trim()) {
-        newErrors.lastName = t('required');
+        newErrors.lastName = t('field_required');
       }
       if (formData.password !== formData.confirmPassword) {
-        newErrors.confirmPassword = t('passwordMismatch');
+        newErrors.confirmPassword = t('password_mismatch');
       }
       if (!formData.acceptTerms) {
-        newErrors.terms = t('acceptTermsRequired');
+        newErrors.acceptTerms = t('acceptTermsRequired');
       }
     }
 
@@ -113,27 +120,84 @@ const AuthPage = () => {
     
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitAttempted(true);
     
     if (!validateForm()) return;
 
-    if (isLoginActive) {
-      await dispatch(loginUser({
-        email: formData.email,
-        password: formData.password,
-        rememberMe: formData.rememberMe,
-        langue: langue
-      }));
-    } else {
-      await dispatch(registerUser({
-        username: formData.username, // Utilisation de la valeur du formulaire
-        first_name: formData.firstName,
-        last_name: formData.lastName,
-        email: formData.email,
-        password: formData.password,
-        password_confirmation: formData.confirmPassword,
-        acceptTerms: formData.acceptTerms,
-        langue: langue,
-      }));
+    try {
+      if (isLoginActive) {
+        await dispatch(loginUser({
+          email: formData.email,
+          password: formData.password,
+          rememberMe: formData.rememberMe,
+          langue: langue
+        }));
+      } else {
+        const result = await dispatch(registerUser({
+          username: formData.username,
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          email: formData.email,
+          password: formData.password,
+          password_confirmation: formData.confirmPassword,
+          acceptTerms: formData.acceptTerms,
+          langue: langue,
+        }));
+
+        if (result.error) {
+          const apiErrors = result.payload?.errors || {};
+          const formattedErrors = {};
+          
+          if (apiErrors.email && apiErrors.email.some(err => err.includes('already been taken'))) {
+            formattedErrors.email = t('email_taken');
+          }
+          
+          Object.keys(apiErrors).forEach(key => {
+            if (!formattedErrors[key]) {
+              const errorMessage = apiErrors[key][0];
+              
+              switch(key) {
+                case 'username':
+                  formattedErrors.username = errorMessage.includes('required') 
+                    ? t('username_required')
+                    : errorMessage.includes('already been taken')
+                    ? t('username_taken')
+                    : t('username_invalid');
+                  break;
+                  
+                case 'password':
+                  formattedErrors.password = errorMessage.includes('required')
+                    ? t('password_required')
+                    : errorMessage.includes('least 8 characters')
+                    ? t('password_min_length')
+                    : t('password_invalid');
+                  break;
+                  
+                case 'first_name':
+                case 'last_name':
+                  formattedErrors[key] = errorMessage.includes('required')
+                    ? t('field_required')
+                    : t('field_invalid');
+                  break;
+                  
+                case 'password_confirmation':
+                  formattedErrors.confirmPassword = errorMessage.includes('match')
+                    ? t('password_mismatch')
+                    : t('confirmation_required');
+                  break;
+                  
+                default:
+                  formattedErrors[key] = errorMessage;
+              }
+            }
+          });
+          
+          setErrors(formattedErrors);
+        }
+      }
+    } catch (error) {
+      console.error("Auth error:", error);
+      setErrors({ general: t('an_error_has_occurred') });
     }
   };
 
@@ -144,10 +208,9 @@ const AuthPage = () => {
     }));
   };
 
-
   return (
     <>
-    <Toaster />
+      <Toaster />
       <div className="min-h-screen flex items-center justify-center p-4 bg-bleu-pale">
         <div className="auth-container">
           <button
@@ -162,18 +225,18 @@ const AuthPage = () => {
             />
           </button>
 
-          {/* Page de Connexion */}
+          {/* Login Page */}
           <div className={`auth-page login-page ${isLoginActive ? 'active' : ''}`}>
             <div className="text-center mb-8">
               <h1 className="text-3xl font-bold text-bleu-fonce mb-2">
-                {t(isLoginActive ? 'welcome_back' : 'create_account')}
+                {t('welcome_back')}
               </h1>
-              <p className="text-bleu-moyen">{t(isLoginActive ? 'login_to_account' : 'join_community')}</p>
+              <p className="text-bleu-moyen">{t('login_to_account')}</p>
             </div>
 
-             {authError && (
+            {(errors.general || authError) && (
               <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">
-                {authError&& t('invalid_credentials')}
+                {errors.general || authError}
               </div>
             )}
 
@@ -239,18 +302,19 @@ const AuthPage = () => {
               </div>
 
               <button 
-                  type="submit" 
-                  className="submit-btn"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <div className='flex items-center justify-center gap-4'>
-                    <LoadingComponent size={5} color="border-white"/>  {t("loading")} 
-                    </div>
-                  ) : (
-                    t("connect")
-                  )}
-                </button>
+                type="submit" 
+                className="submit-btn"
+                disabled={loading}
+              >
+                {loading ? (
+                  <div className='flex items-center justify-center gap-4'>
+                    <LoadingComponent size={5} color="border-white"/>  
+                    {t("loading")} 
+                  </div>
+                ) : (
+                  t("connect")
+                )}
+              </button>
             </form>
 
             <div className="mt-6 text-center">
@@ -266,9 +330,9 @@ const AuthPage = () => {
               </p>
             </div>
 
-            <div className="flex items-center my-6 text-[#3b5998] text-sm">
+            <div className="flex items-center my-6">
               <div className="flex-grow border-t border-gray-300 opacity-50"></div>
-              <span className="mx-4">{t("login_with")}</span>
+              <span className="mx-4 text-bleu-moyen">{t("login_with")}</span>
               <div className="flex-grow border-t border-gray-300 opacity-50"></div>
             </div>
 
@@ -281,16 +345,16 @@ const AuthPage = () => {
             </button>
           </div>
 
-          {/* Page d'Inscription */}
+          {/* Register Page */}
           <div className={`auth-page register-page ${!isLoginActive ? 'active' : ''}`}>
             <div className="text-center mb-8">
               <h1 className="text-3xl font-bold text-bleu-fonce mb-2">{t("create_account")}</h1>
               <p className="text-bleu-moyen">{t("join_community")}</p>
             </div>
 
-            {authError && (
+            {(errors.general || authError) && (
               <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">
-                {authError}
+                {errors.general || authError}
               </div>
             )}
 
@@ -306,11 +370,12 @@ const AuthPage = () => {
                   disabled={loading}
                 />
                 <label>{t("username")}</label>
-                {errors.username && <span className="error-message">{errors.username}</span>}
+                {errors.username && (
+                  <span className="error-message">{errors.username}</span>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
-                
                 <div className="input-group">
                   <input
                     type="text"
@@ -322,7 +387,9 @@ const AuthPage = () => {
                     disabled={loading}
                   />
                   <label>{t("first_name")}</label>
-                  {errors.firstName && <span className="error-message">{errors.firstName}</span>}
+                  {errors.firstName && (
+                    <span className="error-message">{errors.firstName}</span>
+                  )}
                 </div>
 
                 <div className="input-group">
@@ -336,7 +403,9 @@ const AuthPage = () => {
                     disabled={loading}
                   />
                   <label>{t("last_name")}</label>
-                  {errors.lastName && <span className="error-message">{errors.lastName}</span>}
+                  {errors.lastName && (
+                    <span className="error-message">{errors.lastName}</span>
+                  )}
                 </div>
               </div>
 
@@ -351,7 +420,19 @@ const AuthPage = () => {
                   disabled={loading}
                 />
                 <label>{t("email")}</label>
-                {errors.email && <span className="error-message">{errors.email}</span>}
+                {errors.email && (
+                  <span className="error-message">
+                    {errors.email}
+                    {errors.email === t('email_taken') && (
+                      <button 
+                        onClick={toggleAuthMode}
+                        className="ml-2 text-bleu-accent hover:underline"
+                      >
+                        {t("login_instead")}
+                      </button>
+                    )}
+                  </span>
+                )}
               </div>
 
               <div className="input-group">
@@ -373,7 +454,9 @@ const AuthPage = () => {
                 >
                   <FontAwesomeIcon icon={showPassword.register ? faEyeSlash : faEye} />
                 </button>
-                {errors.password && <span className="error-message">{errors.password}</span>}
+                {errors.password && (
+                  <span className="error-message">{errors.password}</span>
+                )}
               </div>
 
               <div className="input-group">
@@ -395,7 +478,9 @@ const AuthPage = () => {
                 >
                   <FontAwesomeIcon icon={showPassword.confirm ? faEyeSlash : faEye} />
                 </button>
-                {errors.confirmPassword && <span className="error-message">{errors.confirmPassword}</span>}
+                {errors.confirmPassword && (
+                  <span className="error-message">{errors.confirmPassword}</span>
+                )}
               </div>
 
               <div className="flex items-center">
@@ -405,27 +490,32 @@ const AuthPage = () => {
                   name="acceptTerms"
                   checked={formData.acceptTerms}
                   onChange={handleChange}
-                  className="w-4 h-4 text-bleu-accent rounded focus:ring-bleu-accent border-bleu-pale"
+                  className={`w-4 h-4 text-bleu-accent rounded focus:ring-bleu-accent border-bleu-pale ${
+                    (errors.acceptTerms || (submitAttempted && !formData.acceptTerms)) ? 'border-red-500' : ''
+                  }`}
                   disabled={loading}
                 />
                 <label htmlFor="acceptTerms" className="ml-2 text-sm text-bleu-moyen">
                   {t("accept_terms")}
                 </label>
               </div>
-              {errors.terms && <div className="error-message mt-2">{errors.terms}</div>}
+              {(errors.acceptTerms || (submitAttempted && !formData.acceptTerms)) && (
+                <div className="error-message mt-2">{t('acceptTermsRequired')}</div>
+              )}
 
               <button 
                 type="submit" 
                 className="submit-btn"
-                disabled={loading}
+                disabled={loading || (submitAttempted && !formData.acceptTerms)}
               >
                 {loading ? (
-                    <div className='flex items-center justify-center gap-4'>
-                      <LoadingComponent size={10} color="border-white"/> {t("loading")}
-                    </div>
-                  ) : (
-                    t("register")
-                  )}
+                  <div className='flex items-center justify-center gap-4'>
+                    <LoadingComponent size={10} color="border-white"/> 
+                    {t("loading")}
+                  </div>
+                ) : (
+                  t("register")
+                )}
               </button>
             </form>
 
