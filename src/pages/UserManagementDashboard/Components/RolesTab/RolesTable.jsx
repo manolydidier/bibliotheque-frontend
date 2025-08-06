@@ -14,6 +14,7 @@ import RoleModal from './RoleModal';
 import Pagination from '../../../../component/pagination/Pagination';
 import { useDeleteRole } from './DeleteRoleModal'; // Hook personnalisé
 import ErrorBoundary from '../../../../component/ErrorBoundary/ErrorBoundary';
+import { useSelector } from 'react-redux';
 
 const RolesTable = () => {
   const { t } = useTranslation();
@@ -27,6 +28,7 @@ const RolesTable = () => {
     last_page: 1,
     total: 0,
   });
+   const isRefresh=useSelector(state => state.library.isReredingListeuser)
 
   const [showModal, setShowModal] = useState(false);
   const [selectedRole, setSelectedRole] = useState(null);
@@ -89,7 +91,7 @@ const RolesTable = () => {
     return () => {
       if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
     };
-  }, [currentPage, searchTerm]);
+  }, [currentPage, searchTerm,isRefresh]);
 
   // Gestion du modal
   const handleCreate = () => {

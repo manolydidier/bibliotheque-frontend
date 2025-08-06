@@ -47,51 +47,56 @@ export const useDeleteRole = (onRoleDeleted) => {
   };
 
   const DeleteModal = () => {
-    if (!roleToDelete) return null;
+  if (!roleToDelete) return null;
 
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 relative">
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+      <div className="bg-white rounded-xl shadow-2xl  w-auto p-8 relative">
+        {/* Bouton de fermeture */}
+        <button
+          onClick={closeDeleteModal}
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition"
+          aria-label={t('close')}
+        >
+          <FontAwesomeIcon icon={faTimes} />
+        </button>
+
+        {/* Icône et titre */}
+        <div className="text-center bg-slate-50 p-2 w-80 rounded-md">
+          <FontAwesomeIcon icon={faTrashAlt} className="text-red-500 text-6xl mb-4 " />
+          <h3 className="text-xl font-semibold text-gray-800 mb-2">
+            {t('confirm_delete')}
+          </h3>
+          <p className="text-gray-600 ">
+            {t('delete_role_confirmation', { name: roleToDelete.name })}
+          </p>
+        </div>
+
+        {/* Boutons centrés */}
+        <div className="flex justify-center gap-4 mt-6">
           <button
+            type="button"
             onClick={closeDeleteModal}
-            className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+            className="px-5 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition"
           >
-            <FontAwesomeIcon icon={faTimes} />
+            {t('cancel')}
           </button>
-
-          <div className="text-center">
-            <FontAwesomeIcon icon={faTrashAlt} className="text-red-500 text-3xl mb-4" />
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">
-              {t('confirm_delete')}
-            </h3>
-            <p className="text-gray-600 mb-6">
-              {t('delete_role_confirmation', { name: roleToDelete.name })}
-            </p>
-          </div>
-
-          <div className="flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={closeDeleteModal}
-              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              {t('cancel')}
-            </button>
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={isDeleting}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-70 flex items-center"
-            >
-              {isDeleting && <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" />}
-              <FontAwesomeIcon icon={faCheck} className="mr-2" />
-              {t('confirm')}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-70 flex items-center transition"
+          >
+            {isDeleting && <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" />}
+            <FontAwesomeIcon icon={faCheck} className="mr-2" />
+            {t('confirm')}
+          </button>
         </div>
       </div>
-    );
-  };
+    </div>
+  );
+};
+
 
   return { openDeleteModal, DeleteModal };
 };

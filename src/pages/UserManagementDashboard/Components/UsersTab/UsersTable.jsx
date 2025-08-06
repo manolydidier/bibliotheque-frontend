@@ -2,6 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Pagination from '../../../../component/pagination/Pagination';
+
+import { faUserTag } from '@fortawesome/free-solid-svg-icons';
+import UserRoleModal from './UserRoleModal';
+import useDeleteUserRole from './useDeleteUserRole';
+
 import { 
   faEdit, faCog, faTrashAlt, 
   faChevronDown, faSearch, faPlus,
@@ -14,10 +19,6 @@ import DeactivateUserModal from './DeactivateUserModal';
 import EditRoleModal from './EditRoleModal';
 import { useSelector } from 'react-redux';
 
-
- 
-
-
 const UsersTable = () => {
    const isRefresh=useSelector(state => state.library.isReredingListeuser)
   const { t } = useTranslation();
@@ -29,7 +30,21 @@ const UsersTable = () => {
     total: 0
   });
 
-  
+  // États pour la gestion des UserRoles
+  const [userRoles, setUserRoles] = useState([]);
+  const [userRolesLoading, setUserRolesLoading] = useState(false);
+  const [showUserRoleModal, setShowUserRoleModal] = useState(false);
+  const [selectedUserForRoles, setSelectedUserForRoles] = useState(null);
+
+  // Hook pour la suppression des UserRoles
+  const { 
+    openDeleteModal: openDeleteUserRoleModal, 
+    DeleteModal: DeleteUserRoleModal 
+  } = useDeleteUserRole((deletedId) => {
+    setUserRoles(prev => prev.filter(ur => ur.id !== deletedId));
+  });
+
+
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   
@@ -86,6 +101,7 @@ const UsersTable = () => {
         },
         cancelToken: cancelToken.current.token
       });
+    
       
       setUsers(response.data.users || []);
       setPagination(response.data.pagination || {
@@ -177,6 +193,7 @@ const setValueFresh=()=>{
     );
     closeModals();
   };
+
 
   if (loading && users.length === 0) {
     return (
@@ -321,6 +338,71 @@ const setValueFresh=()=>{
           )}
         </div>
         
+ {/* Section UserRoles */}
+      {selectedUserForRoles && (
+        <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div className="flex items-center justify-between p-4 border-b">
+            <h3 className="font-medium">
+              {t('roles_for_user', { name: selectedUserForRoles.name })}
+            </h3>
+            <button
+              onClick={() => setShowUserRoleModal(true)}
+              className="px-3 py-1 bg-blue-600 text-white rounded text-sm flex items-center"
+            >
+              <FontAwesomeIcon icon={faPlus} className="mr-1" />
+              {t('assign_role')}
+            </button>
+          </div>
+
+          {userRolesLoading ? (
+            <div className="p-8 text-center">
+              <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" />
+              {t('loading')}...
+            </div>
+          ) : (
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('role')}</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('assigned_at')}</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">{t('actions')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {userRoles.map(role => (
+                  <tr key={role.id}>
+                    <td className="px-6 py-4 whitespace-nowrap">{role.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(role.pivot.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <button
+                        onClick={() => openDeleteUserRoleModal(role)}
+                        className="text-red-600 hover:text-red-800 p-1"
+                      >
+                        <FontAwesomeIcon icon={faTrashAlt} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+
+      <DeleteModal />
+      <DeleteUserRoleModal />
+      <UserRoleModal
+        show={showUserRoleModal}
+        onClose={() => setShowUserRoleModal(false)}
+        onSave={(newUserRole) => {
+          setUserRoles(prev => [...prev, newUserRole]);
+          setShowUserRoleModal(false);
+        }}
+        userId={selectedUserForRoles?.id}
+      />
         {/* Modales avec contrôle conditionnel */}
         <DeleteModal />
         
@@ -343,6 +425,7 @@ const setValueFresh=()=>{
           />
         )}
       </div>
+       
     </ErrorBoundary>
   );
 };

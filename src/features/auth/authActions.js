@@ -40,7 +40,7 @@ const handleAuthError = (error) => {
 
 export const loginUser = (credentials) => async (dispatch) => {
   dispatch(loginStart());
-  
+
   toast.loading(
     credentials.langue === 'fr' 
       ? 'Connexion en cours...' 
@@ -54,7 +54,13 @@ export const loginUser = (credentials) => async (dispatch) => {
   );
 
   try {
-    const response = await axios.post('/login', credentials);
+    // Ajout de la date actuelle au format ISO
+    const enrichedCredentials = {
+      ...credentials,
+      last_login: new Date().toISOString()
+    };
+
+    const response = await axios.post('/login', enrichedCredentials);
     const data = response.data;
     
     localStorage.setItem('auth_token', data.token);

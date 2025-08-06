@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { refreshListUser } from '../../../../store/slices/Slice';
 import {
   faTimes,
   faSave,
@@ -13,24 +14,38 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import axios from 'axios';
 import { toast } from '../../../../component/toast/toast';
+import { useDispatch } from 'react-redux';
 
 const RoleModal = ({ show, onClose, initialData = null }) => {
   const { t } = useTranslation();
   const nameInputRef = useRef(null);
   const modalRef = useRef();
+  const dispatch = useDispatch();
 
-  // ✅ Initialisation de is_active :
-  // - Si mode édition → utilise la valeur du rôle
-  // - Si création → null ou false par défaut (pas de valeur fixe)
+  // Liste des permissions (à charger dynamiquement si possible)
+  const allPermissions = [
+    'user.view',
+    'user.create',
+    'user.edit',
+    'user.delete',
+    'role.view',
+    'role.create',
+    'role.edit',
+    'role.delete',
+    'permission.manage',
+  ];
+
+  // État du formulaire
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    is_active: false, // ✅ Par défaut : inactif (ou `null` si vous préférez)
+    is_active: false,
+    is_admin: false,
+    permissions: [],
   });
 
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
   // Configuration Axios
@@ -42,17 +57,24 @@ const RoleModal = ({ show, onClose, initialData = null }) => {
     axios.defaults.baseURL = API_BASE_URL;
   }, []);
 
-  // 🔄 Remplissage des données en mode édition
+  // Remplissage des données en mode édition
   useEffect(() => {
     if (initialData) {
       setFormData({
         name: initialData.name || '',
         description: initialData.description || '',
-        is_active: initialData.is_active ?? false, // ✅ Garde l'état du rôle
+        is_active: initialData.is_active ?? false,
+        is_admin: initialData.is_admin ?? false,
+        permissions: initialData.permissions?.map(p => p.name) || [], // Ajuste selon ton API
       });
     } else {
-      // ✅ Réinitialise à false (inactif) pour une création
-      setFormData({ name: '', description: '', is_active: false });
+      setFormData({
+        name: '',
+        description: '',
+        is_active: false,
+        is_admin: false,
+        permissions: [],
+      });
     }
     setErrors({});
   }, [initialData, show]);
@@ -87,10 +109,21 @@ const RoleModal = ({ show, onClose, initialData = null }) => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-    }));
+
+    if (name === 'permissions') {
+      setFormData((prev) => ({
+        ...prev,
+        permissions: checked
+          ? [...prev.permissions, value]
+          : prev.permissions.filter((p) => p !== value),
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: type === 'checkbox' ? checked : value,
+      }));
+    }
+
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: '' }));
     }
@@ -105,6 +138,12 @@ const RoleModal = ({ show, onClose, initialData = null }) => {
     }
     if (formData.description.length > 500) {
       newErrors.description = t('description_too_long', { max: 500 });
+    }
+    if (typeof formData.is_active !== 'boolean') {
+      newErrors.is_active = t('is_active_required');
+    }
+    if (typeof formData.is_admin !== 'boolean') {
+      newErrors.is_admin = t('is_admin_required');
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -121,7 +160,9 @@ const RoleModal = ({ show, onClose, initialData = null }) => {
       const payload = {
         name: formData.name.trim(),
         description: formData.description.trim() || null,
-        is_active: formData.is_active, // ✅ Envoi la valeur du toggle
+        is_active: formData.is_active,
+        is_admin: formData.is_admin,
+        permissions: formData.permissions, // Envoie la liste des permissions
       };
 
       if (initialData) {
@@ -132,6 +173,7 @@ const RoleModal = ({ show, onClose, initialData = null }) => {
         toast.success(t('role_created'));
       }
 
+      dispatch(refreshListUser("true"));
       onClose();
     } catch (error) {
       if (error.response?.status === 422) {
@@ -158,7 +200,7 @@ const RoleModal = ({ show, onClose, initialData = null }) => {
     >
       <div
         ref={modalRef}
-        className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col animate-scale-in overflow-hidden"
+        className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-scale-in overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white">
@@ -178,7 +220,7 @@ const RoleModal = ({ show, onClose, initialData = null }) => {
         </div>
 
         {/* Formulaire */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto max-h-[calc(90vh-140px)]">
           {/* Nom du rôle */}
           <div>
             <label htmlFor="name" className="block text-sm font-medium text-gray-800 mb-2">
@@ -290,7 +332,48 @@ const RoleModal = ({ show, onClose, initialData = null }) => {
                 ></div>
               </div>
             </label>
+            {errors.is_active && (
+              <p className="mt-2 text-xs text-red-600">{errors.is_active}</p>
+            )}
           </div>
+
+          {/* Rôle Administrateur */}
+          <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+            <label
+              htmlFor="is_admin"
+              className="flex items-center justify-between cursor-pointer"
+            >
+              <div>
+                <span className="text-sm font-medium text-purple-800">{t('admin_role')}</span>
+                <p className="text-xs text-purple-600 mt-1">{t('admin_role_hint')}</p>
+              </div>
+              <div className="relative inline-block w-12 align-middle select-none">
+                <input
+                  type="checkbox"
+                  id="is_admin"
+                  name="is_admin"
+                  checked={formData.is_admin}
+                  onChange={handleChange}
+                  className="sr-only"
+                />
+                <div
+                  className={`block w-12 h-6 rounded-full transition-colors duration-200 ${
+                    formData.is_admin ? 'bg-purple-600' : 'bg-gray-300'
+                  }`}
+                ></div>
+                <div
+                  className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-200 transform ${
+                    formData.is_admin ? 'translate-x-6' : 'translate-x-0'
+                  }`}
+                ></div>
+              </div>
+            </label>
+            {errors.is_admin && (
+              <p className="mt-2 text-xs text-red-600">{errors.is_admin}</p>
+            )}
+          </div>
+
+         
 
           {/* Boutons */}
           <div className="flex justify-end space-x-3 pt-5 border-t border-gray-200">

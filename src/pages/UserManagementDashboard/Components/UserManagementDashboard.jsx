@@ -9,6 +9,8 @@ import RolesTable from './RolesTab/RolesTable';
 import ActivityLog from './ActivityTab/ActivityLog';
 import PermissionsTable from './PermissionsTab/PermissionsTable';
 import EditProfileTab from './EditProfile/EditProfileTab';
+import UserRoleForm from './UserRole/UserRoleForm';
+import UserRolesDisplay from './UserRole/UserRolesDisplay ';
 
 
 
@@ -21,8 +23,10 @@ const UserManagementDashboard = () => {
     { id: 'profile', label: t('my_profile'), icon: 'user' },
     { id: 'EditProfil', label: t('edit_profil'), icon: 'history' },
     { id: 'users', label: t('user_list'), icon: 'users' },
-    { id: 'permissions', label: t('permissions'), icon: 'key' },
+    { id: 'userrole', label: t('user_roles'), icon: 'history' },
     { id: 'roles', label: t('roles'), icon: 'user-tag' },
+
+    { id: 'permissions', label: t('permissions'), icon: 'key' },
     { id: 'activity', label: t('activity'), icon: 'history' },
   ];
 
@@ -39,8 +43,10 @@ const UserManagementDashboard = () => {
           {activeTab === 'roles' && <RolesTable />}
           {activeTab === 'activity' && <ActivityLog />}
           {activeTab === 'EditProfil' && <EditProfileTab />}
+          {activeTab === 'userrole' && <UserRolesDisplay  />}
         </div>
       </div>
+   
     </div>
   );
 };
