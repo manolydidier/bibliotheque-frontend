@@ -11,7 +11,9 @@ import {
   faSearch,
   faSortUp,
   faSortDown,
-  faInfoCircle
+  faInfoCircle,
+  faUsers,
+  faKey
 } from '@fortawesome/free-solid-svg-icons';
 import axios from 'axios';
 
@@ -48,34 +50,66 @@ const EditRoleModal = ({ user, isOpen, onClose, onRoleUpdated }) => {
   const fetchAvailableRoles = async (term = '') => {
     setLoadingRoles(true);
     try {
-      const params = {
-        search: term,
-        page: pagination.page,
-        per_page: pagination.perPage,
-        is_admin: filters.onlyAdmin || undefined,
-        has_permissions: filters.withPermissions || undefined,
-        sort_field: sortField,
-        sort_direction: sortDirection
-      };
+      // Utiliser la route correcte pour les rôles
+      const response = await axios.get('/roles');
       
-      const response = await axios.get('/roles/rolesliste', { params });
-      
-      if (response.data.success) {
-        setAvailableRoles(response.data.data || []);
+      if (response.data && response.data.data) {
+        // Filtrer les rôles selon les critères
+        let filteredRoles = response.data.data;
+        
+        // Filtrer par terme de recherche
+        if (term) {
+          filteredRoles = filteredRoles.filter(role => 
+            role.name.toLowerCase().includes(term.toLowerCase()) ||
+            (role.description && role.description.toLowerCase().includes(term.toLowerCase()))
+          );
+        }
+        
+        // Filtrer par type admin
+        if (filters.onlyAdmin) {
+          filteredRoles = filteredRoles.filter(role => role.is_admin === true);
+        }
+        
+        // Filtrer par permissions
+        if (filters.withPermissions) {
+          filteredRoles = filteredRoles.filter(role => 
+            role.permissions && role.permissions.length > 0
+          );
+        }
+        
+        // Trier les résultats
+        filteredRoles.sort((a, b) => {
+          if (sortField === 'name') {
+            return sortDirection === 'asc' 
+              ? a.name.localeCompare(b.name) 
+              : b.name.localeCompare(a.name);
+          } else if (sortField === 'users_count') {
+            return sortDirection === 'asc' 
+              ? (a.users_count || 0) - (b.users_count || 0)
+              : (b.users_count || 0) - (a.users_count || 0);
+          }
+          return 0;
+        });
+        
+        setAvailableRoles(filteredRoles);
         setPagination(prev => ({
           ...prev,
-          total: response.data.meta.total
+          total: filteredRoles.length
         }));
 
-        if (!term && user?.role_id) {
-          const currentRole = response.data.data.find((r) => r.id === user.role_id);
-          setSelectedRoleDetails(currentRole);
+        // Sélectionner le rôle actuel de l'utilisateur
+        if (!term && user) {
+          const currentRole = filteredRoles.find((r) => r.id === user.role_id);
           if (currentRole) {
             setSelectedRole(currentRole.id);
+            setSelectedRoleDetails(currentRole);
+          } else if (user.role) {
+            // Si l'utilisateur a un rôle mais qu'il n'est pas dans la liste
+            setSelectedRole(user.role);
           }
         }
       } else {
-        throw new Error(response.data.message || 'Failed to fetch roles');
+        throw new Error('Invalid response format');
       }
     } catch (err) {
       console.error('Error fetching roles:', err);
@@ -87,9 +121,9 @@ const EditRoleModal = ({ user, isOpen, onClose, onRoleUpdated }) => {
   };
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && user) {
       setSearchTerm('');
-      setSelectedRole(user?.role_id || '');
+      setSelectedRole(user.role_id || user.role || '');
       setPagination(prev => ({ ...prev, page: 1 }));
       fetchAvailableRoles();
     } else {
@@ -112,12 +146,6 @@ const EditRoleModal = ({ user, isOpen, onClose, onRoleUpdated }) => {
     return () => clearTimeout(delayDebounce);
   }, [searchTerm]);
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchAvailableRoles(searchTerm);
-    }
-  }, [pagination.page]);
-
   const handleRoleChange = (roleId) => {
     setSelectedRole(roleId);
     const role = availableRoles.find((r) => r.id === roleId);
@@ -125,24 +153,62 @@ const EditRoleModal = ({ user, isOpen, onClose, onRoleUpdated }) => {
   };
 
   const handleUpdateRole = async () => {
-    if (!user || !selectedRole || selectedRole === user.role_id) return;
+    if (!user || !selectedRole) return;
 
     setIsUpdating(true);
     setError('');
     try {
-      const response = await axios.patch(`/users/${user.id}/role`, {
-        role_id: selectedRole,
-      });
+      // Utiliser la route correcte pour mettre à jour le rôle
+      // Votre contrôleur attend un ID d'attribution de rôle, mais nous devons d'abord trouver l'ID de l'attribution existante
+      
+      // D'abord, récupérer l'attribution de rôle existante pour cet utilisateur
+      const userRolesResponse = await axios.get(`/userrole/${user.id}/roles`);
+        // console.log(userRolesResponse.data.data.roles[0].id);
 
-      if (response.data.success) {
-        onRoleUpdated?.(user.id, selectedRole, response.data.user);
-        onClose();
+      
+      if (userRolesResponse.data.status && userRolesResponse.data.data.roles.length > 0) {
+        // Prendre le premier rôle (ou trouver le bon si l'utilisateur a plusieurs rôles)
+        const userRole = userRolesResponse.data.data.roles[0];
+        // console.log(userRole);
+        
+        // Maintenant mettre à jour avec l'ID correct
+        const response = await axios.post(`/users/${userRole.id}/role`, {
+          role_id: selectedRole,
+          user_id: user.id
+        });
+
+        if (response.data.status) {
+          onRoleUpdated?.(user.id, selectedRole, response.data.data);
+          onClose();
+        } else {
+          throw new Error(response.data.message || 'Failed to update role');
+        }
       } else {
-        throw new Error(response.data.message || 'Failed to update role');
+        // Si l'utilisateur n'a pas d'attribution de rôle existante, en créer une nouvelle
+        const response = await axios.post('/userrole/user-roles', {
+          role_id: selectedRole,
+          user_id: user.id
+        });
+
+        if (response.data.status) {
+          onRoleUpdated?.(user.id, selectedRole, response.data.data);
+          onClose();
+        } else {
+          throw new Error(response.data.message || 'Failed to assign role');
+        }
       }
     } catch (error) {
       console.error('Error updating user role:', error);
-      setError(error.response?.data?.message || t('error_updating_role'));
+      // Afficher un message d'erreur plus spécifique
+      if (error.response?.data?.message) {
+        setError(error.response.data.message);
+      } else if (error.response?.status === 404) {
+        setError(t('role_assignment_not_found'));
+      } else if (error.response?.status === 422) {
+        setError(t('user_already_has_role'));
+      } else {
+        setError(t('error_updating_role'));
+      }
     } finally {
       setIsUpdating(false);
     }
@@ -160,6 +226,13 @@ const EditRoleModal = ({ user, isOpen, onClose, onRoleUpdated }) => {
 
   const handlePageChange = (newPage) => {
     setPagination(prev => ({ ...prev, page: newPage }));
+  };
+
+  // Fonction pour obtenir les rôles paginés
+  const getPaginatedRoles = () => {
+    const startIndex = (pagination.page - 1) * pagination.perPage;
+    const endIndex = startIndex + pagination.perPage;
+    return availableRoles.slice(startIndex, endIndex);
   };
 
   if (!isOpen || !user) return null;
@@ -202,7 +275,7 @@ const EditRoleModal = ({ user, isOpen, onClose, onRoleUpdated }) => {
             <div className="text-right">
               <p className="text-xs text-gray-500 mb-1">{t('current_role')}</p>
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                {user.role?.name || 'N/A'}
+                {user.role?.name || user.role || 'N/A'}
               </span>
             </div>
           </div>
@@ -298,7 +371,7 @@ const EditRoleModal = ({ user, isOpen, onClose, onRoleUpdated }) => {
                   </div>
                 ) : (
                   <ul className="divide-y divide-gray-100">
-                    {availableRoles.map((role) => (
+                    {getPaginatedRoles().map((role) => (
                       <li
                         key={role.id}
                         onClick={() => handleRoleChange(role.id)}
@@ -352,10 +425,12 @@ const EditRoleModal = ({ user, isOpen, onClose, onRoleUpdated }) => {
                                 ? 'bg-purple-50 text-purple-700' 
                                 : 'bg-gray-50 text-gray-700'
                             }`}>
-                              {role.users_count} {t('users')}
+                              <FontAwesomeIcon icon={faUsers} className="mr-1 text-xs" />
+                              {role.users_count || 0}
                             </span>
                             {role.is_admin && (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700">
+                                <FontAwesomeIcon icon={faKey} className="mr-1 text-xs" />
                                 Admin
                               </span>
                             )}
@@ -399,7 +474,7 @@ const EditRoleModal = ({ user, isOpen, onClose, onRoleUpdated }) => {
                 <FontAwesomeIcon icon={faShieldAlt} className="text-blue-500 mr-1.5 text-xs" />
                 {t('role_permissions')}
               </h4>
-              {selectedRoleDetails.permissions?.length > 0 ? (
+              {selectedRoleDetails.permissions && selectedRoleDetails.permissions.length > 0 ? (
                 <div className="grid grid-cols-2 gap-1.5">
                   {selectedRoleDetails.permissions.map((permission) => (
                     <div key={permission.id} className="flex items-center text-xs text-gray-700">
@@ -432,7 +507,7 @@ const EditRoleModal = ({ user, isOpen, onClose, onRoleUpdated }) => {
           </button>
           <button
             onClick={handleUpdateRole}
-            disabled={isUpdating || !selectedRole || selectedRole === user.role_id}
+            disabled={isUpdating || !selectedRole || selectedRole === (user.role_id || user.role)}
             className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[100px]"
           >
             {isUpdating ? (

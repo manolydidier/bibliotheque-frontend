@@ -30,7 +30,7 @@ const ProfileForm = () => {
     email: '',
     phone: '',
     birthdate: '',
-    roles: [],
+    roles: [], // Initialisé comme tableau vide
     address: '',
     isActive: false,
     emailVerified: false
@@ -42,23 +42,38 @@ const ProfileForm = () => {
   const dispatch = useDispatch();
 
   const [validationErrors, setValidationErrors] = useState({});
-axios.defaults.headers.common['Accept'] = 'application/json';
-axios.defaults.headers.common['Content-Type'] = 'application/json';
+  
+  axios.defaults.headers.common['Accept'] = 'application/json';
+  axios.defaults.headers.common['Content-Type'] = 'application/json';
 
-axios.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('auth_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+  axios.interceptors.request.use(
+    (config) => {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    },
+    (error) => {
+      return Promise.reject(error);
     }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+  );
+
   // Récupération des données utilisateur depuis Redux
   const userId = useSelector(state => state?.library?.auth?.user?.id);
+
+  // Fonction pour normaliser les rôles (s'assurer que c'est toujours un tableau)
+  const normalizeRoles = (roles) => {
+    if (Array.isArray(roles)) {
+      return roles;
+    } else if (typeof roles === 'string') {
+      return [roles];
+    } else if (roles && typeof roles === 'object') {
+      // Si c'est un objet avec une propriété name
+      return [roles.name || 'User'];
+    }
+    return ['User']; // Valeur par défaut
+  };
 
   // Chargement des données utilisateur
   useEffect(() => {
@@ -66,26 +81,28 @@ axios.interceptors.request.use(
       try {
         setLoading(true);
         const response = await axios.get(`/user/${userId}/profile`);
-
+        
+        // Normaliser les rôles pour s'assurer que c'est toujours un tableau
+        const normalizedRoles = normalizeRoles(response?.data?.roles[0]?.name || response?.data?.roles || "User");
+        
         setFormData({
-          username: response.data.user.username,
-          firstName: response.data.user.first_name,
-          lastName: response.data.user.last_name,
-          email: response.data.user.email,
-          phone: response.data.user.phone,
-          birthdate: response.data.user.birthdate,
-          roles: response.data.user.roles || [],
-          address: response.data.user.address,
-          isActive: response.data.user.is_active,
+          username: response.data.user.username || '',
+          firstName: response.data.user.first_name || '',
+          lastName: response.data.user.last_name || '',
+          email: response.data.user.email || '',
+          phone: response.data.user.phone || '',
+          birthdate: response.data.user.birthdate || '',
+          roles: normalizedRoles,
+          address: response.data.user.address || '',
+          isActive: response.data.user.is_active || false,
           emailVerified: response.data.user.email_verified_at !== null
         });
+        
         dispatch(updateUser(response.data.user));
         
       } catch (err) {
         setError(err.response?.data?.message || t('fetch_error'));
-        console.log(err);
-        
-
+        console.error('Error fetching user profile:', err);
       } finally {
         setLoading(false);
       }
@@ -93,10 +110,8 @@ axios.interceptors.request.use(
 
     if (userId) {
       fetchUserProfile();
-     
-      
     }
-  }, [userId, t]);
+  }, [userId, t, dispatch]);
 
   const handleInputChange = (e) => {
     const { id, value } = e.target;
@@ -151,6 +166,7 @@ axios.interceptors.request.use(
     setIsEditing(false);
     setError(null);
     setValidationErrors({});
+    // Recharger les données originales
     setLoading(true);
   };
 
@@ -226,6 +242,7 @@ axios.interceptors.request.use(
             <button
               onClick={handleEditClick}
               className="px-4 py-2 bg-white text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition-colors duration-200 flex items-center shadow-sm hover:shadow-md"
+              disabled={loading}
             >
               <FontAwesomeIcon icon={faEdit} className="mr-2" />
               {t('edit')}
@@ -494,14 +511,14 @@ axios.interceptors.request.use(
                 />
               </div>
               <div className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-100 bg-gray-50 text-gray-500 min-h-[42px] flex items-center">
-                {formData.roles?.length > 0 ? (
+                {Array.isArray(formData.roles) && formData.roles.length > 0 ? (
                   <div className="flex flex-wrap gap-1">
                     {formData.roles.map((role, index) => (
                       <span 
                         key={index}
                         className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full"
                       >
-                        {role}
+                        {typeof role === 'object' ? role.name : role}
                       </span>
                     ))}
                   </div>

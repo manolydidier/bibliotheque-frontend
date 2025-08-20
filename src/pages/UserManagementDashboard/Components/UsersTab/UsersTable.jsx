@@ -58,7 +58,7 @@ const UsersTable = () => {
   
   const cancelToken = useRef(null);
   const debounceTimeout = useRef(null);
-;
+
   // Hook pour gérer la suppression
   const { openDeleteModal, DeleteModal } = useDeleteUser((userId) => {
     setUsers(prevUsers => prevUsers.filter(user => user.id !== userId));
@@ -171,9 +171,11 @@ const UsersTable = () => {
     setShowEditRoleModal(false);
     setSelectedUser(null);
   };
-const setValueFresh=()=>{
-  setFresh(!fresh)
-}
+  
+  const setValueFresh=()=>{
+    setFresh(!fresh)
+  }
+  
   // Callback après modification du rôle
   const handleRoleUpdated = (updatedUser) => {
     setUsers(prevUsers => 
@@ -193,7 +195,6 @@ const setValueFresh=()=>{
     );
     closeModals();
   };
-
 
   if (loading && users.length === 0) {
     return (
@@ -255,7 +256,7 @@ const setValueFresh=()=>{
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {users.map((user) => (
-                  <tr key={user.id} className="hover:bg-gray-50">
+                  <tr key={user.id} className="hover:bg-gray-50 group">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10">
@@ -293,28 +294,54 @@ const setValueFresh=()=>{
                       {user.last_activity}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
-                        <button 
-                          className="text-blue-600 hover:text-blue-900 p-1 rounded-full hover:bg-blue-50"
-                          title={t('edit')}
-                          onClick={() => handleEditClick(user)}
-                        >
-                          <FontAwesomeIcon icon={faEdit} />
-                        </button>
-                        <button 
-                          className="text-gray-600 hover:text-gray-900 p-1 rounded-full hover:bg-gray-50"
-                          title={t('settings')}
-                          onClick={() => handleDeactivateClick(user)}
-                        >
-                          <FontAwesomeIcon icon={faCog} />
-                        </button>
-                        <button 
-                          className="text-red-600 hover:text-red-900 p-1 rounded-full hover:bg-red-50"
-                          title={t('delete')}
-                          onClick={() => handleDeleteClick(user)}
-                        >
-                          <FontAwesomeIcon icon={faTrashAlt} />
-                        </button>
+                      <div className="flex justify-end space-x-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        {/* Bouton Modifier avec tooltip */}
+                        <div className="relative group/action">
+                          <button 
+                            className="text-blue-600 hover:text-blue-900 p-2 rounded-full hover:bg-blue-50 transition-colors duration-200"
+                            onClick={() => handleEditClick(user)}
+                          >
+                            <FontAwesomeIcon icon={faEdit} />
+                          </button>
+                          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover/action:opacity-100 transition-opacity duration-200 pointer-events-none">
+                            <div className="bg-gray-800 text-white text-xs py-1 px-2 rounded whitespace-nowrap">
+                              {t('edit_user')}
+                            </div>
+                            <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-full w-2 h-2 bg-gray-800 rotate-45"></div>
+                          </div>
+                        </div>
+
+                        {/* Bouton Paramètres avec tooltip */}
+                        <div className="relative group/action">
+                          <button 
+                            className="text-gray-600 hover:text-gray-900 p-2 rounded-full hover:bg-gray-50 transition-colors duration-200"
+                            onClick={() => handleDeactivateClick(user)}
+                          >
+                            <FontAwesomeIcon icon={faCog} />
+                          </button>
+                          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover/action:opacity-100 transition-opacity duration-200 pointer-events-none">
+                            <div className="bg-gray-800 text-white text-xs py-1 px-2 rounded whitespace-nowrap">
+                              {t('user_settings')}
+                            </div>
+                            <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-full w-2 h-2 bg-gray-800 rotate-45"></div>
+                          </div>
+                        </div>
+
+                        {/* Bouton Supprimer avec tooltip */}
+                        <div className="relative group/action">
+                          <button 
+                            className="text-red-600 hover:text-red-900 p-2 rounded-full hover:bg-red-50 transition-colors duration-200"
+                            onClick={() => handleDeleteClick(user)}
+                          >
+                            <FontAwesomeIcon icon={faTrashAlt} />
+                          </button>
+                          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover/action:opacity-100 transition-opacity duration-200 pointer-events-none">
+                            <div className="bg-gray-800 text-white text-xs py-1 px-2 rounded whitespace-nowrap">
+                              {t('delete_user')}
+                            </div>
+                            <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-full w-2 h-2 bg-gray-800 rotate-45"></div>
+                          </div>
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -338,71 +365,79 @@ const setValueFresh=()=>{
           )}
         </div>
         
- {/* Section UserRoles */}
-      {selectedUserForRoles && (
-        <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="flex items-center justify-between p-4 border-b">
-            <h3 className="font-medium">
-              {t('roles_for_user', { name: selectedUserForRoles.name })}
-            </h3>
-            <button
-              onClick={() => setShowUserRoleModal(true)}
-              className="px-3 py-1 bg-blue-600 text-white rounded text-sm flex items-center"
-            >
-              <FontAwesomeIcon icon={faPlus} className="mr-1" />
-              {t('assign_role')}
-            </button>
-          </div>
-
-          {userRolesLoading ? (
-            <div className="p-8 text-center">
-              <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" />
-              {t('loading')}...
+        {/* Section UserRoles */}
+        {selectedUserForRoles && (
+          <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="font-medium">
+                {t('roles_for_user', { name: selectedUserForRoles.name })}
+              </h3>
+              <button
+                onClick={() => setShowUserRoleModal(true)}
+                className="px-3 py-1 bg-blue-600 text-white rounded text-sm flex items-center hover:bg-blue-700 transition-colors"
+              >
+                <FontAwesomeIcon icon={faPlus} className="mr-1" />
+                {t('assign_role')}
+              </button>
             </div>
-          ) : (
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('role')}</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('assigned_at')}</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">{t('actions')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {userRoles.map(role => (
-                  <tr key={role.id}>
-                    <td className="px-6 py-4 whitespace-nowrap">{role.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(role.pivot.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <button
-                        onClick={() => openDeleteUserRoleModal(role)}
-                        className="text-red-600 hover:text-red-800 p-1"
-                      >
-                        <FontAwesomeIcon icon={faTrashAlt} />
-                      </button>
-                    </td>
+
+            {userRolesLoading ? (
+              <div className="p-8 text-center">
+                <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" />
+                {t('loading')}...
+              </div>
+            ) : (
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('role')}</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('assigned_at')}</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">{t('actions')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {userRoles.map(role => (
+                    <tr key={role.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">{role.name}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(role.pivot.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <div className="relative group/action">
+                          <button
+                            onClick={() => openDeleteUserRoleModal(role)}
+                            className="text-red-600 hover:text-red-800 p-2 rounded-full hover:bg-red-50 transition-colors"
+                          >
+                            <FontAwesomeIcon icon={faTrashAlt} />
+                          </button>
+                          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover/action:opacity-100 transition-opacity duration-200 pointer-events-none">
+                            <div className="bg-gray-800 text-white text-xs py-1 px-2 rounded whitespace-nowrap">
+                              {t('delete_role')}
+                            </div>
+                            <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-full w-2 h-2 bg-gray-800 rotate-45"></div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
 
-
-      <DeleteModal />
-      <DeleteUserRoleModal />
-      <UserRoleModal
-        show={showUserRoleModal}
-        onClose={() => setShowUserRoleModal(false)}
-        onSave={(newUserRole) => {
-          setUserRoles(prev => [...prev, newUserRole]);
-          setShowUserRoleModal(false);
-        }}
-        userId={selectedUserForRoles?.id}
-      />
+        <DeleteModal />
+        <DeleteUserRoleModal />
+        <UserRoleModal
+          show={showUserRoleModal}
+          onClose={() => setShowUserRoleModal(false)}
+          onSave={(newUserRole) => {
+            setUserRoles(prev => [...prev, newUserRole]);
+            setShowUserRoleModal(false);
+          }}
+          userId={selectedUserForRoles?.id}
+        />
+        
         {/* Modales avec contrôle conditionnel */}
         <DeleteModal />
         
@@ -425,7 +460,6 @@ const setValueFresh=()=>{
           />
         )}
       </div>
-       
     </ErrorBoundary>
   );
 };
