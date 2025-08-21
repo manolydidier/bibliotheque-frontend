@@ -22,18 +22,7 @@ const RoleModal = ({ show, onClose, initialData = null }) => {
   const modalRef = useRef();
   const dispatch = useDispatch();
 
-  // Liste des permissions (à charger dynamiquement si possible)
-  const allPermissions = [
-    'user.view',
-    'user.create',
-    'user.edit',
-    'user.delete',
-    'role.view',
-    'role.create',
-    'role.edit',
-    'role.delete',
-    'permission.manage',
-  ];
+ 
 
   // État du formulaire
   const [formData, setFormData] = useState({
