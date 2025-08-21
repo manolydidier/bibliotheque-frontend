@@ -7,40 +7,10 @@ import AddPermissionForm from './AddPermissionForm';
 import PermissionList from './PermissionList';
 import SpecialPermissions from './SpecialPermissions';
 import PermissionListPage from './PermissionListPage';
+import RolePermissionMatrix from './RolePermissionMatrix';
 
 // Exemple de données
-const initialPermissions = [
-  {
-    id: 1,
-    table: 'Utilisateurs',
-    icon: faUsers,
-    read: true,
-    create: true,
-    edit: true,
-    delete: false,
-    all: false,
-  },
-  {
-    id: 2,
-    table: 'Articles',
-    icon: faEdit,
-    read: true,
-    create: false,
-    edit: false,
-    delete: false,
-    all: false,
-  },
-  {
-    id: 3,
-    table: 'Paramètres',
-    icon: faKey,
-    read: true,
-    create: false,
-    edit: false,
-    delete: false,
-    all: false,
-  },
-];
+
 
 const initialPermissionList = [
   {
@@ -63,31 +33,12 @@ const initialPermissionList = [
 
 const PermissionsTable = () => {
   const { t } = useTranslation();
-  const [permissions, setPermissions] = useState(initialPermissions);
+  
   const [permissionList, setPermissionList] = useState(initialPermissionList);
   const [showModal, setShowModal] = useState(false);
   const [modalContent, setModalContent] = useState(null);
 
-  const togglePermission = (id, field) => {
-    setPermissions((prev) =>
-      prev.map((perm) => {
-        if (perm.id !== id) return perm;
-        if (field === 'all') {
-          return {
-            ...perm,
-            read: !perm.all,
-            create: !perm.all,
-            edit: !perm.all,
-            delete: !perm.all,
-            all: !perm.all,
-          };
-        }
-        const updated = { ...perm, [field]: !perm[field] };
-        updated.all = updated.read && updated.create && updated.edit && updated.delete;
-        return updated;
-      })
-    );
-  };
+
 
   const handlePermissionAdded = (newPerm) => {
     setPermissionList([newPerm, ...permissionList]);
@@ -221,86 +172,11 @@ const PermissionsTable = () => {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {t('table')}
-                </th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {t('read')}
-                </th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {t('create')}
-                </th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {t('edit')}
-                </th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {t('delete')}
-                </th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {t('all')}
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {permissions.map((permission) => (
-                <tr key={permission.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                        <FontAwesomeIcon icon={permission.icon} className="text-blue-600 text-sm" />
-                      </div>
-                      {permission.table}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-                      checked={permission.read}
-                      onChange={() => togglePermission(permission.id, 'read')}
-                    />
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-                      checked={permission.create}
-                      onChange={() => togglePermission(permission.id, 'create')}
-                    />
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-                      checked={permission.edit}
-                      onChange={() => togglePermission(permission.id, 'edit')}
-                    />
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-                      checked={permission.delete}
-                      onChange={() => togglePermission(permission.id, 'delete')}
-                    />
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-                      checked={permission.all}
-                      onChange={() => togglePermission(permission.id, 'all')}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+         
+         {/* Nouvelle matrice simple */}
+    <RolePermissionMatrix />
+    
+
         <SpecialPermissions />
       </div>
 

@@ -62,7 +62,6 @@ axios.interceptors.request.use(
       try {
         setLoading(true);
         const response = await axios.get(`/user/${userId}/profile`);
-
         setFormData({
           username: response.data.user.username,
           firstName: response.data.user.first_name,
@@ -70,7 +69,7 @@ axios.interceptors.request.use(
           email: response.data.user.email,
           phone: response.data.user.phone,
           birthdate: response.data.user.birthdate,
-          roles: response.data.user.roles || [],
+          roles: response.data.roles[0].name || [],
           address: response.data.user.address,
           isActive: response.data.user.is_active,
           emailVerified: response.data.user.email_verified_at !== null,
@@ -88,8 +87,7 @@ axios.interceptors.request.use(
     };
 
     if (userId) {
-      fetchUserProfile();
-     
+      fetchUserProfile();  
       
     }
   }, [userId, t]);
@@ -110,7 +108,7 @@ axios.interceptors.request.use(
       <h2 className="text-2xl font-bold text-gray-800">{formData.firstName} {formData.lastName}</h2>
       <p className="text-gray-500 mb-4 flex items-center">
         <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full mr-2">
-          {t('administrator')}?
+          {formData.roles}
         </span>
         <span
           className={`text-xs px-2 py-1 rounded-full flex items-center
