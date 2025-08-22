@@ -6,23 +6,23 @@ import axios from 'axios';
 import { useSelector } from 'react-redux';
 
 const ProfileInfo = () => {
- const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const API_BASE_STORAGE = import.meta.env.VITE_API_BASE_STORAGE;
 
-    const [formData, setFormData] = useState({
-       username: '',
-       firstName: '',
-       lastName: '',
-       email: '',
-       phone: '',
-       birthdate: '',
-       roles: [],
-       address: '',
-       isActive: false,
-       emailVerified: false,
-       avatar_url: ''
-     });
-  
+  const [formData, setFormData] = useState({
+    username: '',
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    birthdate: '',
+    roles: [],
+    address: '',
+    isActive: false,
+    emailVerified: false,
+    avatar_url: ''
+  });
+
   const [error, setError] = useState(null);
 
   const { t } = useTranslation();
@@ -38,21 +38,24 @@ const ProfileInfo = () => {
       reader.readAsDataURL(file);
     }
   };
- axios.defaults.headers.common['Accept'] = 'application/json';
-axios.defaults.headers.common['Content-Type'] = 'application/json';
 
-axios.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('auth_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+  // Axios (comme ton code)
+  axios.defaults.headers.common['Accept'] = 'application/json';
+  axios.defaults.headers.common['Content-Type'] = 'application/json';
+
+  axios.interceptors.request.use(
+    (config) => {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    },
+    (error) => {
+      return Promise.reject(error);
     }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+  );
+
   // Récupération des données utilisateur depuis Redux
   const userId = useSelector(state => state?.library?.auth?.user?.id);
 
@@ -73,29 +76,40 @@ axios.interceptors.request.use(
           address: response.data.user.address,
           isActive: response.data.user.is_active,
           emailVerified: response.data.user.email_verified_at !== null,
-          avatar_url: response.data.user.avatar_url 
+          avatar_url: response.data.user.avatar_url
         });
-        
       } catch (err) {
         setError(err.response?.data?.message || t('fetch_error'));
         console.log(err);
-        
-
       } finally {
         setLoading(false);
       }
     };
 
     if (userId) {
-      fetchUserProfile();  
-      
+      fetchUserProfile();
     }
   }, [userId, t]);
+
+  // 👉 Nouvelle fonctionnalité : ouvrir le client mail avec objet & corps
+  const handleMessageClick = () => {
+    const to = (formData.email || '').trim();
+    if (!to) {
+      alert(t('no_email_available') || 'Aucun email disponible pour cet utilisateur.');
+      return;
+    }
+    const fullName = `${formData.firstName || ''} ${formData.lastName || ''}`.trim() || formData.username || '';
+    const subject = t('email_subject_profile', { name: fullName }) || `Message pour ${fullName}`;
+    const body = `${t('hello', 'Bonjour')} ${formData.firstName || fullName},%0D%0A%0D%0A`; // %0D%0A = \r\n
+    const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${body}`;
+    window.location.href = mailto;
+  };
+
   return (
     <div className="flex flex-col items-center">
       <div className="profile-pic-upload relative mb-4">
         <img
-          src={`${API_BASE_STORAGE}/storage/${formData.avatar_url}`|| profileImage}
+          src={`${API_BASE_STORAGE}/storage/${formData.avatar_url}` || profileImage}
           alt="Profile"
           className="w-32 h-32 rounded-full object-cover border-4 border-blue-100 shadow-md"
         />
@@ -104,7 +118,7 @@ axios.interceptors.request.use(
           <input type="file" className="hidden" onChange={handleImageUpload} />
         </div>
       </div>
-      
+
       <h2 className="text-2xl font-bold text-gray-800">{formData.firstName} {formData.lastName}</h2>
       <p className="text-gray-500 mb-4 flex items-center">
         <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full mr-2">
@@ -112,33 +126,40 @@ axios.interceptors.request.use(
         </span>
         <span
           className={`text-xs px-2 py-1 rounded-full flex items-center
-            ${formData.isActive 
-              ? 'text-green-600 bg-green-100' 
+            ${formData.isActive
+              ? 'text-green-600 bg-green-100'
               : 'text-gray-500 bg-gray-100'}
           `}
         >
           <span
-            className={`w-2 h-2 rounded-full mr-1 
-              ${formData.isActive 
-                ? 'bg-green-500' 
+            className={`w-2 h-2 rounded-full mr-1
+              ${formData.isActive
+                ? 'bg-green-500'
                 : 'bg-gray-400'}
             `}
           ></span>
           {formData.isActive ? t('active') : t('inactive')}
         </span>
       </p>
-      
+
       <div className="flex space-x-3 w-full justify-center">
-        <button className="flex-1 bg-blue-100 text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-200 transition-colors flex items-center justify-center">
+        {/* 🆕 onClick → ouvre le client mail */}
+        <button
+          onClick={handleMessageClick}
+          className="flex-1 bg-blue-100 text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-200 transition-colors flex items-center justify-center"
+          title={t('send_email') || 'Envoyer un email'}
+          aria-label={t('send_email') || 'Envoyer un email'}
+        >
           <FontAwesomeIcon icon={faEnvelope} className="mr-2" />
           {t('message')}
         </button>
+
         <button className="flex-1 bg-gray-100 text-gray-600 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center">
           <FontAwesomeIcon icon={faUserPlus} className="mr-2" />
           {t('follow')}
         </button>
       </div>
-      
+
       <div className="w-full mt-6 grid grid-cols-3 gap-3">
         <div className="bg-blue-50 p-3 rounded-lg text-center">
           <p className="text-xl font-bold text-blue-600">24</p>
