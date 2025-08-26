@@ -72,11 +72,11 @@ const ProfileInfo = () => {
           email: response.data.user.email,
           phone: response.data.user.phone,
           birthdate: response.data.user.birthdate,
-          roles: response.data.roles[0].name || [],
+          roles: response?.data?.roles[0]?.name || [],
           address: response.data.user.address,
           isActive: response.data.user.is_active,
           emailVerified: response.data.user.email_verified_at !== null,
-          avatar_url: response.data.user.avatar_url
+          avatar_url: response?.data?.user?.avatar_url
         });
       } catch (err) {
         setError(err.response?.data?.message || t('fetch_error'));
@@ -109,7 +109,7 @@ const ProfileInfo = () => {
     <div className="flex flex-col items-center">
       <div className="profile-pic-upload relative mb-4">
         <img
-          src={`${API_BASE_STORAGE}/storage/${formData.avatar_url}` || profileImage}
+          src={`${API_BASE_STORAGE}/storage/${formData?.avatar_url}` || profileImage}
           alt="Profile"
           className="w-32 h-32 rounded-full object-cover border-4 border-blue-100 shadow-md"
         />
@@ -122,18 +122,18 @@ const ProfileInfo = () => {
       <h2 className="text-2xl font-bold text-gray-800">{formData.firstName} {formData.lastName}</h2>
       <p className="text-gray-500 mb-4 flex items-center">
         <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full mr-2">
-          {formData.roles}
+          {formData?.roles}
         </span>
         <span
           className={`text-xs px-2 py-1 rounded-full flex items-center
-            ${formData.isActive
+            ${formData?.isActive
               ? 'text-green-600 bg-green-100'
               : 'text-gray-500 bg-gray-100'}
           `}
         >
           <span
             className={`w-2 h-2 rounded-full mr-1
-              ${formData.isActive
+              ${formData?.isActive
                 ? 'bg-green-500'
                 : 'bg-gray-400'}
             `}
