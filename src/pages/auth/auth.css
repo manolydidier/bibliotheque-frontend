@@ -106,7 +106,7 @@ body {
 
 /* Fond dégradé modernisé */
 .bg-bleu-pale {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  /* background: linear-gradient(135deg, #667eea 0%, #2b5285 100%); */
   background-attachment: fixed;
   position: relative;
 }
@@ -765,4 +765,66 @@ body {
 .helper-text.warning::before {
   content: "⚠️";
   font-size: 1rem;
+}
+/* ====== Ajustements demandés ====== */
+
+/* 1) Card FLAT (plate) */
+.auth-container.card.flat{
+  max-width: 1280px;         /* plus large pour des champs plus larges */
+  padding: 0;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  box-shadow: none;          /* plat */
+  backdrop-filter: none;     /* retire le blur */
+}
+
+/* 2) Layout 2 colonnes — donner plus d'espace au formulaire */
+.auth-layout{ display:grid; min-height:640px; }
+.auth-layout--media-left  { grid-template-columns: 0.85fr 1.15fr; } /* image | FORM */
+.auth-layout--media-right { grid-template-columns: 1.15fr 0.85fr; } /* FORM | image */
+.auth-form{ padding: 2.5rem 2rem; background: rgba(255,255,255,0.97); }
+
+/* 3) Bouton flottant tout devant */
+.floating-btn{ z-index: 9999; }
+
+/* 4) Panneau média (inchangé sauf rappel) */
+.auth-media{
+  position: relative; overflow:hidden;
+  background:#0b1220; isolation:isolate;
+}
+.auth-media::after{
+  content:""; position:absolute; inset:0;
+  background: radial-gradient(60% 80% at 20% 20%, rgba(255,255,255,.08), transparent),
+              radial-gradient(50% 60% at 80% 70%, rgba(59,130,246,.20), transparent);
+  mix-blend-mode: screen; pointer-events:none;
+}
+.auth-media-img{ width:100%; height:100%; object-fit:contain; display:block; padding:2rem; }
+
+/* 5) Fallback texte */
+.auth-media-fallback{
+  position:absolute; inset:0; display:grid; place-content:center; gap:1rem; text-align:center;
+  color:#e5e7eb; padding:2rem; z-index:1;
+}
+.auth-media-fallback .badge{
+  display:inline-block; font-size:.75rem; letter-spacing:.08em;
+  padding:.35rem .6rem; border:1px solid rgba(255,255,255,.25);
+  border-radius:999px; color:#fff; opacity:.9;
+}
+.auth-media-overlay{ position:absolute; left:1.25rem; right:1.25rem; bottom:1.25rem; color:#fff; text-shadow:0 2px 4px rgba(0,0,0,.3); }
+.auth-media-overlay h3{ margin:0 0 .25rem; font-weight:800; font-size:1.35rem; }
+.auth-media-overlay p{ margin:0; opacity:.9; }
+
+/* 6) Animation de switch Login ⇄ Register */
+@keyframes slideInLeft  { from{ opacity:0; transform: translateX(-24px);} to{ opacity:1; transform:none;} }
+@keyframes slideInRight { from{ opacity:0; transform: translateX( 24px);} to{ opacity:1; transform:none;} }
+
+.auth-page.slide-left.active  { animation: slideInLeft  .45s ease both; }
+.auth-page.slide-right.active { animation: slideInRight .45s ease both; }
+
+/* 7) Responsive : une seule colonne */
+@media (max-width:1024px){
+  .auth-container.card.flat{ max-width: 600px; }
+  .auth-layout--media-left, .auth-layout--media-right{ grid-template-columns: 1fr; }
+  .auth-media{ display:none; }
+  .auth-form{ padding: 2rem 1.5rem; }
 }
