@@ -828,3 +828,107 @@ body {
   .auth-media{ display:none; }
   .auth-form{ padding: 2rem 1.5rem; }
 }
+
+/* ------------------- */
+.auth-container.card.flat{
+  max-width: 980px;
+  padding: 0;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+/* Layout de base */
+.auth-layout{ display:grid; min-height:640px; }
+.auth-layout--media-left  { grid-template-columns: 0.85fr 1.15fr; }
+.auth-layout--media-right { grid-template-columns: 1.15fr 0.85fr; }
+.auth-form{ padding: 2.5rem 2rem; background: rgba(255,255,255,0.97); }
+
+/* Bouton switch au-dessus de tout */
+.floating-btn{ z-index: 99999; }
+
+/* Animations */
+@keyframes slideInLeft  { from{ opacity:0; transform: translateX(-24px);} to{ opacity:1; transform:none;} }
+@keyframes slideInRight { from{ opacity:0; transform: translateX( 24px);} to{ opacity:1; transform:none;} }
+.auth-page.slide-left.active  { animation: slideInLeft  .45s ease both; }
+.auth-page.slide-right.active { animation: slideInRight .45s ease both; }
+
+/* Login : encore plus court */
+.auth-page.login .auth-layout--media-left {
+  grid-template-columns: 1.45fr 0.55fr;  /* image | form (form étroit) */
+}
+.auth-page.login .auth-form { max-width: 420px; margin-inline: auto; }
+
+/* Register : encore plus large */
+.auth-page.register .auth-layout--media-right {
+  grid-template-columns: 1.55fr 0.45fr;  /* form | image (form large) */
+}
+.auth-page.register .auth-form { max-width: 960px; }
+.auth-page.register .input-group input { height: 4rem; font-size: 1.05rem; }
+
+/* Responsive */
+@media (max-width:1024px){
+  .auth-container.card.flat{ max-width: 600px; }
+  .auth-layout--media-left, .auth-layout--media-right{ grid-template-columns: 1fr; }
+  .auth-media{ display:none; }
+  .auth-page.login .auth-form,
+  .auth-page.register .auth-form { max-width: 100%; }
+  .auth-form{ padding: 2rem 1.5rem; }
+}
+
+/* === Overrides layout demandés (placer tout en bas) === */
+
+/* REGISTER : form plus large, UI plus étroite */
+.auth-page.register .auth-layout.auth-layout--media-right{
+  /* form | media */
+  grid-template-columns: 1.35fr 0.65fr !important;
+}
+.auth-page.register .auth-form{
+  /* largeur confortable sans dépasser le container */
+  max-width: 760px !important;
+}
+
+/* LOGIN : form et UI moyens (équilibrés) */
+.auth-page.login .auth-layout.auth-layout--media-left{
+  /* media | form */
+  grid-template-columns: 1fr 1fr !important;
+}
+.auth-page.login .auth-form{
+  max-width: 560px !important;
+}
+
+/* (Optionnel) Inputs un peu plus confortables côté Register */
+.auth-page.register .input-group input{
+  height: 4.1rem !important;
+  font-size: 1.05rem !important;
+}
+
+/* === UI : image de livre en fond + UI Register un peu plus large === */
+
+/* 1) Image de livre en arrière-plan du panneau UI (Login & Register) */
+.auth-page.login .auth-media,
+.auth-page.register .auth-media{
+  background-image:
+    linear-gradient(rgba(11,18,32,.35), rgba(11,18,32,.35)),
+    url("https://images.unsplash.com/photo-1519682577862-22b62b24e493?q=80&w=1920&auto=format&fit=crop");
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+}
+
+/* L’illustration au-dessus prend un peu moins de place pour laisser voir le fond */
+.auth-media-img{
+  opacity: .95;
+  padding: 1.5rem;
+}
+
+/* 2) Register : agrandir légèrement la colonne UI */
+.auth-page.register .auth-layout.auth-layout--media-right{
+  /* form | media (UI un peu plus large) */
+  grid-template-columns: 1.30fr 0.70fr !important;
+}
+
+/* (optionnel) Pour encore plus d’espace UI en Register, tu peux essayer :
+   .auth-page.register .auth-layout.auth-layout--media-right{ grid-template-columns: 1.25fr 0.75fr !important; }
+*/

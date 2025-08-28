@@ -1,4 +1,3 @@
-// src/pages/auth/AuthPage.jsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faUserPlus, faSignInAlt, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
@@ -12,9 +11,26 @@ import Toaster from '../../component/toast/Toaster';
 import { loginUser, registerUser, checkUnique } from '../../features/auth/authActions';
 import { startGoogleOAuth } from '../../features/auth/oauthActions';
 
-/* Illustrations web (SVG libres) */
-const LOGIN_ILLU    = "https://illustrations.popsy.co/white/user-account.svg";
-const REGISTER_ILLU = "https://illustrations.popsy.co/white/rocket-launch.svg";
+/* ================= Illustrations web (SVG libres) =================
+   Choisir un thème ici: 'securite' | 'ecommerce' | 'productivite'
+   Tu peux changer THEME sans toucher au reste du code. */
+const THEME = 'securite';
+const THEMES = {
+  securite: {
+    login:    'https://illustrations.popsy.co/white/security.svg',
+    register: 'https://illustrations.popsy.co/white/user-account.svg',
+  },
+  ecommerce: {
+    login:    'https://illustrations.popsy.co/white/online-shopping.svg',
+    register: 'https://illustrations.popsy.co/white/creation-process.svg',
+  },
+  productivite: {
+    login:    'https://illustrations.popsy.co/white/creation-process.svg',
+    register: 'https://illustrations.popsy.co/white/rocket-launch.svg',
+  }
+};
+const LOGIN_ILLU    = THEMES[THEME].login;
+const REGISTER_ILLU = THEMES[THEME].register;
 
 /* Icône Google */
 const GoogleIcon = () => ( 
@@ -26,7 +42,7 @@ const GoogleIcon = () => (
   </svg>
 );
 
-/* UI messages (inchangés) */
+/* Messages UI (inchangés) */
 const ErrorMessage = ({ id, children, visible }) => visible ? (
   <div id={id} className="field-pop error" role="alert">{children}</div>
 ) : null;
@@ -235,8 +251,8 @@ const AuthPage = () => {
             <FontAwesomeIcon icon={isLoginActive ? faUserPlus : faSignInAlt} className="text-xl" />
           </button>
 
-          {/* LOGIN — illustration à gauche (slide-in gauche) */}
-          <div className={`auth-page ${isLoginActive ? 'active slide-left' : 'hidden'}`}>
+          {/* LOGIN — illustration à gauche, champs raccourcis */}
+          <div className={`auth-page login ${isLoginActive ? 'active slide-left' : 'hidden'}`}>
             <div className="auth-layout auth-layout--media-left">
               <aside className="auth-media" aria-hidden="true">
                 <img src={LOGIN_ILLU} alt="" className="auth-media-img" onError={(e)=>{ e.currentTarget.style.display='none'; }} loading="eager"/>
@@ -255,7 +271,7 @@ const AuthPage = () => {
                 </div>
               </aside>
 
-              <div className="auth-form w-xl">
+              <div className="auth-form ">
                 <div className="form-header">
                   <h1 id="auth-title" className="form-title">{t('welcome_back')}</h1>
                   <p className="form-subtitle">{t('login_to_account')}</p>
@@ -263,7 +279,7 @@ const AuthPage = () => {
 
                 {errors.general && <div className="api-notice">{errors.general}</div>}
 
-                <form onSubmit={handleSubmit} className="space-y-6" noValidate aria-busy={submitting}>
+                <form onSubmit={handleSubmit} className="space-y-6 w-xl" noValidate aria-busy={submitting}>
                   <div className="input-group">
                     <input type="email" name="email" value={formData.email} onChange={handleChange}
                       onFocus={handleFocus} onBlur={handleBlur} placeholder=" "
@@ -285,7 +301,7 @@ const AuthPage = () => {
                       <FontAwesomeIcon icon={showPassword.login ? faEyeSlash : faEye} />
                     </button>
                     <ErrorMessage id="err-pass-login" visible={!!errors.password}>{errors.password}</ErrorMessage>
-                    {caps.login && <div className="helper-text warning">Verr. Maj activée</div>}
+                    {caps.login && <div className="helper-text.warning">Verr. Maj activée</div>}
                   </div>
 
                   <div className="form-row between">
@@ -315,8 +331,8 @@ const AuthPage = () => {
             </div>
           </div>
 
-          {/* REGISTER — illustration à droite (slide-in droite) */}
-          <div className={`auth-page ${!isLoginActive ? 'active slide-right' : 'hidden'}`}>
+          {/* REGISTER — illustration à droite, champs élargis */}
+          <div className={`auth-page register ${!isLoginActive ? 'active slide-right' : 'hidden'}`}>
             <div className="auth-layout auth-layout--media-right">
               <div className="auth-form">
                 <div className="form-header">

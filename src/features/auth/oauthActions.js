@@ -36,7 +36,7 @@ export const startGoogleOAuth = (langue = 'fr') => async (dispatch) => {
   // 1) récupère l’URL Google
   let redirectUrl = '';
   try {
-    const resp = await fetch(`${API_BASE_URL}/oauth/google/url`, { credentials: 'omit' });
+    const resp = await fetch(`${API_BASE_URL}/oauth/google/callback`, { credentials: 'omit' });
     console.log(resp);
 
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
