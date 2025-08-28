@@ -10,7 +10,8 @@ import './auth.css';
 import LoadingComponent from '../../component/loading/LoadingComponent';
 import Toaster from '../../component/toast/Toaster';
 import { loginUser, registerUser, checkUnique } from '../../features/auth/authActions';
- import { startGoogleOAuth } from '../../features/auth/oauthActions';
+import { startGoogleOAuth } from '../../features/auth/oauthActions';
+
 /* Google icon */
 const GoogleIcon = () => ( 
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -21,13 +22,33 @@ const GoogleIcon = () => (
   </svg>
 );
 
-/* Light popup (error/info/hint) */
-const FieldPopup = ({ id, type = 'error', children, visible, placement = 'bottom' }) => {
+/* Messages d'erreur modernisés avec icônes */
+const ErrorMessage = ({ id, children, visible }) => {
+  if (!visible) return null;
+  return (
+    <div id={id} className="field-pop error" role="alert">
+      {children}
+    </div>
+  );
+};
+
+/* Messages de succès */
+const SuccessMessage = ({ id, children, visible }) => {
+  if (!visible) return null;
+  return (
+    <div id={id} className="field-pop success" role="status">
+      {children}
+    </div>
+  );
+};
+
+/* Messages d'information/hint */
+const HintMessage = ({ id, type = 'hint', children, visible, placement = 'bottom' }) => {
   if (!visible) return null;
   return (
     <div
       id={id}
-      role={type === 'error' ? 'alert' : 'status'}
+      role="status"
       className={`field-pop ${type} ${placement}`}
     >
       {children}
@@ -35,6 +56,7 @@ const FieldPopup = ({ id, type = 'error', children, visible, placement = 'bottom
   );
 };
 
+/* Messages inline pour erreurs de validation */
 const InlineError = ({ id, children, visible }) => {
   if (!visible) return null;
   return <div id={id} className="inline-error" role="alert">{children}</div>;
@@ -103,8 +125,8 @@ const AuthPage = () => {
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [focusField, setFocusField] = useState(null);
 
-  // vérification d’unicité (popup bleu discret)
-  const [uniqueStatus, setUniqueStatus] = useState({ email: 'idle', username: 'idle' }); // idle|checking|ok|taken|error
+  // vérification d'unicité
+  const [uniqueStatus, setUniqueStatus] = useState({ email: 'idle', username: 'idle' });
   const [uniqueMsg, setUniqueMsg] = useState({ email: '', username: '' });
 
   useEffect(() => { if (isAuthenticated) navigate('/dashboard'); }, [isAuthenticated, navigate]);
@@ -157,7 +179,7 @@ const AuthPage = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Debounced unique checks -> n’alimente PAS errors.* (donc pas de rouge)
+  // Debounced unique checks
   const debounceMs = 450;
   const debouncedEmail = useMemo(() => formData.email, [formData.email]);
   const debouncedUsername = useMemo(() => formData.username, [formData.username]);
@@ -205,7 +227,7 @@ const AuthPage = () => {
           setUniqueStatus(s => ({ ...s, username: 'ok' }));
           setUniqueMsg(m => ({ ...m, username: '' }));
         } else {
-          const msg = res?.message || (langue === 'fr' ? 'Nom d’utilisateur déjà pris.' : 'Username already taken');
+          const msg = res?.message || (langue === 'fr' ? "Nom d'utilisateur déjà pris." : 'Username already taken');
           setUniqueStatus(s => ({ ...s, username: 'taken' }));
           setUniqueMsg(m => ({ ...m, username: msg }));
         }
@@ -225,7 +247,7 @@ const AuthPage = () => {
     setSubmitAttempted(true);
     if (!validateForm()) return;
 
-    // si uniqueness dit "taken" → on bloque l’inscription (mais pas de rouge)
+    // si uniqueness dit "taken" → on bloque l'inscription
     if (!isLoginActive && (uniqueStatus.email === 'taken' || uniqueStatus.username === 'taken')) {
       return;
     }
@@ -280,15 +302,18 @@ const AuthPage = () => {
   const togglePasswordVisibility = (field) =>
     setShowPassword(prev => ({ ...prev, [field]: !prev[field] }));
 
-  /* helpers visibility for hint popups */
-  const showEmailHint =
-    !isLoginActive &&
-    !!formData.email &&
+  // helpers pour la visibilité des messages
+  const getInputClassName = (fieldName) => {
+    if (errors[fieldName]) return 'invalid';
+    if (fieldName === 'email' && uniqueStatus.email === 'ok') return 'valid';
+    if (fieldName === 'username' && uniqueStatus.username === 'ok') return 'valid';
+    return '';
+  };
+
+  const showEmailHint = !isLoginActive && !!formData.email && 
     (uniqueStatus.email === 'checking' || uniqueStatus.email === 'taken' || uniqueStatus.email === 'error');
 
-  const showUsernameHint =
-    !isLoginActive &&
-    !!formData.username &&
+  const showUsernameHint = !isLoginActive && !!formData.username && 
     (uniqueStatus.username === 'checking' || uniqueStatus.username === 'taken' || uniqueStatus.username === 'error');
 
   return (
@@ -319,11 +344,11 @@ const AuthPage = () => {
                 <input
                   type="email" name="email" value={formData.email} onChange={handleChange}
                   onFocus={handleFocus} onBlur={handleBlur} placeholder=" "
-                  className={errors.email ? 'invalid' : ''} autoComplete="username"
+                  className={getInputClassName('email')} autoComplete="username"
                   aria-invalid={!!errors.email} aria-describedby={errors.email ? 'err-email-login' : undefined}
                 />
                 <label>{t("email")}</label>
-                <FieldPopup id="err-email-login" type="error" visible={!!errors.email}>{errors.email}</FieldPopup>
+                <ErrorMessage id="err-email-login" visible={!!errors.email}>{errors.email}</ErrorMessage>
               </div>
 
               <div className="input-group">
@@ -331,7 +356,7 @@ const AuthPage = () => {
                   type={showPassword.login ? "text" : "password"} name="password" value={formData.password}
                   onChange={handleChange} onFocus={handleFocus} onBlur={handleBlur}
                   onKeyUp={(e) => setCaps(prev => ({ ...prev, login: e.getModifierState('CapsLock') }))}
-                  placeholder=" " className={errors.password ? 'invalid' : ''} autoComplete="current-password"
+                  placeholder=" " className={getInputClassName('password')} autoComplete="current-password"
                   aria-invalid={!!errors.password} aria-describedby={errors.password ? 'err-pass-login' : undefined}
                 />
                 <label>{t("password")}</label>
@@ -339,7 +364,12 @@ const AuthPage = () => {
                   aria-label={showPassword.login ? t('hide_password') : t('show_password')}>
                   <FontAwesomeIcon icon={showPassword.login ? faEyeSlash : faEye} />
                 </button>
-                <FieldPopup id="err-pass-login" type="error" visible={!!errors.password}>{errors.password}</FieldPopup>
+                <ErrorMessage id="err-pass-login" visible={!!errors.password}>{errors.password}</ErrorMessage>
+                {caps.login && (
+                  <div className="helper-text warning">
+                    Verr. Maj activée
+                  </div>
+                )}
               </div>
 
               <div className="form-row between">
@@ -358,14 +388,14 @@ const AuthPage = () => {
             </form>
 
             <div className="or-line"><span>{t("login_with")}</span></div>
-             <button
-                type="button"
-                  className="google-btn"
-                  onClick={() => dispatch(startGoogleOAuth(langue))}
-                  disabled={submitting}
-                >
-                  <GoogleIcon /><span>{t("continue_with_google")}</span>
-                </button>
+            <button
+              type="button"
+              className="google-btn"
+              onClick={() => dispatch(startGoogleOAuth(langue))}
+              disabled={submitting}
+            >
+              <GoogleIcon /><span>{t("continue_with_google")}</span>
+            </button>
 
             <div className="switch-ask">
               <p>{t("no_account")} <button onClick={toggleAuthMode} className="link-strong">{t("register")}?</button></p>
@@ -387,47 +417,45 @@ const AuthPage = () => {
                 <input
                   type="text" name="username" value={formData.username} onChange={handleChange}
                   onFocus={handleFocus} onBlur={handleBlur} placeholder=" "
-                  className={errors.username ? 'invalid' : ''} aria-invalid={!!errors.username}
+                  className={getInputClassName('username')} aria-invalid={!!errors.username}
                   aria-describedby={errors.username ? 'err-username' : undefined}
                 />
                 <label>{t("username")}</label>
-                <FieldPopup id="err-username" type="error" visible={!!errors.username}>{errors.username}</FieldPopup>
+                <ErrorMessage id="err-username" visible={!!errors.username}>{errors.username}</ErrorMessage>
+                <SuccessMessage id="success-username" visible={uniqueStatus.username === 'ok'}>
+                  Nom d'utilisateur disponible
+                </SuccessMessage>
 
-                {/* Hint bleu discret (unicité) */}
-                <FieldPopup
-                  id="hint-username"
-                  type="hint"
-                  placement="right"
-                  visible={showUsernameHint}
-                >
+                {/* Hint pour unicité */}
+                <HintMessage id="hint-username" type="hint" placement="right" visible={showUsernameHint}>
                   {uniqueStatus.username === 'checking' && (
                     <span className="hint-row"><span className="mini-spinner" /> Vérification…</span>
                   )}
                   {uniqueStatus.username === 'taken' && (
-                    <span>{uniqueMsg.username || 'Ce nom d’utilisateur est déjà pris.'}</span>
+                    <span>{uniqueMsg.username || "Ce nom d'utilisateur est déjà pris."}</span>
                   )}
                   {uniqueStatus.username === 'error' && (
                     <span>{uniqueMsg.username}</span>
                   )}
-                </FieldPopup>
+                </HintMessage>
               </div>
 
               {/* FIRST / LAST */}
               <div className="two-cols">
                 <div className="input-group">
                   <input type="text" name="firstName" value={formData.firstName} onChange={handleChange}
-                    placeholder=" " className={errors.firstName ? 'invalid' : ''} aria-invalid={!!errors.firstName}
+                    placeholder=" " className={getInputClassName('firstName')} aria-invalid={!!errors.firstName}
                     aria-describedby={errors.firstName ? 'err-first' : undefined}/>
                   <label>{t("first_name")}</label>
-                  <FieldPopup id="err-first" type="error" visible={!!errors.firstName}>{errors.firstName}</FieldPopup>
+                  <ErrorMessage id="err-first" visible={!!errors.firstName}>{errors.firstName}</ErrorMessage>
                 </div>
 
                 <div className="input-group">
                   <input type="text" name="lastName" value={formData.lastName} onChange={handleChange}
-                    placeholder=" " className={errors.lastName ? 'invalid' : ''} aria-invalid={!!errors.lastName}
+                    placeholder=" " className={getInputClassName('lastName')} aria-invalid={!!errors.lastName}
                     aria-describedby={errors.lastName ? 'err-last' : undefined}/>
                   <label>{t("last_name")}</label>
-                  <FieldPopup id="err-last" type="error" visible={!!errors.lastName}>{errors.lastName}</FieldPopup>
+                  <ErrorMessage id="err-last" visible={!!errors.lastName}>{errors.lastName}</ErrorMessage>
                 </div>
               </div>
 
@@ -436,19 +464,17 @@ const AuthPage = () => {
                 <input
                   type="email" name="email" value={formData.email} onChange={handleChange}
                   onFocus={handleFocus} onBlur={handleBlur} placeholder=" "
-                  className={errors.email ? 'invalid' : ''} aria-invalid={!!errors.email}
+                  className={getInputClassName('email')} aria-invalid={!!errors.email}
                   aria-describedby={errors.email ? 'err-email' : undefined}
                 />
                 <label>{t("email")}</label>
-                <FieldPopup id="err-email" type="error" visible={!!errors.email}>{errors.email}</FieldPopup>
+                <ErrorMessage id="err-email" visible={!!errors.email}>{errors.email}</ErrorMessage>
+                <SuccessMessage id="success-email" visible={uniqueStatus.email === 'ok'}>
+                  Email disponible
+                </SuccessMessage>
 
-                {/* Hint bleu discret (unicité) */}
-                <FieldPopup
-                  id="hint-email"
-                  type="hint"
-                  placement="right"
-                  visible={showEmailHint}
-                >
+                {/* Hint pour unicité */}
+                <HintMessage id="hint-email" type="hint" placement="right" visible={showEmailHint}>
                   {uniqueStatus.email === 'checking' && (
                     <span className="hint-row"><span className="mini-spinner" /> Vérification…</span>
                   )}
@@ -458,7 +484,7 @@ const AuthPage = () => {
                   {uniqueStatus.email === 'error' && (
                     <span>{uniqueMsg.email}</span>
                   )}
-                </FieldPopup>
+                </HintMessage>
               </div>
 
               {/* PASSWORD */}
@@ -467,7 +493,7 @@ const AuthPage = () => {
                   type={showPassword.register ? "text" : "password"} name="password" value={formData.password}
                   onChange={handleChange} onFocus={handleFocus} onBlur={handleBlur}
                   onKeyUp={(e) => setCaps(prev => ({ ...prev, register: e.getModifierState('CapsLock') }))}
-                  placeholder=" " className={errors.password ? 'invalid' : ''} aria-invalid={!!errors.password}
+                  placeholder=" " className={getInputClassName('password')} aria-invalid={!!errors.password}
                   aria-describedby={errors.password ? 'err-pass' : 'pw-pop'}
                 />
                 <label>{t("password")}</label>
@@ -476,12 +502,12 @@ const AuthPage = () => {
                   <FontAwesomeIcon icon={showPassword.register ? faEyeSlash : faEye} />
                 </button>
 
-                <FieldPopup id="err-pass" type="error" visible={!!errors.password} placement="bottom">{errors.password}</FieldPopup>
-                <FieldPopup id="pw-pop" type="info" visible={!errors.password && (focusField === 'password' || !!formData.password)} placement="right">
+                <ErrorMessage id="err-pass" visible={!!errors.password}>{errors.password}</ErrorMessage>
+                <HintMessage id="pw-pop" type="info" visible={!errors.password && (focusField === 'password' || !!formData.password)} placement="right">
                   {caps.register && <div className="helper-text warning">Verr. Maj activée</div>}
                   <PasswordStrength value={formData.password} />
                   <PasswordHints value={formData.password} />
-                </FieldPopup>
+                </HintMessage>
               </div>
 
               {/* CONFIRM */}
@@ -490,7 +516,7 @@ const AuthPage = () => {
                   type={showPassword.confirm ? "text" : "password"} name="confirmPassword" value={formData.confirmPassword}
                   onChange={handleChange} onFocus={handleFocus} onBlur={handleBlur}
                   onKeyUp={(e) => setCaps(prev => ({ ...prev, confirm: e.getModifierState('CapsLock') }))}
-                  placeholder=" " className={errors.confirmPassword ? 'invalid' : ''} aria-invalid={!!errors.confirmPassword}
+                  placeholder=" " className={getInputClassName('confirmPassword')} aria-invalid={!!errors.confirmPassword}
                   aria-describedby={errors.confirmPassword ? 'err-pass2' : undefined}
                 />
                 <label>{t("confirm_password")}</label>
@@ -498,7 +524,12 @@ const AuthPage = () => {
                   aria-label={showPassword.confirm ? t('hide_password') : t('show_password')}>
                   <FontAwesomeIcon icon={showPassword.confirm ? faEyeSlash : faEye} />
                 </button>
-                <FieldPopup id="err-pass2" type="error" visible={!!errors.confirmPassword} placement="bottom">{errors.confirmPassword}</FieldPopup>
+                <ErrorMessage id="err-pass2" visible={!!errors.confirmPassword}>{errors.confirmPassword}</ErrorMessage>
+                {caps.confirm && (
+                  <div className="helper-text warning">
+                    Verr. Maj activée
+                  </div>
+                )}
               </div>
 
               {/* TERMS */}
