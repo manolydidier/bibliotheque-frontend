@@ -98,6 +98,8 @@ const RolePermissionsManager = () => {
 
       const response = await axios.get('/role-permissions', { params });
       
+      console.log(response);
+      
       setRolePermissions(response.data.data || []);
       setPagination(response.data.pagination || {
         current_page: 1,
@@ -125,6 +127,8 @@ const RolePermissionsManager = () => {
       setRoles(rolesRes.data.data || []);
       setPermissions(permissionsRes.data.data.data || []);
       setUsers(usersRes.data.users || []);
+    
+      
     } catch (err) {
       console.error('Error fetching initial data:', err);
     }
@@ -184,6 +188,7 @@ const RolePermissionsManager = () => {
 
     try {
       const response = await axios.post('/role-permissions', formData);
+      console.log(response);
       
       
       if (response.data.status === 'success') {
