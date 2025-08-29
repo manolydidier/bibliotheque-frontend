@@ -298,6 +298,7 @@ export const logoutUser = (langue) => async (dispatch) => {
       });
     }
   }
+  
   clearAuth();
   dispatch(logoutAction());
   toast.success(langue === 'fr' ? 'Déconnexion réussie !' : 'Logout success', {

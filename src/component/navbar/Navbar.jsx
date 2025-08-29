@@ -162,7 +162,7 @@ const Navbar = () => {
       await dispatch(logoutUser(i18n.language));
       setIsProfileOpen(false);
       setIsMenuOpen(false);
-      navigate('/');
+      navigate('/auth');
       
     } catch (error) {
       console.error('Logout failed:', error);

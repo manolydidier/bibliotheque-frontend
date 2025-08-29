@@ -311,7 +311,11 @@ const AuthPage = () => {
 
   return (
     <>
+    <div className='z-50'>
       <Toaster />
+
+    </div>
+      
 
       {/* OTP Modal */}
       <OtpModal
