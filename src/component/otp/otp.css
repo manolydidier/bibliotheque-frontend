@@ -1,0 +1,58 @@
+/* src/component/otp/otp.css */
+.otp-backdrop{
+  position: fixed; inset: 0; background: rgba(17,24,39,.55);
+  display: grid; place-items: center; z-index: 999999;
+  backdrop-filter: blur(2px);
+}
+.otp-modal{
+  width: min(92vw, 480px);
+  background: #fff; border-radius: 16px; padding: 24px 20px;
+  box-shadow: 0 20px 50px rgba(0,0,0,.25); position: relative;
+  border: 1px solid #e5e7eb;
+}
+.otp-close{
+  position: absolute; right: 10px; top: 8px; border: 0; background: transparent;
+  font-size: 28px; line-height: 1; color: #6b7280; cursor: pointer;
+}
+.otp-title{
+  margin: 0 0 8px; font-size: 1.35rem; font-weight: 800;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.otp-sub{ margin: 0 0 16px; color: #4b5563; }
+
+.otp-inputs{
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px;
+  margin: 10px 0 18px;
+}
+.otp-inputs input{
+  height: 58px; text-align: center; font-size: 1.25rem; font-weight: 700;
+  border-radius: 12px; border: 2px solid #e5e7eb; outline: none;
+  transition: .2s;
+}
+.otp-inputs input:focus{
+  border-color: #3b82f6; box-shadow: 0 0 0 4px rgba(59,130,246,.12);
+  transform: translateY(-1px);
+}
+
+.otp-verify{
+  width: 100%; padding: 12px 16px; border: 0; border-radius: 12px;
+  background: linear-gradient(135deg,#3b82f6,#2563eb);
+  color: #fff; font-weight: 800; font-size: 1.05rem; letter-spacing: .02em;
+  box-shadow: 0 8px 18px rgba(37,99,235,.25); cursor: pointer; transition: .2s;
+}
+.otp-verify:disabled{ opacity:.6; cursor:not-allowed; box-shadow:none; }
+.otp-verify:hover:not(:disabled){ transform: translateY(-1px); }
+
+.otp-footer{
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 14px; color: #6b7280; font-weight: 600;
+}
+.otp-resend{
+  border: 0; background: transparent; color: #2563eb; font-weight: 800;
+  cursor: pointer; padding: 6px 8px; border-radius: 10px; transition: .2s;
+}
+.otp-resend:disabled{ color:#9ca3af; cursor:not-allowed; }
+.otp-resend:not(:disabled):hover{ background: #eff6ff; }
+
+.otp-progress{ display: inline-flex; align-items:center; gap:.5rem; }

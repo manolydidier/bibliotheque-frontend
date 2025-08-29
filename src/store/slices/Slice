@@ -1,13 +1,53 @@
+// src/store/slices/Slice.js
 import { createSlice } from '@reduxjs/toolkit';
+
+const AUTH_TOKEN_KEY = 'auth_token';
+const AUTH_USER_KEY  = 'user';
+
+/* Helpers lecture local OU session */
+const getFromAnyStorage = (key) => {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const v = localStorage.getItem(key);
+      if (v != null) return v;
+    }
+  } catch {}
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      const v = sessionStorage.getItem(key);
+      if (v != null) return v;
+    }
+  } catch {}
+  return null;
+};
+
+const getActiveStorage = () => {
+  try {
+    if (typeof localStorage  !== 'undefined' && localStorage.getItem(AUTH_TOKEN_KEY)) return localStorage;
+    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(AUTH_TOKEN_KEY)) return sessionStorage;
+  } catch {}
+  try { return localStorage; } catch { return null; }
+};
+
+const clearAuthBoth = () => {
+  try { localStorage.removeItem(AUTH_TOKEN_KEY); localStorage.removeItem(AUTH_USER_KEY); } catch {}
+  try { sessionStorage.removeItem(AUTH_TOKEN_KEY); sessionStorage.removeItem(AUTH_USER_KEY); } catch {}
+};
+
+/* État initial : lit dans local OU session */
+const initialToken = getFromAnyStorage(AUTH_TOKEN_KEY);
+let initialUser = null;
+const rawUser = getFromAnyStorage(AUTH_USER_KEY);
+try { initialUser = rawUser ? JSON.parse(rawUser) : null; } catch { initialUser = null; }
 
 const initialState = {
   langue: 'fr',
   isReredingListeuser: false,
   auth: {
     loading: false,
-    isAuthenticated: !!localStorage.getItem('auth_token'),
-    token: localStorage.getItem('auth_token') || null,
-    user: JSON.parse(localStorage.getItem('user')) || null, // Ajout de JSON.parse
+    isAuthenticated: !!initialToken,
+    token: initialToken || null,
+    user: initialUser,
     error: null,
     roles: [],
     permissions: [],
@@ -24,35 +64,51 @@ export const librarySlice = createSlice({
     },
     loginSuccess: (state, action) => {
       state.auth.isAuthenticated = true;
-      state.auth.token = action.payload.token; // Ajout du token
-      state.auth.user = action.payload.user;
+      state.auth.token = action.payload.token || null;
+      state.auth.user = action.payload.user || null;
       state.auth.roles = action.payload.roles || [];
       state.auth.permissions = action.payload.permissions || [];
       state.auth.loading = false;
       state.auth.error = null;
+
+      // Écrit le user dans le storage actif
+      try {
+        const storage = getActiveStorage();
+        if (storage && state.auth.user) {
+          storage.setItem(AUTH_USER_KEY, JSON.stringify(state.auth.user));
+        }
+      } catch {}
     },
     loginFailure: (state, action) => {
       state.auth.loading = false;
-      state.auth.error = action.payload;
-      state.auth.isAuthenticated = false;
-      state.auth.user = null;
-      state.auth.token = null;
-    },
-    logoutUser: (state) => {
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('user');
+      state.auth.error = action.payload || null;
       state.auth.isAuthenticated = false;
       state.auth.user = null;
       state.auth.token = null;
       state.auth.roles = [];
       state.auth.permissions = [];
     },
+    logoutUser: (state) => {
+      clearAuthBoth();
+      state.auth.isAuthenticated = false;
+      state.auth.user = null;
+      state.auth.token = null;
+      state.auth.roles = [];
+      state.auth.permissions = [];
+      state.auth.loading = false;
+      state.auth.error = null;
+    },
     language: (state, action) => {
       state.langue = action.payload.langue;
     },
     updateUser: (state, action) => {
-      state.auth.user = action.payload;
-      localStorage.setItem('user', JSON.stringify(action.payload));
+      state.auth.user = action.payload || null;
+      try {
+        const storage = getActiveStorage();
+        if (storage && state.auth.user) {
+          storage.setItem(AUTH_USER_KEY, JSON.stringify(state.auth.user));
+        }
+      } catch {}
     },
     refreshListUser: (state) => {
       state.isReredingListeuser = !state.isReredingListeuser;
