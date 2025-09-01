@@ -18,6 +18,7 @@ import DefaultLayout from '../DefaultLayout'
 import AlbumDetailPage from './pages/UserManagementDashboard/Components/Backoffice/Album/AlbumDetailPage'
 import AlbumPhoto from './pages/UserManagementDashboard/Components/Backoffice/Album/AlbumPhoto'
 import Visualiseur from './pages/UserManagementDashboard/Components/Visualiseur/Visualiseur'
+import ResetPasswordPage from './pages/auth/ResetPasswordPage'
 function App() {
 
   return (
@@ -32,7 +33,7 @@ function App() {
                 <Route path="/settings" element={<UserManagementDashboard />} />
                 <Route path="/" element={<Accueil />} />
                 <Route path="/auth" element={<AuthPage />} />
-       
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
       
 
                 <Route path="/about" element={

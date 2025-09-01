@@ -13,6 +13,8 @@ import { loginUser, registerUser, checkUnique, preVerifyEmail } from '../../feat
 import { startGoogleOAuth } from '../../features/auth/oauthActions';
 
 import OtpModal from '../../component/otp/OtpModal';
+import ForgotPasswordModal from '../../component/auth/ForgotPasswordModal';
+
 
 /* ================= Illustrations web (SVG libres) ================= */
 const THEME = 'securite';
@@ -122,6 +124,9 @@ const AuthPage = () => {
   const [otpCtx, setOtpCtx] = useState({ email: '', ttl: 120, intent: 'login' });
   const [pendingLogin, setPendingLogin] = useState(null);
   const [pendingRegister, setPendingRegister] = useState(null);
+
+  // Forgot password modal
+  const [forgotOpen, setForgotOpen] = useState(false);
 
   useEffect(()=>{ if(isAuthenticated) navigate('/'); },[isAuthenticated,navigate]);
 
@@ -311,11 +316,17 @@ const AuthPage = () => {
 
   return (
     <>
-    <div className='z-50'>
-      <Toaster />
+      <div className='z-50'>
+        <Toaster />
+      </div>
 
-    </div>
-      
+      {/* Forgot Password Modal */}
+      <ForgotPasswordModal
+        open={forgotOpen}
+        onClose={()=>setForgotOpen(false)}
+        defaultEmail={formData.email}
+        langue={langue}
+      />
 
       {/* OTP Modal */}
       <OtpModal
@@ -403,7 +414,10 @@ const AuthPage = () => {
                       <input type="checkbox" name="rememberMe" checked={formData.rememberMe} onChange={handleChange} />
                       <span>{t("remember_me")}</span>
                     </label>
-                    <button type="button" className="link">{t("forgot_password")}</button>
+                    {/* Ouvre le modal "Mot de passe oublié" */}
+                    <button type="button" className="link" onClick={()=>setForgotOpen(true)}>
+                      {t("forgot_password")}
+                    </button>
                   </div>
 
                   <button type="submit" className="submit-btn" disabled={submitting}>

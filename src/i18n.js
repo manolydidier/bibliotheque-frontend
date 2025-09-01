@@ -441,6 +441,25 @@ i18n
           "roles": "Roles",
           "permissions": "Permissions",
           "posts": "Posts",
+          
+        
+        "forgot_password": "Forgot password",
+        "forgot_password_help": "Enter your email. We will send you a link to reset your password.",
+        "reset_link_sent": "If an account exists, a reset link has been sent.",
+        "reset_password": "Reset password",
+        "reset_password_sub": "Set a new password for your account.",
+        "new_password": "New password",
+        "confirm_password": "Confirm password",
+        "password_updated": "Your password has been reset.",
+        "back_to_login": "Back to login",
+        "send": "Send",
+        "save": "Save",
+        "close": "Close",
+        "cancel": "Cancel",
+        "invalid_email": "Invalid email",
+        "token_missing": "Missing or invalid token.",
+        "unexpected_error": "Unexpected error",
+
 
           "validation": {
               "required": "The {{field}} field is required.",
@@ -900,6 +919,23 @@ i18n
           "roles": "Rôles",
           "permissions": "Permissions",
           "posts": "Articles",
+
+          "forgot_password": "Mot de passe oublié",
+          "forgot_password_help": "Entrez votre e-mail. Nous vous enverrons un lien pour réinitialiser votre mot de passe.",
+          "reset_link_sent": "Si un compte existe, un lien de réinitialisation a été envoyé.",
+          "reset_password": "Réinitialiser le mot de passe",
+          "reset_password_sub": "Définissez un nouveau mot de passe pour votre compte.",
+          "new_password": "Nouveau mot de passe",
+          "confirm_password": "Confirmer le mot de passe",
+          "password_updated": "Votre mot de passe a été réinitialisé.",
+          "back_to_login": "Retour à la connexion",
+          "send": "Envoyer",
+          "save": "Enregistrer",
+          "close": "Fermer",
+          "cancel": "Annuler",
+          "invalid_email": "Email invalide",
+          "token_missing": "Jeton manquant ou invalide.",
+          "unexpected_error": "Erreur inattendue",
 
         "validation": {
             "required": "Le champ {{field}} est requis.",
