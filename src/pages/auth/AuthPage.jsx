@@ -1,3 +1,4 @@
+// src/pages/auth/AuthPage.jsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faUserPlus, faSignInAlt, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
@@ -8,12 +9,12 @@ import { useTranslation } from 'react-i18next';
 import './auth.css';
 import LoadingComponent from '../../component/loading/LoadingComponent';
 import Toaster from '../../component/toast/Toaster';
-import { loginUser, registerUser, checkUnique } from '../../features/auth/authActions';
+import { loginUser, registerUser, checkUnique, preVerifyEmail } from '../../features/auth/authActions';
 import { startGoogleOAuth } from '../../features/auth/oauthActions';
 
-/* ================= Illustrations web (SVG libres) =================
-   Choisir un thème ici: 'securite' | 'ecommerce' | 'productivite'
-   Tu peux changer THEME sans toucher au reste du code. */
+import OtpModal from '../../component/otp/OtpModal';
+
+/* ================= Illustrations web (SVG libres) ================= */
 const THEME = 'securite';
 const THEMES = {
   securite: {
@@ -42,7 +43,7 @@ const GoogleIcon = () => (
   </svg>
 );
 
-/* Messages UI (inchangés) */
+/* Messages UI utilitaires */
 const ErrorMessage = ({ id, children, visible }) => visible ? (
   <div id={id} className="field-pop error" role="alert">{children}</div>
 ) : null;
@@ -59,7 +60,7 @@ const InlineError = ({ id, children, visible }) => visible ? (
   <div id={id} className="inline-error" role="alert">{children}</div>
 ) : null;
 
-/* Password helpers (inchangés) */
+/* Password helpers */
 const PasswordStrength = ({ value = '' }) => {
   const tests = [(v)=>v.length>=8,(v)=>/[A-Z]/.test(v)&&/[a-z]/.test(v),(v)=>/\d/.test(v),(v)=>/[^A-Za-z0-9]/.test(v)];
   const score = tests.reduce((a,t)=>a+(t(value)?1:0),0);
@@ -87,6 +88,10 @@ const PasswordHints = ({ value = '' }) => {
 };
 
 /* Utils */
+const slugify = (s='') =>
+  s.normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+   .toLowerCase().replace(/[^a-z0-9\s]/g,'').trim().replace(/\s+/g,'');
+
 const isLaravelUnique = (msg='') => /(already been taken|déjà.*pris|déjà.*utilisé|déjà.*utilisée|unique)/i.test(msg);
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -110,7 +115,42 @@ const AuthPage = () => {
   const [focusField, setFocusField] = useState(null);
   const [uniqueStatus, setUniqueStatus] = useState({ email:'idle', username:'idle' });
   const [uniqueMsg, setUniqueMsg] = useState({ email:'', username:'' });
+  const [uSuggest, setUSuggest] = useState('');
 
+  // OTP modal & pending payloads
+  const [otpOpen, setOtpOpen] = useState(false);
+  const [otpCtx, setOtpCtx] = useState({ email: '', ttl: 120, intent: 'login' });
+  const [pendingLogin, setPendingLogin] = useState(null);
+  const [pendingRegister, setPendingRegister] = useState(null);
+
+  useEffect(()=>{ if(isAuthenticated) navigate('/'); },[isAuthenticated,navigate]);
+
+  const progress = useMemo(()=>{
+    if(isLoginActive){
+      let c = 0;
+      if(formData.email && emailRegex.test(formData.email)) c++;
+      if(formData.password && formData.password.length>=8) c++;
+      return Math.round((c/2)*100);
+    } else {
+      let c = 0, total = 7;
+      if(formData.firstName.trim()) c++;
+      if(formData.lastName.trim()) c++;
+      if(formData.username.trim().length>=3) c++;
+      if(formData.email && emailRegex.test(formData.email)) c++;
+      if(formData.password.length>=8) c++;
+      if(formData.confirmPassword && formData.confirmPassword===formData.password) c++;
+      if(formData.acceptTerms) c++;
+      return Math.round((c/total)*100);
+    }
+  }, [isLoginActive, formData]);
+
+  useEffect(()=>{
+    if(isLoginActive) return;
+    if(formData.username.trim()) { setUSuggest(''); return; }
+    const base = slugify(`${formData.firstName} ${formData.lastName}`);
+    if(base.length>=3) setUSuggest(base.slice(0,18));
+    else setUSuggest('');
+  }, [isLoginActive, formData.firstName, formData.lastName, formData.username]);
   useEffect(()=>{ if(isAuthenticated) navigate('/backoffice'); },[isAuthenticated,navigate]);
 
   const toggleAuthMode = () => {
@@ -125,6 +165,7 @@ const AuthPage = () => {
     setFocusField(null);
     setUniqueStatus({ email:'idle', username:'idle' });
     setUniqueMsg({ email:'', username:'' });
+    setUSuggest('');
   };
 
   const handleFocus = (e)=>setFocusField(e.target.name);
@@ -198,31 +239,64 @@ const AuthPage = () => {
     e.preventDefault();
     setSubmitAttempted(true);
     if(!validateForm()) return;
-    if(!isLoginActive && (uniqueStatus.email==='taken'||uniqueStatus.username==='taken')) return;
-    setSubmitting(true);
-    try{
-      if(isLoginActive){
-        await dispatch(loginUser({ email:formData.email, password:formData.password, rememberMe:formData.rememberMe, langue }));
-      }else{
-        const result = await dispatch(registerUser({
-          username:formData.username, first_name:formData.firstName, last_name:formData.lastName,
-          email:formData.email, password:formData.password, password_confirmation:formData.confirmPassword, langue
-        }));
-        if(result?.error){
-          const apiErrors=result.payload?.errors||{}; const f={};
-          const mapU=(arr=[])=>arr.find(isLaravelUnique);
-          if(apiErrors.email?.length){ if(!mapU(apiErrors.email)) f.email=apiErrors.email[0]; }
-          if(apiErrors.username?.length||apiErrors.name?.length){ const arr=apiErrors.username||apiErrors.name; if(!mapU(arr)) f.username=arr[0]; }
-          if(apiErrors.first_name?.length) f.firstName=apiErrors.first_name[0];
-          if(apiErrors.last_name?.length)  f.lastName =apiErrors.last_name[0];
-          if(apiErrors.password?.length)   f.password =apiErrors.password[0];
-          if(apiErrors.password_confirmation?.length) f.confirmPassword=apiErrors.password_confirmation[0];
-          setErrors(f);
-        }
+
+    // === LOGIN: OTP AVANT loginUser ===
+    if(isLoginActive){
+      try{
+        setSubmitting(true);
+        const pre = await dispatch(preVerifyEmail(formData.email, langue, 'login')); // envoie le code
+        setPendingLogin({
+          email: formData.email,
+          password: formData.password,
+          rememberMe: formData.rememberMe,
+          langue
+        });
+        setOtpCtx({ email: formData.email, ttl: Math.max(30, pre?.ttl || 120), intent: 'login' });
+        setOtpOpen(true);
+      } finally {
+        setSubmitting(false);
       }
-    }catch{
-      setErrors(prev=>({ ...prev, general: prev.general || t('an_error_has_occurred') }));
-    }finally{ setSubmitting(false); }
+      return;
+    }
+
+    // === REGISTER: OTP AVANT registerUser ===
+    if(!isLoginActive){
+      if(uniqueStatus.email==='taken'||uniqueStatus.username==='taken') return;
+      setSubmitting(true);
+      try{
+        const pre = await dispatch(preVerifyEmail(formData.email, langue, 'register')); // envoie le code
+        setPendingRegister({
+          username:formData.username,
+          first_name:formData.firstName,
+          last_name:formData.lastName,
+          email:formData.email,
+          password:formData.password,
+          password_confirmation:formData.confirmPassword,
+          langue
+        });
+        setOtpCtx({ email: formData.email, ttl: Math.max(30, pre?.ttl || 120), intent: 'register' });
+        setOtpOpen(true);
+      } finally { setSubmitting(false); }
+      return;
+    }
+  };
+
+  // OTP validé => on lance l'action correspondante
+  const onOtpVerified = async () => {
+    setOtpOpen(false);
+    setSubmitting(true);
+    try {
+      if (otpCtx.intent === 'login' && pendingLogin) {
+        await dispatch(loginUser(pendingLogin));
+        setPendingLogin(null);
+      } else if (otpCtx.intent === 'register' && pendingRegister) {
+        const result = await dispatch(registerUser(pendingRegister));
+        setPendingRegister(null);
+        // Si l'API renvoie des erreurs (forme redux déjà gérée), rien à ajouter ici
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const togglePasswordVisibility = (field)=> setShowPassword(p=>({ ...p, [field]: !p[field] }));
@@ -230,6 +304,7 @@ const AuthPage = () => {
     if(errors[name]) return 'invalid';
     if(name==='email' && uniqueStatus.email==='ok') return 'valid';
     if(name==='username' && uniqueStatus.username==='ok') return 'valid';
+    if(name==='confirmPassword' && formData.confirmPassword && formData.confirmPassword===formData.password) return 'valid';
     return '';
   };
   const showEmailHint = !isLoginActive && !!formData.email && (['checking','taken','error'].includes(uniqueStatus.email));
@@ -237,11 +312,25 @@ const AuthPage = () => {
 
   return (
     <>
+    <div className='z-50'>
       <Toaster />
+
+    </div>
+      
+
+      {/* OTP Modal */}
+      <OtpModal
+        open={otpOpen}
+        email={otpCtx.email}
+        langue={langue}
+        intent={otpCtx.intent}
+        initialTtlSec={otpCtx.ttl}
+        onVerified={onOtpVerified}
+        onClose={()=>setOtpOpen(false)}
+      />
+
       <div className="min-h-screen flex items-center justify-center p-4 bg-bleu-pale">
-        {/* flat pour style plat */}
         <div className="auth-container card flat" role="dialog" aria-modal="true" aria-labelledby="auth-title">
-          {/* bouton switch, z-index élevé via CSS */}
           <button
             onClick={toggleAuthMode}
             className="floating-btn"
@@ -251,11 +340,11 @@ const AuthPage = () => {
             <FontAwesomeIcon icon={isLoginActive ? faUserPlus : faSignInAlt} className="text-xl" />
           </button>
 
-          {/* LOGIN — illustration à gauche, champs raccourcis */}
+          {/* LOGIN */}
           <div className={`auth-page login ${isLoginActive ? 'active slide-left' : 'hidden'}`}>
             <div className="auth-layout auth-layout--media-left">
               <aside className="auth-media" aria-hidden="true">
-                <img src={LOGIN_ILLU} alt="" className="auth-media-img" onError={(e)=>{ e.currentTarget.style.display='none'; }} loading="eager"/>
+                <img src={LOGIN_ILLU} alt="" className="auth-media-img img-fade" onError={(e)=>{ e.currentTarget.style.display='none'; }} loading="eager"/>
                 <div className="auth-media-overlay">
                   <h3>Connexion</h3>
                   <p>Accédez à votre espace en toute sécurité</p>
@@ -275,33 +364,39 @@ const AuthPage = () => {
                 <div className="form-header">
                   <h1 id="auth-title" className="form-title">{t('welcome_back')}</h1>
                   <p className="form-subtitle">{t('login_to_account')}</p>
+                  <div className="form-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+                    <span style={{'--p': `${progress}%`}} />
+                  </div>
                 </div>
 
                 {errors.general && <div className="api-notice">{errors.general}</div>}
 
                 <form onSubmit={handleSubmit} className="space-y-6 w-xl" noValidate aria-busy={submitting}>
-                  <div className="input-group">
+                  <div className="input-group has-icon">
                     <input type="email" name="email" value={formData.email} onChange={handleChange}
                       onFocus={handleFocus} onBlur={handleBlur} placeholder=" "
                       className={getInputClassName('email')} autoComplete="username"
                       aria-invalid={!!errors.email} aria-describedby={errors.email ? 'err-email-login' : undefined}/>
                     <label>{t("email")}</label>
+                    <span className="input-icon">@</span>
+                    <span className="right-mark">✓</span>
                     <ErrorMessage id="err-email-login" visible={!!errors.email}>{errors.email}</ErrorMessage>
                   </div>
 
-                  <div className="input-group">
+                  <div className="input-group has-icon">
                     <input type={showPassword.login ? "text" : "password"} name="password" value={formData.password}
                       onChange={handleChange} onFocus={handleFocus} onBlur={handleBlur}
                       onKeyUp={(e)=>setCaps(p=>({ ...p, login: e.getModifierState('CapsLock') }))}
                       placeholder=" " className={getInputClassName('password')} autoComplete="current-password"
                       aria-invalid={!!errors.password} aria-describedby={errors.password ? 'err-pass-login' : undefined}/>
                     <label>{t("password")}</label>
+                    <span className="input-icon">🔒</span>
                     <button type="button" className="password-toggle" onClick={()=>togglePasswordVisibility('login')}
                       aria-label={showPassword.login ? t('hide_password') : t('show_password')}>
                       <FontAwesomeIcon icon={showPassword.login ? faEyeSlash : faEye} />
                     </button>
                     <ErrorMessage id="err-pass-login" visible={!!errors.password}>{errors.password}</ErrorMessage>
-                    {caps.login && <div className="helper-text.warning">Verr. Maj activée</div>}
+                    {caps.login && <div className="helper-text warning">Verr. Maj activée</div>}
                   </div>
 
                   <div className="form-row between">
@@ -331,19 +426,21 @@ const AuthPage = () => {
             </div>
           </div>
 
-          {/* REGISTER — illustration à droite, champs élargis */}
+          {/* REGISTER */}
           <div className={`auth-page register ${!isLoginActive ? 'active slide-right' : 'hidden'}`}>
             <div className="auth-layout auth-layout--media-right">
               <div className="auth-form">
                 <div className="form-header">
                   <h1 className="form-title">{t("create_account")}</h1>
                   <p className="form-subtitle">{t("join_community")}</p>
+                  <div className="form-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+                    <span style={{'--p': `${progress}%`}} />
+                  </div>
                 </div>
 
                 {errors.general && <div className="api-notice">{errors.general}</div>}
 
                 <form onSubmit={handleSubmit} className="form-grid" noValidate aria-busy={submitting}>
-                  {/* Noms */}
                   <div className="two-cols">
                     <div className="input-group">
                       <input type="text" name="firstName" value={formData.firstName} onChange={handleChange}
@@ -361,32 +458,50 @@ const AuthPage = () => {
                     </div>
                   </div>
 
-                  {/* Username + Email */}
                   <div className="two-cols">
-                    <div className="input-group">
-                      <input type="text" name="username" value={formData.username} onChange={handleChange}
-                        onFocus={handleFocus} onBlur={handleBlur} placeholder=" "
-                        className={getInputClassName('username')} aria-invalid={!!errors.username}
-                        aria-describedby={errors.username ? 'err-username' : undefined}/>
+                    <div className="input-group has-icon">
+                      <input
+                        type="text"
+                        name="username"
+                        value={formData.username}
+                        onChange={handleChange}
+                        onFocus={handleFocus}
+                        onBlur={handleBlur}
+                        placeholder=" "
+                        maxLength={20}
+                        className={getInputClassName('username')}
+                        aria-invalid={!!errors.username}
+                        aria-describedby={errors.username ? 'err-username' : undefined}
+                      />
                       <label>{t("username")}</label>
+                      <span className="input-icon">👤</span>
+                      <span className="right-mark">✓</span>
+                      {uSuggest && !formData.username && (
+                        <button type="button" className="suggest-pill" onClick={()=>setFormData(p=>({...p, username: uSuggest}))}
+                          title="Utiliser la suggestion">@{uSuggest}</button>
+                      )}
+                      <small className="char-counter">{formData.username.length}/20</small>
+
                       <ErrorMessage id="err-username" visible={!!errors.username}>{errors.username}</ErrorMessage>
                       <SuccessMessage id="success-username" visible={uniqueStatus.username === 'ok'}>Nom d'utilisateur disponible</SuccessMessage>
-                      <HintMessage id="hint-username" type="hint" placement="right" visible={showUsernameHint}>
+                      <HintMessage id="hint-username" type="hint" placement="right" visible={!!formData.username && (['checking','taken','error'].includes(uniqueStatus.username))}>
                         {uniqueStatus.username === 'checking' && <span className="hint-row"><span className="mini-spinner" /> Vérification…</span>}
                         {uniqueStatus.username === 'taken' && <span>{uniqueMsg.username || "Ce nom d'utilisateur est déjà pris."}</span>}
                         {uniqueStatus.username === 'error' && <span>{uniqueMsg.username}</span>}
                       </HintMessage>
                     </div>
 
-                    <div className="input-group">
+                    <div className="input-group has-icon">
                       <input type="email" name="email" value={formData.email} onChange={handleChange}
                         onFocus={handleFocus} onBlur={handleBlur} placeholder=" "
                         className={getInputClassName('email')} aria-invalid={!!errors.email}
                         aria-describedby={errors.email ? 'err-email' : undefined}/>
                       <label>{t("email")}</label>
+                      <span className="input-icon">@</span>
+                      <span className="right-mark">✓</span>
                       <ErrorMessage id="err-email" visible={!!errors.email}>{errors.email}</ErrorMessage>
                       <SuccessMessage id="success-email" visible={uniqueStatus.email === 'ok'}>Email disponible</SuccessMessage>
-                      <HintMessage id="hint-email" type="hint" placement="right" visible={showEmailHint}>
+                      <HintMessage id="hint-email" type="hint" placement="right" visible={!!formData.email && (['checking','taken','error'].includes(uniqueStatus.email))}>
                         {uniqueStatus.email === 'checking' && <span className="hint-row"><span className="mini-spinner" /> Vérification…</span>}
                         {uniqueStatus.email === 'taken' && <span>{uniqueMsg.email || 'Cet email est déjà utilisé.'}</span>}
                         {uniqueStatus.email === 'error' && <span>{uniqueMsg.email}</span>}
@@ -394,15 +509,15 @@ const AuthPage = () => {
                     </div>
                   </div>
 
-                  {/* Password + Confirm */}
                   <div className="two-cols">
-                    <div className="input-group">
+                    <div className="input-group has-icon">
                       <input type={showPassword.register ? "text" : "password"} name="password" value={formData.password}
                         onChange={handleChange} onFocus={handleFocus} onBlur={handleBlur}
                         onKeyUp={(e)=>setCaps(p=>({ ...p, register: e.getModifierState('CapsLock') }))}
                         placeholder=" " className={getInputClassName('password')} aria-invalid={!!errors.password}
                         aria-describedby={errors.password ? 'err-pass' : 'pw-pop'}/>
                       <label>{t("password")}</label>
+                      <span className="input-icon">🔒</span>
                       <button type="button" className="password-toggle" onClick={()=>togglePasswordVisibility('register')}
                         aria-label={showPassword.register ? t('hide_password') : t('show_password')}>
                         <FontAwesomeIcon icon={showPassword.register ? faEyeSlash : faEye} />
@@ -415,17 +530,21 @@ const AuthPage = () => {
                       </HintMessage>
                     </div>
 
-                    <div className="input-group">
+                    <div className="input-group has-icon">
                       <input type={showPassword.confirm ? "text" : "password"} name="confirmPassword" value={formData.confirmPassword}
                         onChange={handleChange} onFocus={handleFocus} onBlur={handleBlur}
                         onKeyUp={(e)=>setCaps(p=>({ ...p, confirm: e.getModifierState('CapsLock') }))}
                         placeholder=" " className={getInputClassName('confirmPassword')} aria-invalid={!!errors.confirmPassword}
                         aria-describedby={errors.confirmPassword ? 'err-pass2' : undefined}/>
                       <label>{t("confirm_password")}</label>
+                      <span className="input-icon">🔒</span>
                       <button type="button" className="password-toggle" onClick={()=>togglePasswordVisibility('confirm')}
                         aria-label={showPassword.confirm ? t('hide_password') : t('show_password')}>
                         <FontAwesomeIcon icon={showPassword.confirm ? faEyeSlash : faEye} />
                       </button>
+                      {formData.confirmPassword && formData.confirmPassword===formData.password && (
+                        <span className="right-mark">✓</span>
+                      )}
                       <ErrorMessage id="err-pass2" visible={!!errors.confirmPassword}>{errors.confirmPassword}</ErrorMessage>
                     </div>
                   </div>
@@ -453,7 +572,7 @@ const AuthPage = () => {
               </div>
 
               <aside className="auth-media" aria-hidden="true">
-                <img src={REGISTER_ILLU} alt="" className="auth-media-img" onError={(e)=>{ e.currentTarget.style.display='none'; }} loading="eager"/>
+                <img src={REGISTER_ILLU} alt="" className="auth-media-img img-fade" onError={(e)=>{ e.currentTarget.style.display='none'; }} loading="eager"/>
                 <div className="auth-media-overlay">
                   <h3>Inscription</h3>
                   <p>Rejoignez la communauté et démarrez</p>

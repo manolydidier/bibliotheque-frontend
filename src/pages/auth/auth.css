@@ -932,3 +932,161 @@ body {
 /* (optionnel) Pour encore plus d’espace UI en Register, tu peux essayer :
    .auth-page.register .auth-layout.auth-layout--media-right{ grid-template-columns: 1.25fr 0.75fr !important; }
 */
+/* === DESIGN UPGRADE (sans dark mode) =============================== */
+
+/* 1) Anneau gradient subtil autour de la carte plate */
+.auth-container.card.flat{
+  position: relative;
+  isolation: isolate;
+}
+.auth-container.card.flat::before{
+  content:"";
+  position:absolute; inset:-1px;
+  border-radius: inherit;
+  background: conic-gradient(from 180deg,
+    #60a5fa, #3b82f6 25%, #60a5fa 50%, #93c5fd 75%, #60a5fa);
+  z-index: -1;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  padding: 1px;
+  opacity: .25;
+}
+
+/* 2) Barre de chargement en haut quand un form est busy */
+.auth-container.card.flat:has(form[aria-busy="true"])::after{
+  content:"";
+  position:absolute; left:0; top:0; height:3px; width:100%;
+  background: linear-gradient(90deg, transparent, rgba(59,130,246,.6), transparent);
+  background-size: 240px 100%;
+  animation: topLoader 900ms ease-in-out infinite;
+  border-top-left-radius: inherit; border-top-right-radius: inherit;
+}
+@keyframes topLoader{
+  from{ background-position-x: -240px; }
+  to  { background-position-x:  240px; }
+}
+
+/* 3) Leading icons + coche droite quand .valid */
+.input-group.has-icon input{ padding-left: 3rem; }
+.input-group .input-icon{
+  position:absolute; left: .9rem; top:50%; transform: translateY(-50%);
+  width:1.25rem; height:1.25rem; display:grid; place-items:center;
+  color: var(--gray-400);
+}
+.input-group .right-mark{
+  position:absolute; right: 3rem; top:50%; transform: translateY(-50%) scale(.9);
+  opacity:0; transition: var(--transition); color: var(--success-600); font-size:1rem;
+}
+.input-group input.valid ~ .right-mark{
+  opacity:1; transform: translateY(-50%) scale(1);
+}
+
+/* 4) Parallaxe/tilt (côté médias) */
+.auth-media{
+  transform-style: preserve-3d;
+  will-change: transform;
+  transition: transform .25s ease;
+}
+.auth-media .auth-media-overlay{ transform: translateZ(24px); }
+.auth-media .auth-media-fallback{ transform: translateZ(16px); }
+
+/* 5) Micro-interactions boutons */
+.submit-btn:active{ transform: translateY(0) scale(.99); filter: saturate(1.05); }
+.google-btn:active{ transform: translateY(0) scale(.99); }
+
+/* 6) CTA collant en bas (mobile) */
+@media (max-width: 480px){
+  .submit-btn.sticky{
+    position: sticky;
+    bottom: calc(env(safe-area-inset-bottom, 8px) + 8px);
+    z-index: 5;
+    box-shadow: 0 10px 24px -12px rgba(0,0,0,.35);
+  }
+  .auth-form{ padding-bottom: 5rem; }
+}
+
+/* 7) Shake doux pour erreurs */
+@keyframes shakeX {
+  0%,100%{ transform: translateX(0); }
+  20%{ transform: translateX(-6px); }
+  40%{ transform: translateX(6px); }
+  60%{ transform: translateX(-4px); }
+  80%{ transform: translateX(4px); }
+}
+.auth-form.shake{ animation: shakeX .35s ease; }
+
+/* 8) Strength bars un peu vivantes */
+.bar{ transform: scaleY(.9); transform-origin: center; }
+.bar.on-1, .bar.on-2, .bar.on-3, .bar.on-4{
+  transform: scaleY(1);
+  transition: transform .25s ease, background-color .25s ease;
+}
+
+/* 9) Finitions typographiques */
+.form-title{ letter-spacing: -0.02em; }
+.input-group label{ letter-spacing: .005em; }
+
+/* 10) Popups mieux empilés sur très petit écran */
+@media (max-width: 480px){
+  .field-pop { position: static; margin-top: .5rem; }
+  .field-pop::after { display: none; }
+}
+/* === Progress bar formulaire === */
+.form-progress{
+  height: 6px;
+  background: var(--gray-100);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: .75rem;
+  position: relative;
+}
+.form-progress > span{
+  position:absolute; inset:0 auto 0 0;
+  width: var(--p, 0%);
+  background: linear-gradient(90deg, var(--primary-400), var(--primary-600));
+  transition: width .35s ease;
+}
+
+/* === Icônes d’entrée & coche droite === */
+.input-group.has-icon input{ padding-left: 3rem; }
+.input-group .input-icon{
+  position:absolute; left: .9rem; top:50%; transform: translateY(-50%);
+  width:1.25rem; height:1.25rem; display:grid; place-items:center; color: var(--gray-400);
+}
+.input-group .right-mark{
+  position:absolute; right: 3rem; top:50%; transform: translateY(-50%) scale(.9);
+  opacity:0; transition: var(--transition); color: var(--success-600); font-size:1rem;
+}
+.input-group input.valid ~ .right-mark{ opacity:1; transform: translateY(-50%) scale(1); }
+
+/* === Suggestion username + compteur === */
+.suggest-pill{
+  position:absolute; right: .5rem; top: .5rem;
+  font-size: .78rem; padding: .25rem .5rem; border-radius: 999px;
+  background: var(--gray-100); border: 1px solid var(--gray-200); color: var(--gray-700);
+  cursor: pointer; transition: var(--transition);
+}
+.suggest-pill:hover{ background: var(--gray-50); color: var(--gray-900); }
+.char-counter{
+  position:absolute; right: .75rem; bottom: -1.25rem;
+  font-size: .75rem; color: var(--gray-500);
+}
+
+/* === Image fade-in (discret) === */
+.img-fade{ opacity: 0; transform: translateY(6px); transition: opacity .35s ease, transform .35s ease; }
+.img-fade[style], .auth-media-img.img-fade{ opacity: 1; transform: none; } /* le navigateur applique inline style après load */
+
+/* === Autofill propre === */
+input:-webkit-autofill{
+  transition: background-color 9999s ease-in-out 0s;
+  -webkit-text-fill-color: var(--gray-900);
+  box-shadow: 0 0 0px 1000px var(--white) inset !important;
+}
+
+/* === Reduced motion (accessibilité) === */
+@media (prefers-reduced-motion: reduce){
+  * { animation: none !important; transition: none !important; }
+}
