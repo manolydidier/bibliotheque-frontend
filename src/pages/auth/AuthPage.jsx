@@ -381,7 +381,7 @@ const AuthPage = () => {
 
                 {errors.general && <div className="api-notice">{errors.general}</div>}
 
-                <form onSubmit={handleSubmit} className="space-y-6 w-xl" noValidate aria-busy={submitting}>
+                <form onSubmit={handleSubmit} className="space-y-6 w-2xl" noValidate aria-busy={submitting}>
                   <div className="input-group has-icon">
                     <input type="email" name="email" value={formData.email} onChange={handleChange}
                       onFocus={handleFocus} onBlur={handleBlur} placeholder=" "
@@ -409,7 +409,7 @@ const AuthPage = () => {
                     {caps.login && <div className="helper-text warning">Verr. Maj activée</div>}
                   </div>
 
-                  <div className="form-row between">
+                  <div className="form-row justify-between w-full  flex items-center px-2 py-1 rounded">
                     <label className="checkbox">
                       <input type="checkbox" name="rememberMe" checked={formData.rememberMe} onChange={handleChange} />
                       <span>{t("remember_me")}</span>
@@ -442,7 +442,7 @@ const AuthPage = () => {
           {/* REGISTER */}
           <div className={`auth-page register ${!isLoginActive ? 'active slide-right' : 'hidden'}`}>
             <div className="auth-layout auth-layout--media-right">
-              <div className="auth-form">
+              <div className="auth-form ">
                 <div className="form-header">
                   <h1 className="form-title">{t("create_account")}</h1>
                   <p className="form-subtitle">{t("join_community")}</p>
