@@ -111,7 +111,7 @@ const AuthPage = () => {
   const [uniqueStatus, setUniqueStatus] = useState({ email:'idle', username:'idle' });
   const [uniqueMsg, setUniqueMsg] = useState({ email:'', username:'' });
 
-  useEffect(()=>{ if(isAuthenticated) navigate('/dashboard'); },[isAuthenticated,navigate]);
+  useEffect(()=>{ if(isAuthenticated) navigate('/backoffice'); },[isAuthenticated,navigate]);
 
   const toggleAuthMode = () => {
     setIsLoginActive(v => !v);
