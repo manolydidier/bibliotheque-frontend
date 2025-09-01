@@ -30,8 +30,7 @@ function App() {
               {/* Routes publiques avec la Navbar */}
               <Route element={<DefaultLayout />}>
                 <Route path="/settings" element={<UserManagementDashboard />} />
-                <Route path="/" element={<Accueil />} />
-                <Route path="/auth" element={<AuthPage />} />
+                <Route path="/" element={<Accueil />} />                
                 <Route path="/about" element={
                   <div className="min-h-screen bg-gray-100 flex items-center justify-center">
                     <div className="bg-white p-8 rounded-lg shadow-md">
@@ -45,6 +44,9 @@ function App() {
                   </div>
                 } />
               </Route>
+
+              <Route path="/login" element={<AuthPage />} />
+              <Route path="/auth" element={<AuthPage />} />
 
               {/* Routes du tableau de bord avec la Sidebar */}
               <Route element={<DashboardLayout />}>
