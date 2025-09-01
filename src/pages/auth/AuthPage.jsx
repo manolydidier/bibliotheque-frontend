@@ -156,6 +156,7 @@ const AuthPage = () => {
     if(base.length>=3) setUSuggest(base.slice(0,18));
     else setUSuggest('');
   }, [isLoginActive, formData.firstName, formData.lastName, formData.username]);
+  useEffect(()=>{ if(isAuthenticated) navigate('/backoffice'); },[isAuthenticated,navigate]);
 
   const toggleAuthMode = () => {
     setIsLoginActive(v => !v);

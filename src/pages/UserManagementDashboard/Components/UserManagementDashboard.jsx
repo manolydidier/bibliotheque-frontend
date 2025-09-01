@@ -30,6 +30,11 @@ const UserManagementDashboard = () => {
     { id: 'activity', label: t('activity'), icon: 'history' },
   ];
 
+  const token = localStorage.getItem('auth_token');
+    if (!token) {
+        window.location.href = '/auth';
+  }
+
   return (
     <div className="bg-white w-full font-sans antialiased mt-10">
       <div className="container mx-auto px-4 py-6">

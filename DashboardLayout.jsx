@@ -19,6 +19,8 @@ const DashboardLayout = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [title, setTitle]= useState("");
     const toggleSidebar = () => {
+        console.log(isSidebarOpen);
+
         setIsSidebarOpen(!isSidebarOpen);
     };
 
@@ -67,7 +69,7 @@ const DashboardLayout = () => {
     return (
         <div className="flex h-screen w-full overflow-hidden bg-bgDefault">
             {/* Sidebar */}
-            <div id='sidebar' className={`sidebar w-64 bg-white  flex-shrink-0 overflow-y-auto transition-all duration-300 ease-in-out ${isSidebarOpen ? 'ml-0' : '-ml-64'}`}>
+            <div id='sidebar' className={`sidebar w-64 bg-white flex-shrink-0 overflow-y-auto transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'ml-0' : '-ml-64'}`}>
                 <div className="p-5 border-b border-gray-200">
                     <div className="flex  items-center">
                         <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center mr-3">

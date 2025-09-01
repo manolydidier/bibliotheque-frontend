@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCamera, faEnvelope, faUserPlus } from '@fortawesome/free-solid-svg-icons';
 import axios from 'axios';
 import { useSelector } from 'react-redux';
+import LoadingComponent from '../../../../component/loading/LoadingComponent';
 
 const ProfileInfo = () => {
   const [loading, setLoading] = useState(true);
@@ -106,75 +107,84 @@ const ProfileInfo = () => {
   };
 
   return (
-    <div className="flex flex-col items-center">
-      <div className="profile-pic-upload relative mb-4">
-        <img
-          src={`${API_BASE_STORAGE}/storage/${formData?.avatar_url}` || profileImage}
-          alt="Profile"
-          className="w-32 h-32 rounded-full object-cover border-4 border-blue-100 shadow-md"
-        />
-        <div className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 transition-colors">
-          <FontAwesomeIcon icon={faCamera} />
-          <input type="file" className="hidden" onChange={handleImageUpload} />
-        </div>
-      </div>
+    <>
+      {loading ? 
+      <div className="flex justify-center items-center h-full">
+      <LoadingComponent /> 
+      </div> :
+        <div className="flex flex-col items-center">
+          <div className="profile-pic-upload relative mb-4">
+            <img
+              src={`${API_BASE_STORAGE}/storage/${formData?.avatar_url}` || profileImage}
+              alt="Profile"
+              className="w-32 h-32 rounded-full object-cover border-4 border-blue-100 shadow-md"
+            />
+            <div className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 transition-colors">
+              <FontAwesomeIcon icon={faCamera} />
+              <input type="file" className="hidden" onChange={handleImageUpload} />
+            </div>
+          </div>
 
-      <h2 className="text-2xl font-bold text-gray-800">{formData.firstName} {formData.lastName}</h2>
-      <p className="text-gray-500 mb-4 flex items-center">
-        <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full mr-2">
-          {formData?.roles}
-        </span>
-        <span
-          className={`text-xs px-2 py-1 rounded-full flex items-center
+
+          <h2 className="text-2xl font-bold text-gray-800">{formData.firstName} {formData.lastName}</h2>
+
+          <p className="text-gray-500 mb-4 flex items-center">
+            <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full mr-2">
+              {formData?.roles}
+            </span>
+            <span
+              className={`text-xs px-2 py-1 rounded-full flex items-center
             ${formData?.isActive
-              ? 'text-green-600 bg-green-100'
-              : 'text-gray-500 bg-gray-100'}
+                  ? 'text-green-600 bg-green-100'
+                  : 'text-gray-500 bg-gray-100'}
           `}
-        >
-          <span
-            className={`w-2 h-2 rounded-full mr-1
+            >
+              <span
+                className={`w-2 h-2 rounded-full mr-1
               ${formData?.isActive
-                ? 'bg-green-500'
-                : 'bg-gray-400'}
+                    ? 'bg-green-500'
+                    : 'bg-gray-400'}
             `}
-          ></span>
-          {formData.isActive ? t('active') : t('inactive')}
-        </span>
-      </p>
+              ></span>
+              {formData.isActive ? t('active') : t('inactive')}
+            </span>
+          </p>
 
-      <div className="flex space-x-3 w-full justify-center">
-        {/* 🆕 onClick → ouvre le client mail */}
-        <button
-          onClick={handleMessageClick}
-          className="flex-1 bg-blue-100 text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-200 transition-colors flex items-center justify-center"
-          title={t('send_email') || 'Envoyer un email'}
-          aria-label={t('send_email') || 'Envoyer un email'}
-        >
-          <FontAwesomeIcon icon={faEnvelope} className="mr-2" />
-          {t('message')}
-        </button>
+          <div className="flex space-x-3 w-full justify-center">
+            {/* 🆕 onClick → ouvre le client mail */}
+            <button
+              onClick={handleMessageClick}
+              className="flex-1 bg-blue-100 text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-200 transition-colors flex items-center justify-center"
+              title={t('send_email') || 'Envoyer un email'}
+              aria-label={t('send_email') || 'Envoyer un email'}
+            >
+              <FontAwesomeIcon icon={faEnvelope} className="mr-2" />
+              {t('message')}
+            </button>
 
-        <button className="flex-1 bg-gray-100 text-gray-600 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center">
-          <FontAwesomeIcon icon={faUserPlus} className="mr-2" />
-          {t('follow')}
-        </button>
-      </div>
+            <button className="flex-1 bg-gray-100 text-gray-600 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center">
+              <FontAwesomeIcon icon={faUserPlus} className="mr-2" />
+              {t('follow')}
+            </button>
+          </div>
 
-      <div className="w-full mt-6 grid grid-cols-3 gap-3">
-        <div className="bg-blue-50 p-3 rounded-lg text-center">
-          <p className="text-xl font-bold text-blue-600">24</p>
-          <p className="text-xs text-gray-500 uppercase tracking-wider">{t('projects')}</p>
+          <div className="w-full mt-6 grid grid-cols-3 gap-3">
+            <div className="bg-blue-50 p-3 rounded-lg text-center">
+              <p className="text-xl font-bold text-blue-600">24</p>
+              <p className="text-xs text-gray-500 uppercase tracking-wider">{t('projects')}</p>
+            </div>
+            <div className="bg-green-50 p-3 rounded-lg text-center">
+              <p className="text-xl font-bold text-green-600">18</p>
+              <p className="text-xs text-gray-500 uppercase tracking-wider">{t('tasks')}</p>
+            </div>
+            <div className="bg-purple-50 p-3 rounded-lg text-center">
+              <p className="text-xl font-bold text-purple-600">3</p>
+              <p className="text-xs text-gray-500 uppercase tracking-wider">{t('teams')}</p>
+            </div>
+          </div>
         </div>
-        <div className="bg-green-50 p-3 rounded-lg text-center">
-          <p className="text-xl font-bold text-green-600">18</p>
-          <p className="text-xs text-gray-500 uppercase tracking-wider">{t('tasks')}</p>
-        </div>
-        <div className="bg-purple-50 p-3 rounded-lg text-center">
-          <p className="text-xl font-bold text-purple-600">3</p>
-          <p className="text-xs text-gray-500 uppercase tracking-wider">{t('teams')}</p>
-        </div>
-      </div>
-    </div>
+      }
+    </>
   );
 };
 

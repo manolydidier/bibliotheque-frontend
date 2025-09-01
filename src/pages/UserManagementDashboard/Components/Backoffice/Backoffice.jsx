@@ -81,6 +81,12 @@ const Backoffice = () => {
         { title: 'Photos/Vidéos', value: 6, icon: <FaPhotoFilm className="text-green-600" />, pourcentage: "5%", color: "green" },
         { title: 'Favoris', value: 4, icon: <FaStar className="text-yellow-600" />, pourcentage: "1%", color: "yellow" }
     ]
+
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+        window.location.href = '/auth';
+    }
+
     return (
         <div>
             {/* les blocs de données */}
