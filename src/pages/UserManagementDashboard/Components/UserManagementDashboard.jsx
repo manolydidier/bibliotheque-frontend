@@ -30,7 +30,7 @@ const UserManagementDashboard = () => {
     { id: 'activity', label: t('activity'), icon: 'history' },
   ];
 
-  const token = localStorage.getItem('auth_token');
+  const token = localStorage.getItem('tokenGuard');
     if (!token) {
         window.location.href = '/auth';
   }

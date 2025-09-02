@@ -186,7 +186,7 @@ export const loginUser = (credentials) => async (dispatch) => {
       roles: data.user?.roles || [],
       permissions: data.permissions || data.user?.permissions || []
     }));
-
+    localStorage.setItem('tokenGuard', data.token);
     toast.success(credentials.langue === 'fr' ? 'Connexion réussie !' : 'Login success', {
       duration: 3000, position: 'top-right', color: 'bg-green-100 text-green-800 border-green-300', closable: true
     });
@@ -235,6 +235,7 @@ export const registerUser = (userData) => async (dispatch) => {
       roles: data.user?.roles || [],
       permissions: data.permissions || data.user?.permissions || []
     }));
+    localStorage.setItem('tokenGuard', data.token);
 
     toast.success(userData.langue === 'fr' ? 'Inscription réussie !' : 'Registration success', {
       duration: 3000, position: 'top-right', color: 'bg-green-100 text-green-800 border-green-300', closable: true
@@ -298,6 +299,7 @@ export const logoutUser = (langue) => async (dispatch) => {
       });
     }
   }
+    localStorage.removeItem('tokenGuard');
   
   clearAuth();
   dispatch(logoutAction());

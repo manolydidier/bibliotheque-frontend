@@ -128,7 +128,7 @@ const AuthPage = () => {
   // Forgot password modal
   const [forgotOpen, setForgotOpen] = useState(false);
 
-  useEffect(()=>{ if(isAuthenticated) navigate('/'); },[isAuthenticated,navigate]);
+  // useEffect(()=>{ if(isAuthenticated) navigate('/'); },[isAuthenticated,navigate]);
 
   const progress = useMemo(()=>{
     if(isLoginActive){
@@ -156,7 +156,7 @@ const AuthPage = () => {
     if(base.length>=3) setUSuggest(base.slice(0,18));
     else setUSuggest('');
   }, [isLoginActive, formData.firstName, formData.lastName, formData.username]);
-  useEffect(()=>{ if(isAuthenticated) navigate('/backoffice'); },[isAuthenticated,navigate]);
+  // useEffect(()=>{ if(isAuthenticated) navigate('/'); },[isAuthenticated,navigate]);
 
   const toggleAuthMode = () => {
     setIsLoginActive(v => !v);

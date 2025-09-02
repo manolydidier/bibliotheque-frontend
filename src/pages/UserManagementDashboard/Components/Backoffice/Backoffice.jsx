@@ -82,7 +82,7 @@ const Backoffice = () => {
         { title: 'Favoris', value: 4, icon: <FaStar className="text-yellow-600" />, pourcentage: "1%", color: "yellow" }
     ]
 
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('tokenGuard');
     if (!token) {
         window.location.href = '/auth';
     }

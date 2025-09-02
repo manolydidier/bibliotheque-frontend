@@ -6,18 +6,8 @@ const AUTH_USER_KEY  = 'user';
 
 /* Helpers lecture local OU session */
 const getFromAnyStorage = (key) => {
-  try {
-    if (typeof localStorage !== 'undefined') {
-      const v = localStorage.getItem(key);
-      if (v != null) return v;
-    }
-  } catch {}
-  try {
-    if (typeof sessionStorage !== 'undefined') {
-      const v = sessionStorage.getItem(key);
-      if (v != null) return v;
-    }
-  } catch {}
+  try { if (typeof localStorage !== 'undefined') { const v = localStorage.getItem(key); if (v != null) return v; } } catch {}
+  try { if (typeof sessionStorage !== 'undefined') { const v = sessionStorage.getItem(key); if (v != null) return v; } } catch {}
   return null;
 };
 
@@ -63,21 +53,26 @@ export const librarySlice = createSlice({
       state.auth.error = null;
     },
     loginSuccess: (state, action) => {
-      state.auth.isAuthenticated = true;
-      state.auth.token = action.payload.token || null;
-      state.auth.user = action.payload.user || null;
-      state.auth.roles = action.payload.roles || [];
-      state.auth.permissions = action.payload.permissions || [];
+      const token = action.payload?.token || null;
+      const user  = action.payload?.user  || null;
+
+      state.auth.isAuthenticated = !!token;
+      state.auth.token = token;
+      state.auth.user  = user;
+      state.auth.roles = action.payload?.roles || [];
+      state.auth.permissions = action.payload?.permissions || [];
       state.auth.loading = false;
       state.auth.error = null;
 
-      // Écrit le user dans le storage actif
+      // -- PERSISTE le TOKEN & USER ------------------------------  <-- IMPORTANT
       try {
-        const storage = getActiveStorage();
-        if (storage && state.auth.user) {
-          storage.setItem(AUTH_USER_KEY, JSON.stringify(state.auth.user));
+        const storage = getActiveStorage() || (typeof localStorage !== 'undefined' ? localStorage : null);
+        if (storage) {
+          if (token) storage.setItem(AUTH_TOKEN_KEY, token);
+          if (user)  storage.setItem(AUTH_USER_KEY, JSON.stringify(user));
         }
       } catch {}
+      // ----------------------------------------------------------
     },
     loginFailure: (state, action) => {
       state.auth.loading = false;
@@ -89,7 +84,7 @@ export const librarySlice = createSlice({
       state.auth.permissions = [];
     },
     logoutUser: (state) => {
-      clearAuthBoth();
+      clearAuthBoth(); // supprime token + user des 2 storages
       state.auth.isAuthenticated = false;
       state.auth.user = null;
       state.auth.token = null;
@@ -104,7 +99,7 @@ export const librarySlice = createSlice({
     updateUser: (state, action) => {
       state.auth.user = action.payload || null;
       try {
-        const storage = getActiveStorage();
+        const storage = getActiveStorage() || (typeof localStorage !== 'undefined' ? localStorage : null);
         if (storage && state.auth.user) {
           storage.setItem(AUTH_USER_KEY, JSON.stringify(state.auth.user));
         }
