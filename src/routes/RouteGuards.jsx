@@ -19,7 +19,7 @@ export const RequireAuth = ({ redirectTo = "/auth", fallback = null }) => {
   
   // Version ultra-défensive pour éviter les erreurs
   const authState = useSelector((state) => {
-    console.log("État Redux complet:", state); // Debug
+    // console.log("État Redux complet:", state); // Debug
     
     // Essayer différentes structures possibles
     let auth = null;
@@ -53,7 +53,7 @@ export const RequireAuth = ({ redirectTo = "/auth", fallback = null }) => {
     
     // Si on a un token mais pas d'authentification active
     if (!isAuthenticated && !isLoading && hasToken && !token) {
-      console.log("Lancement de la réhydratation");
+      // console.log("Lancement de la réhydratation");
       dispatch(rehydrateAuthFromStorage());
     }
   }, [dispatch, isAuthenticated, isLoading, token]);
@@ -112,7 +112,7 @@ export const RequireGuest = ({ redirectTo = "/", fallback = null }) => {
     if (!isAuthenticated && !isLoading && hasToken && !token) {
       dispatch(rehydrateAuthFromStorage());
     }
-  }, [dispatch, isAuthenticated, isLoading, token]);
+  }, [dispatch]);
 
   // Afficher le spinner pendant le chargement
   if (isLoading) {

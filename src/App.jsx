@@ -29,6 +29,7 @@ import { RequireAuth, RequireGuest } from './routes/RouteGuards';
 import './App.css';
 import './index.css';
 import DebugAuth from './routes/DebugAuth';
+import MediaLibrary from './pages/media-library';
 
 function AuthInitializer({ children }) {
   const dispatch = useDispatch();
@@ -56,7 +57,7 @@ export default function App() {
                   <Route index element={<Accueil />} />
                   
                   {/* Pages invités uniquement */}
-                  <Route element={<RequireGuest redirectTo="/" />}>
+                  <Route element={<RequireAuth redirectTo="/" />}>
                     <Route path="/auth" element={<AuthPage />} />
                     <Route path="/reset-password" element={<ResetPasswordPage />} />
                   </Route>
@@ -73,16 +74,16 @@ export default function App() {
                     }
                   />
                 </Route>
-
+              
                 {/* Routes protégées avec DefaultLayout */}
-                <Route element={<RequireAuth redirectTo="/auth" />}>
+                <Route element={<RequireGuest redirectTo="/auth" />}>
                   <Route element={<DefaultLayout />}>
                     <Route path="/settings" element={<UserManagementDashboard />} />
                   </Route>
                 </Route>
 
                 {/* Routes protégées avec DashboardLayout */}
-                <Route element={<RequireAuth redirectTo="/auth" />}>
+                <Route element={<RequireGuest redirectTo="/auth" />}>
                   <Route element={<DashboardLayout />}>
                     <Route path="/backoffice" element={<Backoffice />} />
                     <Route path="/backoffice/album/:albumName" element={<AlbumDetailPage />} />
@@ -103,11 +104,13 @@ export default function App() {
                     </div>
                   }
                 />
+                {/* Ajout des routes pour PageMedias et Visualiseur */}
+                <Route path="/medias" element={<MediaLibrary />} />
+                <Route path="/visualiseur/:photoName" element={<Visualiseur />} />
               </Routes>
             </Router>
-            <DebugAuth/>
+            {/* <DebugAuth/> */}
           </AuthInitializer>
-          
         </PersistGate>
       </Provider>
     </I18nextProvider>
