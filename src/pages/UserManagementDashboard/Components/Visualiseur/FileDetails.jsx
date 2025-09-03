@@ -4,7 +4,26 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faFilePdf, faFileExcel, faFileWord, faImage, faFileVideo, faFile, faPlus } from '@fortawesome/free-solid-svg-icons';
 import { useTags } from "../../../../hooks/UseTags";
 import { useState } from "react";
+import TagModal from "../Backoffice/Modals/TagModal";
 
+/**
+ * Détermine si le texte doit être clair ou foncé en fonction de la couleur de fond.
+ * @param {string} hexColor - La couleur de fond au format hexadécimal (ex: "#RRGGBB").
+ * @returns {string} La couleur du texte ('#FFFFFF' pour blanc, '#1F2937' pour gris foncé).
+ */
+const getContrastingTextColor = (hexColor) => {
+    if (!hexColor || hexColor.length < 4) {
+        return '#1F2937'; // text-gray-800
+    }
+    const hex = hexColor.replace('#', '');
+    const fullHex = hex.length === 3 ? hex.split('').map(c => c + c).join('') : hex;
+    
+    const r = parseInt(fullHex.substring(0, 2), 16);
+    const g = parseInt(fullHex.substring(2, 4), 16);
+    const b = parseInt(fullHex.substring(4, 6), 16);
+    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+    return (yiq >= 128) ? '#1F2937' : '#FFFFFF';
+};
 
 export default function FileDetails({ file }) {
     const getFileIconClass = (type) => {
@@ -35,21 +54,8 @@ export default function FileDetails({ file }) {
 
     //Tags
     const { tags, loading, error, createTag, deleteTag } = useTags();
-    const [newTag, setNewTag] = useState({ name: '', description: '', color: '' });
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            await createTag(newTag);
-            setNewTag({ name: '', description: '', color: '#fbfbfb' });
-        } catch (error) {
-            console.error('Erreur:', error);
-        }
-    };
-
-    if (loading) return <div>Chargement...</div>;
-    if (error) return <div>Erreur: {JSON.stringify(error)}</div>;
-
+   
+    const [openTagModal, setOpenTagModal] = useState(false)
     return (
         <div className="">
             <div className="p-6">
@@ -93,16 +99,21 @@ export default function FileDetails({ file }) {
                     <div>
                         <p className="text-gray-500 mb-2">Tags</p>
                         <div className="flex flex-wrap gap-2">
-                            <span className="tag bg-blue-100 text-blue-800 px-2 py-1 rounded-md text-xs">
-                                {file.favorite ? 'Favori' : 'Nouveau'}
-                            </span>
-                            <span className="tag bg-green-100 text-green-800 px-2 py-1 rounded-md text-xs">
-                                {file.category}
-                            </span>
-                            <button className="tag bg-gray-100 text-gray-800 px-2 py-1 rounded-md text-xs flex items-center">
+                            {tags.map(tag => (
+                                <span 
+                                    key={tag.id} 
+                                    className="tag px-2 py-1 rounded-md text-xs"
+                                    style={{ backgroundColor: tag.color || '#ccc', color: getContrastingTextColor(tag.color) }}
+                                >
+                                {tag.name}
+                                </span>
+                            ))}                            
+                            <button className="tag bg-gray-100 text-gray-800 px-2 py-1 rounded-md text-xs flex items-center" onClick={() => setOpenTagModal(true)}>
                                 <FontAwesomeIcon icon={faPlus} className="mr-1 text-xs" />
                                 <span>Ajouter</span>
                             </button>
+                            <TagModal isOpen={openTagModal} onClose={() => setOpenTagModal(false)}/>
+
                         </div>
                     </div>
                 </div>
@@ -110,30 +121,7 @@ export default function FileDetails({ file }) {
                 <Comments onSubmit={commentSubmit}/>
             </div>
             <div>
-                <h2>Tags</h2>
-
-                {/* Formulaire de création */}
-                <form onSubmit={handleSubmit}>
-                    <input
-                        type="text"
-                        placeholder="Nom du tag"
-                        value={newTag.name}
-                        onChange={(e) => setNewTag({ ...newTag, name: e.target.value })}
-                        required
-                    />
-                    <textarea
-                        placeholder="Description"
-                        value={newTag.description}
-                        onChange={(e) => setNewTag({ ...newTag, description: e.target.value })}
-                    />
-                    <input
-                        type="color"
-                        value={newTag.color}
-                        onChange={(e) => setNewTag({ ...newTag, color: e.target.value })}
-                    />
-                    <button type="submit">Créer</button>
-                </form>
-
+                <h2>Tags</h2>               
                 {/* Liste des tags */}
                 <div>
                     {tags.map(tag => (
