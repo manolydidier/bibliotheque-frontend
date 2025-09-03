@@ -2,6 +2,9 @@ import React from "react";
 import Comments from "./Comments";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faFilePdf, faFileExcel, faFileWord, faImage, faFileVideo, faFile, faPlus } from '@fortawesome/free-solid-svg-icons';
+import { useTags } from "../../../../hooks/UseTags";
+import { useState } from "react";
+
 
 export default function FileDetails({ file }) {
     const getFileIconClass = (type) => {
@@ -29,6 +32,24 @@ export default function FileDetails({ file }) {
     const commentSubmit = (value)=>{
         console.log(value)
     }
+
+    //Tags
+    const { tags, loading, error, createTag, deleteTag } = useTags();
+    const [newTag, setNewTag] = useState({ name: '', description: '', color: '' });
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        try {
+            await createTag(newTag);
+            setNewTag({ name: '', description: '', color: '#fbfbfb' });
+        } catch (error) {
+            console.error('Erreur:', error);
+        }
+    };
+
+    if (loading) return <div>Chargement...</div>;
+    if (error) return <div>Erreur: {JSON.stringify(error)}</div>;
+
     return (
         <div className="">
             <div className="p-6">
@@ -87,6 +108,42 @@ export default function FileDetails({ file }) {
                 </div>
                 {/* Comment section */}
                 <Comments onSubmit={commentSubmit}/>
+            </div>
+            <div>
+                <h2>Tags</h2>
+
+                {/* Formulaire de création */}
+                <form onSubmit={handleSubmit}>
+                    <input
+                        type="text"
+                        placeholder="Nom du tag"
+                        value={newTag.name}
+                        onChange={(e) => setNewTag({ ...newTag, name: e.target.value })}
+                        required
+                    />
+                    <textarea
+                        placeholder="Description"
+                        value={newTag.description}
+                        onChange={(e) => setNewTag({ ...newTag, description: e.target.value })}
+                    />
+                    <input
+                        type="color"
+                        value={newTag.color}
+                        onChange={(e) => setNewTag({ ...newTag, color: e.target.value })}
+                    />
+                    <button type="submit">Créer</button>
+                </form>
+
+                {/* Liste des tags */}
+                <div>
+                    {tags.map(tag => (
+                        <div key={tag.id} style={{ border: `2px solid ${tag.color || '#ccc'}`, margin: '10px', padding: '10px' }}>
+                            <h3>{tag.name}</h3>
+                            <p>{tag.description}</p>
+                            <button onClick={() => deleteTag(tag.id)}>Supprimer</button>                            
+                        </div>
+                    ))}
+                </div>
             </div>
         </div>
     );
