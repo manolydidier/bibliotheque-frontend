@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useCategories } from "../../../../../../hooks/useCategory";
 import CategoryModal from "../../Modals/CategoryModal";
+import { FaPenAlt, FaTrashAlt } from "react-icons/fa";
 
 export default function CategoryTab() {
     const [add, setAdd]= useState(false);
@@ -41,24 +42,21 @@ export default function CategoryTab() {
                 <h3>Catégories ({filteredCategories.length})</h3>
 
                 {filteredCategories.map(category => (
-                    <div key={category.id} className="category-card" style={{ borderLeft: `4px solid ${category.color || '#ccc'}` }}>
-                        <div className="category-header">
-                            <h4>{category.name}</h4>
-                            <span style={{ color: category.color }}>●</span>
+                    <div key={category.id} className="mt-4 p-3 bg-gray-50 rounded-lg w-1/2" style={{ borderLeft: `4px solid ${category.color || '#ccc'}` }}>
+                        <div className="flex justify-between items-center">
+                            <p className="font-semibold" style={{ color: category.color }}>{category.name}</p>                           
+                            <div className="flex flex-row gap-3">
+                                <FaPenAlt className="text-sm text-gray-500"/>
+                                <FaTrashAlt onClick={() => deleteCategory(category.id)} className="text-sm text-red-300"/>                                
+                            </div>
                         </div>
 
                         {category.description && (
-                            <p className="category-description">{category.description}</p>
+                            <p className="text-sm text-gray-600">{category.description}</p>
                         )}
 
                         <div className="category-actions">
-                            <button
-                                onClick={() => deleteCategory(category.id)}
-                                disabled={loading}
-                                className="btn-danger"
-                            >
-                                Supprimer
-                            </button>
+                            
                         </div>
                     </div>
                 ))}
