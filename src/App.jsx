@@ -57,7 +57,7 @@ export default function App() {
                   <Route index element={<Accueil />} />
                   
                   {/* Pages invités uniquement */}
-                  <Route element={<RequireAuth redirectTo="/" />}>
+                  <Route element={<RequireGuest redirectTo="/" />}>
                     <Route path="/auth" element={<AuthPage />} />
                     <Route path="/reset-password" element={<ResetPasswordPage />} />
                   </Route>
@@ -83,7 +83,7 @@ export default function App() {
                 </Route>
 
                 {/* Routes protégées avec DashboardLayout */}
-                <Route element={<RequireGuest redirectTo="/auth" />}>
+                <Route element={<RequireAuth redirectTo="/auth" />}>
                   <Route element={<DashboardLayout />}>
                     <Route path="/backoffice" element={<Backoffice />} />
                     <Route path="/backoffice/album/:albumName" element={<AlbumDetailPage />} />
