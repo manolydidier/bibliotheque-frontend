@@ -45,7 +45,7 @@ const DashboardLayout = () => {
     {
       title: "Paramètres",
       items: [
-        { name: "Configuration", icon: <FaCog className="text-gray-500 mr-3" />, onClick: () => {} },
+        { name: "Configuration", icon: <FaCog className="text-gray-500 mr-3" />, link :"/configuration" },
         { name: "Utilisateurs",  icon: <FaUsersGear className="text-gray-500 mr-3" />, onClick: () => {} },
       ],
     },

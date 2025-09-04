@@ -30,6 +30,7 @@ import './App.css';
 import './index.css';
 import DebugAuth from './routes/DebugAuth';
 import MediaLibrary from './pages/media-library';
+import Configuration from './pages/UserManagementDashboard/Components/Backoffice/configuration/configuration';
 
 function AuthInitializer({ children }) {
   const dispatch = useDispatch();
@@ -91,6 +92,7 @@ export default function App() {
                     <Route path="/backoffice/album/:albumName" element={<AlbumDetailPage />} />
                     <Route path="/albumphoto" element={<AlbumPhoto />} />
                     <Route path="/visualiseur/:photoName" element={<Visualiseur />} />
+                    <Route path="/configuration" element={<Configuration/>} />
                   </Route>
                 </Route>
 
