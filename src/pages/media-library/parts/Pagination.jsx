@@ -1,29 +1,264 @@
 // ------------------------------
-// File: media-library/parts/Pagination.jsx
+// File: media-library/parts/Pagination.jsx (version améliorée)
 // ------------------------------
-import { FaChevronLeft, FaChevronRight } from "react-icons/fa";
+import { useMemo, useState, useCallback } from "react";
+import {
+  FaChevronLeft,
+  FaChevronRight,
+  FaAngleDoubleLeft,
+  FaAngleDoubleRight,
+} from "react-icons/fa";
 
-export default function Pagination({ page, perPage, total, onChange }) {
-  const pages = Math.max(1, Math.ceil(total / perPage));
-  const canPrev = page > 1;
-  const canNext = page < pages;
-  const go = (p) => onChange(Math.min(Math.max(1, p), pages));
-  const start = (page - 1) * perPage + 1;
-  const end = Math.min(total, page * perPage);
+/**
+ * Pagination — composant accessible, réactif et stylé (Tailwind)
+ *
+ * Props compatibles avec votre version initiale + options facultatives :
+ * - page: number (1-indexed)
+ * - perPage: number
+ * - total: number
+ * - onChange: (nextPage:number) => void
+ *
+ * Options facultatives (toutes avec valeurs par défaut) :
+ * - className: string — classes supplémentaires pour le conteneur
+ * - siblingCount: number — nb de pages autour de la page active (par défaut 1)
+ * - boundaryCount: number — nb de pages au début/fin (par défaut 1)
+ * - showFirstLast: boolean — afficher « première »/« dernière » (par défaut true)
+ * - showJump: boolean — champ « Aller à la page » (par défaut true)
+ * - showPageSize: boolean — afficher le sélecteur de taille de page (par défaut false)
+ * - pageSizeOptions: number[] — options du sélecteur (par défaut [10,20,50,100])
+ * - onPageSizeChange: (size:number) => void — rappel pour changer perPage
+ */
+export default function Pagination({
+  page = 1,
+  perPage = 24,
+  total = 0,
+  onChange = () => {},
+  className = "",
+  siblingCount = 1,
+  boundaryCount = 1,
+  showFirstLast = true,
+  showJump = true,
+  showPageSize = false,
+  pageSizeOptions = [10, 20, 50, 100],
+  onPageSizeChange,
+}) {
+  const pages = Math.max(1, Math.ceil((total || 0) / Math.max(1, perPage)));
+  const current = Math.min(Math.max(1, page), pages);
+  const canPrev = current > 1;
+  const canNext = current < pages;
+
+  const go = useCallback(
+    (p) => {
+      const next = Math.min(Math.max(1, p), pages);
+      if (next !== current) onChange(next);
+    },
+    [current, pages, onChange]
+  );
+
+  // Calcule la plage des boutons numériques avec ellipses
+  const pageItems = useMemo(() => {
+    const totalPages = pages;
+    if (totalPages <= 1) return [1];
+
+    const range = (start, end) =>
+      Array.from({ length: end - start + 1 }, (_, i) => start + i);
+
+    const startPages = range(1, Math.min(boundaryCount, totalPages));
+    const endPages = range(
+      Math.max(totalPages - boundaryCount + 1, boundaryCount + 1),
+      totalPages
+    );
+
+    const siblingsStart = Math.max(
+      Math.min(
+        current - siblingCount,
+        totalPages - boundaryCount - siblingCount * 2 - 1
+      ),
+      boundaryCount + 2
+    );
+    const siblingsEnd = Math.min(
+      Math.max(
+        current + siblingCount,
+        boundaryCount + siblingCount * 2 + 2
+      ),
+      totalPages - boundaryCount - 1
+    );
+
+    const items = [
+      ...startPages,
+      siblingsStart > boundaryCount + 2 ? "ellipsis" : null,
+      ...range(siblingsStart, siblingsEnd),
+      siblingsEnd < totalPages - boundaryCount - 1 ? "ellipsis" : null,
+      ...endPages,
+    ].filter(Boolean);
+
+    // Si peu de pages, on simplifie
+    if (totalPages <= boundaryCount * 2 + siblingCount * 2 + 3) {
+      return range(1, totalPages);
+    }
+
+    return items;
+  }, [pages, current, siblingCount, boundaryCount]);
+
+  const hasItems = total > 0;
+  const startItem = hasItems ? (current - 1) * perPage + 1 : 0;
+  const endItem = hasItems ? Math.min(total, current * perPage) : 0;
+
+  const [jump, setJump] = useState("");
+
+  // ————————————————————————————————————————————————
+  // Styles (accent bleu, épuré & intuitif)
+  // ————————————————————————————————————————————————
+  const btnBase =
+    "inline-flex items-center justify-center h-9 min-w-9 px-3 rounded-md border text-sm transition focus:outline-none focus:ring-2 focus:ring-blue-400/60 disabled:opacity-50 disabled:cursor-not-allowed";
+  const btnGhost =
+    "hover:bg-blue-50 border-blue-200 text-blue-700 dark:hover:bg-blue-900/30 dark:border-blue-700 dark:text-blue-200";
+  const btnSolid =
+    "bg-blue-600 text-white hover:bg-blue-700 border-blue-600 dark:bg-blue-500 dark:text-white dark:hover:bg-blue-600";
+
+  // Accessibilité clavier: flèches gauche/droite pour naviguer (hors champs input)
+  const onKeyDownNav = (e) => {
+    if (e.target.tagName === "INPUT") return;
+    if (e.key === "ArrowLeft" && canPrev) {
+      e.preventDefault();
+      go(current - 1);
+    } else if (e.key === "ArrowRight" && canNext) {
+      e.preventDefault();
+      go(current + 1);
+    }
+  };
+
   return (
-    <div className="flex items-center justify-between py-4">
-      <p className="text-sm text-slate-600">
-        Affichage <b>{start}</b>–<b>{end}</b> sur <b>{total}</b>
-      </p>
+    <nav
+      className={`w-full flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between py-4 ${className}`}
+      role="navigation"
+      aria-label="Pagination"
+      onKeyDown={onKeyDownNav}
+    >
+      {/* Infos */}
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          Affichage <b>{startItem}</b>–<b>{endItem}</b> sur <b>{total}</b>
+        </p>
+
+        {showPageSize && (
+          <div className="flex items-center gap-2 text-sm">
+            <label htmlFor="page-size" className="text-slate-600 dark:text-slate-300">
+              Par page
+            </label>
+            <select
+              id="page-size"
+              className="h-9 rounded-md border border-blue-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/60 dark:border-blue-700 dark:bg-slate-900"
+              value={perPage}
+              onChange={(e) => onPageSizeChange?.(parseInt(e.target.value, 10))}
+            >
+              {pageSizeOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      {/* Contrôles */}
       <div className="flex items-center gap-2">
-        <button className="px-2 py-1.5 border rounded-md" disabled={!canPrev} onClick={() => go(page - 1)}>
+        {showFirstLast && (
+          <button
+            type="button"
+            aria-label="Première page"
+            className={`${btnBase} ${btnGhost}`}
+            disabled={!canPrev}
+            onClick={() => go(1)}
+          >
+            <FaAngleDoubleLeft />
+          </button>
+        )}
+
+        <button
+          type="button"
+          aria-label="Page précédente"
+          className={`${btnBase} ${btnGhost}`}
+          disabled={!canPrev}
+          onClick={() => go(current - 1)}
+        >
           <FaChevronLeft />
         </button>
-        <span className="text-sm">Page {page} / {pages}</span>
-        <button className="px-2 py-1.5 border rounded-md" disabled={!canNext} onClick={() => go(page + 1)}>
+
+        {/* Pages numériques (compact sur mobile) */}
+        <ul className="hidden sm:flex items-center gap-1" aria-label="Pages">
+          {pageItems.map((item, idx) => {
+            if (item === "ellipsis") {
+              return (
+                <li key={`el-${idx}`} className="px-2 text-blue-400/80 select-none">…</li>
+              );
+            }
+            const isActive = item === current;
+            return (
+              <li key={item}>
+                <button
+                  type="button"
+                  aria-label={`Aller à la page ${item}`}
+                  aria-current={isActive ? "page" : undefined}
+                  className={`${btnBase} ${isActive ? btnSolid : btnGhost}`}
+                  onClick={() => go(item)}
+                >
+                  {item}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+
+        <button
+          type="button"
+          aria-label="Page suivante"
+          className={`${btnBase} ${btnGhost}`}
+          disabled={!canNext}
+          onClick={() => go(current + 1)}
+        >
           <FaChevronRight />
         </button>
+
+        {showFirstLast && (
+          <button
+            type="button"
+            aria-label="Dernière page"
+            className={`${btnBase} ${btnGhost}`}
+            disabled={!canNext}
+            onClick={() => go(pages)}
+          >
+            <FaAngleDoubleRight />
+          </button>
+        )}
+
+        {showJump && (
+          <div className="ml-1 flex items-center gap-2 text-white">
+            <label htmlFor="jump" className="sr-only text-white">
+              Aller à la page
+            </label>
+            <input
+              id="jump"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={pages}
+              value={jump}
+              onChange={(e) => setJump(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const val = parseInt(jump, 10);
+                  if (!Number.isNaN(val)) go(val);
+                  setJump("");
+                }
+              }}
+              placeholder="Aller à…"
+              className="h-9 w-24 text-white rounded-md border border-blue-200 bg-white px-3 text-sm placeholder:text-blue-400/70 focus:outline-none focus:ring-2 focus:ring-blue-400/60 dark:border-blue-700 text-blue-400/80 "
+            />
+          </div>
+        )}
       </div>
-    </div>
+    </nav>
   );
 }

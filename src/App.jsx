@@ -76,9 +76,11 @@ export default function App() {
                 </Route>
               
                 {/* Routes protégées avec DefaultLayout */}
-                <Route element={<RequireGuest redirectTo="/auth" />}>
+                <Route element={<RequireAuth redirectTo="/auth" />}>
                   <Route element={<DefaultLayout />}>
                     <Route path="/settings" element={<UserManagementDashboard />} />
+                     <Route path="/medias" element={<MediaLibrary />} />
+                      <Route path="/visualiseur/:photoName" element={<Visualiseur />} />
                   </Route>
                 </Route>
 
@@ -105,8 +107,7 @@ export default function App() {
                   }
                 />
                 {/* Ajout des routes pour PageMedias et Visualiseur */}
-                <Route path="/medias" element={<MediaLibrary />} />
-                <Route path="/visualiseur/:photoName" element={<Visualiseur />} />
+               
               </Routes>
             </Router>
             {/* <DebugAuth/> */}

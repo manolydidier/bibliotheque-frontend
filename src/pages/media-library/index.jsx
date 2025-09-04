@@ -267,19 +267,7 @@ export default function MediaLibrary({
   const viewRows = loadMode === "infinite" ? infiniteRows : rows;
 
   return (
-    <div className="p-4 md:p-6">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-2xl font-bold">Ma Bibliothèque</h1>
-          <p className="text-slate-600 text-sm">Recherche avancée, filtres, tri, {loadMode === "infinite" ? "scroll infini" : "pagination"}.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="px-3 py-2 rounded-md border flex items-center gap-2" onClick={() => window.location.reload()}>
-            <FaSync /> Actualiser
-          </button>
-        </div>
-      </div>
-
+    <div className="p-4 md:p-6 mt-8 w-full max-w-[1600px] mx-auto flex flex-col gap-6 ">
       <FiltersPanel
         open={filtersOpen}
         setOpen={setFiltersOpen}
@@ -299,7 +287,10 @@ export default function MediaLibrary({
       {loading && viewRows.length === 0 ? (
         <div className="bg-white border rounded-xl p-10 text-center text-slate-600">Chargement…</div>
       ) : view === "grid" ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid gap-6" style={{ 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))',
+          gridAutoRows: 'max-content'
+        }}>
           {viewRows.map((it) => (
             <GridCard key={it.id} item={it} routeBase={routeBase} />
           ))}
@@ -316,7 +307,7 @@ export default function MediaLibrary({
         </div>
       )}
 
-      <div className="mt-6 text-xs text-slate-500">
+      <div className="mt-6 text-xs text-slate-500 hidden">
         Taille totale page: {formatBytes(viewRows.reduce((s, r) => s + (r.sizeBytes || 0), 0))}
       </div>
     </div>
