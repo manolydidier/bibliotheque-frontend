@@ -1,5 +1,5 @@
 // ------------------------------
-// File: media-library/parts/GridCard.jsx (Version UI moderne et premium améliorée - Plus large et distincte)
+// File: media-library/parts/GridCard.jsx (Adapté pour les articles)
 // ------------------------------
 import { useMemo, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
@@ -7,82 +7,56 @@ import {
   FaRegStar,
   FaStar,
   FaEye,
-  FaDownload,
   FaShareAlt,
-  FaPlay,
-  FaFileAlt,
-
   FaUser,
   FaHeart,
   FaRegHeart,
   FaTag,
   FaCalendarAlt,
+  FaComment,
+  FaShare,
+  FaThumbsUp,
+  FaClock,
 } from "react-icons/fa";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faClock } from "@fortawesome/free-solid-svg-icons";
-import { TypeBadge, FileGlyph } from "../shared/atoms/atoms";
-import { formatBytes, formatDate, cls } from "../shared/utils/format";
+import { cls } from "../shared/utils/format";
 import { isFav, toggleFav, isRead, markRead } from "../shared/store/markers";
 
-const LABELS = {
-  pdf: "PDF",
-  doc: "Word",
-  xls: "Excel",
-  ppt: "Slides",
-  zip: "Archive",
-  audio: "Audio",
-  video: "Vidéo",
-  image: "Image",
-  default: "Fichier",
+const CATEGORY_COLORS = {
+  "Développement Web": "from-amber-500/20 to-amber-600/30",
+  "Intelligence Artificielle": "from-emerald-500/20 to-emerald-600/30",
+  "Business": "from-red-500/20 to-red-600/30",
+  "Mobile": "from-purple-500/20 to-purple-600/30",
+  "Startup": "from-cyan-500/20 to-cyan-600/30",
+  "Santé": "from-orange-500/20 to-orange-600/30",
+  "Voyage": "from-teal-500/20 to-teal-600/30",
+  "default": "from-slate-500/20 to-slate-600/30",
 };
 
-const TYPE_COLORS = {
-  pdf: "from-red-500/20 to-red-600/30",
-  doc: "from-blue-500/20 to-blue-600/30",
-  xls: "from-green-500/20 to-green-600/30",
-  ppt: "from-orange-500/20 to-orange-600/30",
-  zip: "from-purple-500/20 to-purple-600/30",
-  audio: "from-pink-500/20 to-pink-600/30",
-  video: "from-indigo-500/20 to-indigo-600/30",
-  image: "from-cyan-500/20 to-cyan-600/30",
-  default: "from-slate-500/20 to-slate-600/30",
+const CATEGORY_BORDER_COLORS = {
+  "Développement Web": "border-amber-200/50 group-hover:border-amber-300/70",
+  "Intelligence Artificielle": "border-emerald-200/50 group-hover:border-emerald-300/70",
+  "Business": "border-red-200/50 group-hover:border-red-300/70",
+  "Mobile": "border-purple-200/50 group-hover:border-purple-300/70",
+  "Startup": "border-cyan-200/50 group-hover:border-cyan-300/70",
+  "Santé": "border-orange-200/50 group-hover:border-orange-300/70",
+  "Voyage": "border-teal-200/50 group-hover:border-teal-300/70",
+  "default": "border-slate-200/50 group-hover:border-slate-300/70",
 };
 
-const TYPE_BORDER_COLORS = {
-  pdf: "border-red-200/50 group-hover:border-red-300/70",
-  doc: "border-blue-200/50 group-hover:border-blue-300/70",
-  xls: "border-green-200/50 group-hover:border-green-300/70",
-  ppt: "border-orange-200/50 group-hover:border-orange-300/70",
-  zip: "border-purple-200/50 group-hover:border-purple-300/70",
-  audio: "border-pink-200/50 group-hover:border-pink-300/70",
-  video: "border-indigo-200/50 group-hover:border-indigo-300/70",
-  image: "border-cyan-200/50 group-hover:border-cyan-300/70",
-  default: "border-slate-200/50 group-hover:border-slate-300/70",
-};
-
-function getKind(type = "", mime = "") {
-  const t = `${type} ${mime}`.toLowerCase();
-  if (/(xls|xlsx|sheet|excel)/.test(t)) return "xls";
-  if (/(doc|docx|word)/.test(t)) return "doc";
-  if (/(ppt|pptx|powerpoint|slides)/.test(t)) return "ppt";
-  if (/(zip|rar|7z|tar|gzip)/.test(t)) return "zip";
-  if (/(mp3|wav|flac|audio)/.test(t)) return "audio";
-  if (/(mp4|mov|mkv|video)/.test(t)) return "video";
-  if (/(png|jpg|jpeg|gif|image|webp)/.test(t)) return "image";
-  if (/(pdf)/.test(t)) return "pdf";
-  return "default";
+function getPrimaryCategory(categories = []) {
+  return categories.length > 0 ? categories[0].name : "Article";
 }
 
 export default function GridCard({ item, routeBase, onOpen }) {
-  const to = useMemo(() => `${routeBase}/${encodeURIComponent(String(item.id))}`, [routeBase, item.id]);
+  const to = useMemo(() => `${routeBase}/${encodeURIComponent(String(item.slug))}`, [routeBase, item.slug]);
   const [fav, setFav] = useState(() => isFav(item.id));
   const [read, setRead] = useState(() => isRead(item.id));
   const [isHovered, setIsHovered] = useState(false);
   const [liked, setLiked] = useState(false);
-  const kind = getKind(item.type, item.mimeType);
-  const label = LABELS[kind] || LABELS.default;
-  const typeColor = TYPE_COLORS[kind] || TYPE_COLORS.default;
-  const borderColor = TYPE_BORDER_COLORS[kind] || TYPE_BORDER_COLORS.default;
+  
+  const primaryCategory = getPrimaryCategory(item.categories);
+  const categoryColor = CATEGORY_COLORS[primaryCategory] || CATEGORY_COLORS.default;
+  const borderColor = CATEGORY_BORDER_COLORS[primaryCategory] || CATEGORY_BORDER_COLORS.default;
 
   const onToggleFav = useCallback((e) => {
     e.stopPropagation();
@@ -103,27 +77,15 @@ export default function GridCard({ item, routeBase, onOpen }) {
 
   const onShare = useCallback(async (e) => {
     e.stopPropagation();
-    const shareUrl = item.shareUrl || `${window.location.origin}${to}`;
+    const shareUrl = item.url || `${window.location.origin}${to}`;
     try {
       if (navigator.share) {
-        await navigator.share({ title: item.name, url: shareUrl });
+        await navigator.share({ title: item.title, url: shareUrl });
       } else if (navigator.clipboard) {
         await navigator.clipboard.writeText(shareUrl);
       }
     } catch {}
-  }, [item.name, item.shareUrl, to]);
-
-  const onDownload = useCallback((e) => {
-    e.stopPropagation();
-    if (item.downloadUrl) {
-      const a = document.createElement("a");
-      a.href = item.downloadUrl;
-      a.download = item.name || "download";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    }
-  }, [item.downloadUrl, item.name]);
+  }, [item.title, item.url, to]);
 
   return (
     <article 
@@ -134,58 +96,46 @@ export default function GridCard({ item, routeBase, onOpen }) {
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      title={item.name}
+      title={item.title}
       style={{ minHeight: '550px' }}
     >
       {/* Effet de lueur en arrière-plan avec animation */}
       <div className={cls(
         "absolute inset-0 opacity-0 group-hover:opacity-20 transition-all duration-700 bg-gradient-to-br",
-        typeColor
+        categoryColor
       )}></div>
       
       {/* Bande décorative en haut */}
       <div className={cls(
         "absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r transition-all duration-500",
-        typeColor.replace('/20', '/60').replace('/30', '/80')
+        categoryColor.replace('/20', '/60').replace('/30', '/80')
       )}></div>
       
-      {/* En-tête avec thumbnail/icône - Plus haut */}
+      {/* En-tête avec image/placeholder */}
       <div className="relative h-64 bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center overflow-hidden">
-        {item.thumbnail ? (
+        {item.featured_image_url ? (
           <>
             <img
-              src={item.thumbnail}
-              alt={item.name}
+              src={item.featured_image_url}
+              alt={item.title}
               className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110 group-hover:brightness-110 group-hover:saturate-110"
               loading="lazy"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500" />
-            
-            {/* Bouton play pour vidéos avec effet néon */}
-            {kind === 'video' && (
-              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500">
-                <div className="relative">
-                  <div className="w-20 h-20 bg-white/95 backdrop-blur-sm rounded-full flex items-center justify-center shadow-2xl transform scale-75 group-hover:scale-100 transition-all duration-500 border-4 border-white/50">
-                    <FaPlay className="text-slate-700 text-2xl ml-1" />
-                  </div>
-                  <div className="absolute inset-0 w-20 h-20 border-4 border-white/30 rounded-full animate-ping"></div>
-                </div>
-              </div>
-            )}
           </>
         ) : (
           <>
             <div className={cls(
               "absolute inset-0 bg-gradient-to-br opacity-15 transition-all duration-700",
-              typeColor,
+              categoryColor,
               "group-hover:opacity-30"
             )}></div>
-            <div className="text-slate-400 group-hover:text-slate-600 transition-all duration-700 transform group-hover:scale-125 group-hover:-rotate-6 relative">
-              <FileGlyph type={item.type} size={80} />
+            <div className="text-slate-400 group-hover:text-slate-600 transition-all duration-700 transform group-hover:scale-125 group-hover:-rotate-6 relative text-6xl">
+              📝
               {/* Effet de halo */}
               <div className={cls(
                 "absolute inset-0 blur-xl opacity-0 group-hover:opacity-30 transition-all duration-700",
-                typeColor
+                categoryColor
               )}></div>
             </div>
           </>
@@ -203,23 +153,11 @@ export default function GridCard({ item, routeBase, onOpen }) {
               isHovered ? "translate-y-0 opacity-100 rotate-0" : "translate-y-8 opacity-0 rotate-12"
             )}
             style={{ transitionDelay: '0ms' }}
-            title="Ouvrir"
+            title="Lire l'article"
             onClick={onOpenCard}
           >
             <FaEye size={24} />
           </Link>
-          
-          <button
-            onClick={onDownload}
-            className={cls(
-              "p-5 bg-white/95 hover:bg-white text-slate-700 hover:text-green-600 rounded-2xl shadow-2xl transition-all duration-500 transform hover:scale-125 hover:rotate-6 hover:shadow-green-200/50",
-              isHovered ? "translate-y-0 opacity-100 rotate-0" : "translate-y-8 opacity-0 -rotate-12"
-            )}
-            style={{ transitionDelay: '100ms' }}
-            title="Télécharger"
-          >
-            <FaDownload size={24} />
-          </button>
           
           <button
             onClick={onShare}
@@ -275,14 +213,14 @@ export default function GridCard({ item, routeBase, onOpen }) {
           </div>
         )}
 
-        {/* Badge de type avec design amélioré */}
+        {/* Badge de catégorie avec design amélioré */}
         <div className="absolute top-4 left-4">
           <div className={cls(
             "relative bg-white/95 backdrop-blur-md text-slate-800 px-4 py-2 rounded-2xl font-bold shadow-2xl border-2 border-white/50 transition-all duration-500 transform group-hover:scale-110",
-            `hover:${typeColor.replace('from-', 'bg-').replace('/20', '/10').split(' ')[0]}`
+            `hover:${categoryColor.replace('from-', 'bg-').replace('/20', '/10').split(' ')[0]}`
           )}>
             <FaTag className="inline mr-2 text-xs" />
-            {label}
+            {primaryCategory}
           </div>
         </div>
       </div>
@@ -294,9 +232,16 @@ export default function GridCard({ item, routeBase, onOpen }) {
           <div className="flex-1">
             {/* En-tête avec titre */}
             <div className="mb-4">
-              <h4 className="font-bold text-slate-900 text-xl leading-tight line-clamp-2 group-hover:text-slate-700 transition-colors mb-2" title={item.name}>
-                {item.name}
+              <h4 className="font-bold text-slate-900 text-xl leading-tight line-clamp-2 group-hover:text-slate-700 transition-colors mb-2" title={item.title}>
+                {item.title}
               </h4>
+              
+              {/* Excerpt */}
+              {item.excerpt && (
+                <p className="text-slate-600 text-sm line-clamp-2 mb-3">
+                  {item.excerpt}
+                </p>
+              )}
               
               {/* Barre de statut */}
               <div className="flex items-center gap-3 mt-2">
@@ -321,18 +266,19 @@ export default function GridCard({ item, routeBase, onOpen }) {
               </div>
             </div>
 
-            {/* Description stylisée */}
-            {item.description && (
-              <div className="relative mb-4">
-                <div className={cls(
-                  "absolute -left-3 top-0 w-1.5 h-full rounded-full bg-gradient-to-b",
-                  typeColor.replace('/20', '/60').replace('/30', '/80')
-                )}></div>
-                <div className="bg-slate-50/80 rounded-xl p-4 pl-6 border-l-4 border-slate-200/50">
-                  <p className="text-sm text-slate-600 line-clamp-2 leading-relaxed italic font-medium">
-                    "{item.description}"
-                  </p>
-                </div>
+            {/* Tags */}
+            {item.tags && item.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-4">
+                {item.tags.slice(0, 3).map(tag => (
+                  <span key={tag.id} className="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded-full">
+                    #{tag.name}
+                  </span>
+                ))}
+                {item.tags.length > 3 && (
+                  <span className="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded-full">
+                    +{item.tags.length - 3}
+                  </span>
+                )}
               </div>
             )}
 
@@ -344,16 +290,8 @@ export default function GridCard({ item, routeBase, onOpen }) {
                 onClick={onOpenCard}
               >
                 <FaEye size={14} />
-                <span>Ouvrir</span>
+                <span>Lire l'article</span>
               </Link>
-              
-              <button
-                onClick={onDownload}
-                className="flex items-center gap-2 px-4 py-2 text-green-700 bg-gradient-to-r from-green-100 to-green-200 hover:from-green-200 hover:to-green-300 rounded-xl font-semibold text-sm transition-all duration-300 transform hover:scale-105 shadow-lg"
-              >
-                <FaDownload size={14} />
-                <span>Télécharger</span>
-              </button>
               
               <button
                 onClick={onShare}
@@ -367,80 +305,88 @@ export default function GridCard({ item, routeBase, onOpen }) {
 
           {/* Colonne droite - Métadonnées et stats */}
           <div className="w-64 space-y-3">
-            {/* Informations fichier */}
+            {/* Informations article */}
             <div className="space-y-2">
-              {typeof item.sizeBytes === "number" && (
+              {/* Auteur */}
+              {item.author && (
                 <div className="flex items-center gap-2 bg-slate-100/80 rounded-lg px-3 py-2">
                   <div className="p-1.5 bg-slate-200/80 rounded">
-                    <FaFileAlt className="text-slate-600" size={12} />
+                    <FaUser className="text-slate-600" size={12} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <span className="font-semibold text-slate-800 text-sm block truncate">{formatBytes(item.sizeBytes)}</span>
-                    <p className="text-slate-600 text-xs">Taille</p>
+                    <span className="font-semibold text-slate-800 text-xs block truncate">{item.author.name}</span>
+                    <p className="text-slate-600 text-xs">Auteur</p>
                   </div>
                 </div>
               )}
               
-              {item.createdAt && (
+              {/* Date de publication */}
+              {item.published_at && (
                 <div className="flex items-center gap-2 bg-slate-100/80 rounded-lg px-3 py-2">
                   <div className="p-1.5 bg-slate-200/80 rounded">
                     <FaCalendarAlt className="text-slate-600" size={12} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <span className="font-semibold text-slate-800 text-xs block truncate">{formatDate(item.createdAt)}</span>
-                    <p className="text-slate-600 text-xs">Créé le</p>
+                    <span className="font-semibold text-slate-800 text-xs block truncate">
+                      {new Date(item.published_at).toLocaleDateString()}
+                    </span>
+                    <p className="text-slate-600 text-xs">Publié le</p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Temps de lecture */}
+              {item.reading_time && (
+                <div className="flex items-center gap-2 bg-slate-100/80 rounded-lg px-3 py-2">
+                  <div className="p-1.5 bg-slate-200/80 rounded">
+                    <FaClock className="text-slate-600" size={12} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="font-semibold text-slate-800 text-xs block truncate">{item.reading_time} min</span>
+                    <p className="text-slate-600 text-xs">Temps de lecture</p>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Propriétaire */}
-            {item.owner && (
-              <div className="bg-gradient-to-br from-blue-50/80 to-indigo-50/80 rounded-lg p-3 border border-blue-100/50">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-lg">
-                    {item.owner.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1 mb-1">
-                      <FaUser className="text-blue-600" size={10} />
-                      <span className="text-blue-700 text-xs font-semibold">Propriétaire</span>
-                    </div>
-                    <p className="text-slate-700 font-semibold text-xs truncate">{item.owner}</p>
-                  </div>
+            {/* Statistiques */}
+            <div className="grid grid-cols-2 gap-2">
+              {/* Vues */}
+              {item.view_count !== undefined && (
+                <div className="bg-gradient-to-br from-blue-50/80 to-indigo-50/80 rounded-lg p-2 text-center">
+                  <div className="text-blue-700 font-bold text-sm">{item.formatted_view_count || item.view_count}</div>
+                  <div className="text-blue-600 text-xs">Vues</div>
                 </div>
-              </div>
-            )}
-
-            {/* Barre de popularité */}
-            {item.downloadCount && (
-              <div className="p-3 bg-gradient-to-br from-blue-50/90 to-indigo-50/90 rounded-lg border border-blue-100/50">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-slate-700 font-semibold text-xs">Popularité</span>
-                  <div className="flex items-center gap-1 bg-blue-500 text-white px-2 py-0.5 rounded-full text-xs font-semibold">
-                    <FaDownload size={8} />
-                    {item.downloadCount}
-                  </div>
+              )}
+              
+              {/* Commentaires */}
+              {item.comment_count !== undefined && (
+                <div className="bg-gradient-to-br from-green-50/80 to-emerald-50/80 rounded-lg p-2 text-center">
+                  <div className="text-green-700 font-bold text-sm">{item.formatted_comment_count || item.comment_count}</div>
+                  <div className="text-green-600 text-xs">Commentaires</div>
                 </div>
-                <div className="w-full bg-slate-200/60 rounded-full h-1.5 overflow-hidden">
-                  <div 
-                    className="bg-gradient-to-r from-blue-500 to-indigo-500 h-1.5 rounded-full transition-all duration-1000 shadow-sm" 
-                    style={{ 
-                      width: `${Math.min((item.downloadCount / 100) * 100, 100)}%`,
-                      transform: isHovered ? 'scaleX(1)' : 'scaleX(0.3)',
-                      transformOrigin: 'left'
-                    }}
-                  ></div>
+              )}
+              
+              {/* Partages */}
+              {item.share_count !== undefined && (
+                <div className="bg-gradient-to-br from-purple-50/80 to-pink-50/80 rounded-lg p-2 text-center">
+                  <div className="text-purple-700 font-bold text-sm">{item.formatted_share_count || item.share_count}</div>
+                  <div className="text-purple-600 text-xs">Partages</div>
                 </div>
-              </div>
-            )}
+              )}
+              
+              {/* Note */}
+              {item.rating_average !== undefined && (
+                <div className="bg-gradient-to-br from-amber-50/80 to-orange-50/80 rounded-lg p-2 text-center">
+                  <div className="text-amber-700 font-bold text-sm">{item.formatted_rating || item.rating_average}/5</div>
+                  <div className="text-amber-600 text-xs">Note</div>
+                </div>
+              )}
+            </div>
 
             {/* Footer info */}
-            <div className="flex items-center gap-1 text-slate-500 pt-2 border-t border-slate-200/50">
-              <FontAwesomeIcon icon={faClock} size="xs" />
-              <span className="text-xs truncate">
-                Modifié {item.updatedAt ? formatDate(item.updatedAt) : 'récemment'}
-              </span>
+            <div className="flex items-center gap-1 text-slate-500 pt-2 border-t border-slate-200/50 text-xs">
+              {item.word_count && <span>{item.formatted_word_count || `${item.word_count} mots`}</span>}
             </div>
           </div>
         </div>

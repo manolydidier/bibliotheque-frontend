@@ -31,6 +31,7 @@ import './index.css';
 import DebugAuth from './routes/DebugAuth';
 import MediaLibrary from './pages/media-library';
 import Configuration from './pages/UserManagementDashboard/Components/Backoffice/configuration/configuration';
+import ArticlesPage from './pages/media-library/ArticlesPage';
 
 function AuthInitializer({ children }) {
   const dispatch = useDispatch();
@@ -80,7 +81,7 @@ export default function App() {
                 <Route element={<RequireAuth redirectTo="/auth" />}>
                   <Route element={<DefaultLayout />}>
                     <Route path="/settings" element={<UserManagementDashboard />} />
-                     <Route path="/medias" element={<MediaLibrary />} />
+                     <Route path="/articles" element={<ArticlesPage/>} />
                       <Route path="/visualiseur/:photoName" element={<Visualiseur />} />
                   </Route>
                 </Route>

@@ -1,35 +1,3 @@
-// ============================================
-// Dossier: media-library/
-// Bibliothèque décomposée en composants (grille/liste, recherche, filtres,
-// pagination/infini, marqueurs lus & favoris, export CSV)
-// ============================================
-// NOTE DE FIX: pour éviter l'erreur « Identifier 'React' has already been declared »
-// quand tout ce code est exécuté en *un seul fichier*, j'ai supprimé les
-// `import React from "react"` redondants et n'importe plus que les hooks via
-// `import { useState, ... } from "react"`. (React 17+ / nouveau JSX Transform)
-// ============================================
-// Arborescence conseillée:
-// media-library/
-//   index.jsx
-//   parts/
-//     FiltersPanel.jsx
-//     GridCard.jsx
-//     ListTable.jsx
-//     Pagination.jsx
-//   shared/
-//     constants.js
-//     mock/service.js
-//     hooks/useDebouncedValue.js
-//     utils/format.js
-//     utils/query.js
-//     store/prefs.js
-//     store/markers.js
-//     atoms/atoms.jsx
-// ============================================
-
-// ------------------------------
-// File: media-library/index.jsx
-// ------------------------------
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FaSync } from "react-icons/fa";
 import FiltersPanel from "./parts/FiltersPanel";
@@ -40,17 +8,16 @@ import { useDebouncedValue } from "./shared/hooks/useDebouncedValue";
 import { parseSearch } from "./shared/utils/query";
 import { getStore } from "./shared/store/prefs";
 import { formatBytes } from "./shared/utils/format";
-import { MOCK_MEDIA } from "./shared/mock/service";
 import { isFav, isRead } from "./shared/store/markers";
 
-const PREF_KEY = "medialib:prefs";
+const PREF_KEY = "articlelib:prefs";
 
-export default function MediaLibrary({
-  items, // optionnel: tableau de médias côté client
-  fetchMedia, // optionnel: async ({ page, perPage, search, filters, sort }) => { data, total }
-  routeBase = "/visualiseur",
+export default function ArticleLibrary({
+  articles, // tableau d'articles
+  fetchArticles, // async ({ page, perPage, search, filters, sort }) => { data, total }
+  routeBase = "/articles",
   initialView = "grid",
-  defaultLoadMode = "pagination", // or "infinite"
+  defaultLoadMode = "pagination",
   perPageOptions = [12, 24, 48, 96],
 }) {
   const persisted = getStore(PREF_KEY, {});
@@ -63,30 +30,42 @@ export default function MediaLibrary({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState(
     persisted.filters || {
-      types: [],
       categories: [],
       tags: [],
-      owners: [],
-      favoritesOnly: false,
+      authors: [],
+      featuredOnly: false,
       unreadOnly: false,
       dateFrom: "",
       dateTo: "",
-      sizeMin: 0,
-      sizeMax: 0,
+      ratingMin: 0,
+      ratingMax: 5,
     }
   );
-  const [sort, setSort] = useState([{ key: "createdAt", dir: "desc" }]);
+  const [sort, setSort] = useState([{ key: "published_at", dir: "desc" }]);
   const [loadMode, setLoadMode] = useState(persisted.loadMode || defaultLoadMode);
 
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  // Propriétaires (à partir des données locales si items/mock)
-  const ownersOptions = useMemo(() => {
-    const src = items || MOCK_MEDIA;
-    return Array.from(new Set(src.map((x) => x.owner))).sort();
-  }, [items]);
+  // Auteurs (à partir des données d'articles)
+  const authorsOptions = useMemo(() => {
+    return Array.from(new Set(articles.map(article => article.author?.name || "Auteur inconnu"))).sort();
+  }, [articles]);
+
+  // Catégories (à partir des données d'articles)
+  const categoriesOptions = useMemo(() => {
+    return Array.from(new Set(articles.flatMap(article => 
+      article.categories.map(cat => cat.name)
+    ))).sort();
+  }, [articles]);
+
+  // Tags (à partir des données d'articles)
+  const tagsOptions = useMemo(() => {
+    return Array.from(new Set(articles.flatMap(article => 
+      article.tags.map(tag => tag.name)
+    ))).sort();
+  }, [articles]);
 
   // Export CSV de la vue courante
   useEffect(() => {
@@ -94,15 +73,19 @@ export default function MediaLibrary({
       if (!rows?.length) return;
       const headers = [
         "id",
-        "name",
-        "type",
-        "ext",
-        "sizeBytes",
-        "category",
-        "owner",
-        "createdAt",
-        "updatedAt",
+        "title",
+        "author",
+        "categories",
         "tags",
+        "published_at",
+        "view_count",
+        "share_count",
+        "comment_count",
+        "rating_average",
+        "reading_time",
+        "word_count",
+        "is_featured",
+        "is_sticky",
         "favorite",
         "read",
       ];
@@ -111,15 +94,19 @@ export default function MediaLibrary({
         .map((r) =>
           [
             r.id,
-            r.name,
-            r.type,
-            r.ext,
-            r.sizeBytes,
-            r.category,
-            r.owner,
-            r.createdAt,
-            r.updatedAt,
-            (r.tags || []).join("|"),
+            r.title,
+            r.author?.name,
+            r.categories.map(c => c.name).join("|"),
+            r.tags.map(t => t.name).join("|"),
+            r.published_at,
+            r.view_count,
+            r.share_count,
+            r.comment_count,
+            r.rating_average,
+            r.reading_time,
+            r.word_count,
+            r.is_featured,
+            r.is_sticky,
             isFav(r.id),
             isRead(r.id),
           ]
@@ -132,12 +119,12 @@ export default function MediaLibrary({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `medias_export_${Date.now()}.csv`;
+      a.download = `articles_export_${Date.now()}.csv`;
       a.click();
       URL.revokeObjectURL(url);
     };
-    window.addEventListener("medialib:export", handler);
-    return () => window.removeEventListener("medialib:export", handler);
+    window.addEventListener("articlelib:export", handler);
+    return () => window.removeEventListener("articlelib:export", handler);
   }, [rows]);
 
   // Chargement des données
@@ -146,8 +133,8 @@ export default function MediaLibrary({
     async function load() {
       setLoading(true);
       try {
-        if (fetchMedia) {
-          const { data, total } = await fetchMedia({
+        if (fetchArticles) {
+          const { data, total } = await fetchArticles({
             page,
             perPage,
             search: debouncedSearch,
@@ -159,43 +146,60 @@ export default function MediaLibrary({
           setTotal(total);
         } else {
           // Mode client: filtrage/tri/pagination côté front
-          const src = items || MOCK_MEDIA;
+          const src = articles || [];
           const { tokens, q } = parseSearch(debouncedSearch);
           let filtered = src.filter((r) => {
             if (!q) return true;
             const s = q.toLowerCase();
             return (
-              r.name.toLowerCase().includes(s) ||
-              r.description.toLowerCase().includes(s) ||
-              r.owner.toLowerCase().includes(s) ||
-              r.tags.some((t) => t.toLowerCase().includes(s))
+              r.title.toLowerCase().includes(s) ||
+              r.excerpt.toLowerCase().includes(s) ||
+              (r.author?.name || "").toLowerCase().includes(s) ||
+              r.categories.some(c => c.name.toLowerCase().includes(s)) ||
+              r.tags.some(t => t.name.toLowerCase().includes(s))
             );
           });
+          
+          // Filtrage par tokens de recherche
           tokens.forEach((t) => {
-            if (t.k === "type") filtered = filtered.filter((r) => r.type.toLowerCase() === t.v.toLowerCase());
-            if (t.k === "tag") filtered = filtered.filter((r) => r.tags.map((x) => x.toLowerCase()).includes(t.v.toLowerCase()));
-            if (t.k === "ext") filtered = filtered.filter((r) => r.ext.toLowerCase() === t.v.toLowerCase());
-            if (t.k === "owner") filtered = filtered.filter((r) => r.owner.toLowerCase().includes(t.v.toLowerCase()));
-            if (t.k === "before") filtered = filtered.filter((r) => new Date(r.createdAt) <= new Date(t.v));
-            if (t.k === "after") filtered = filtered.filter((r) => new Date(r.createdAt) >= new Date(t.v));
-            if (t.k === "size") filtered = filtered.filter((r) => (t.op === ">" ? r.sizeBytes > t.v : r.sizeBytes < t.v));
+            if (t.k === "author") filtered = filtered.filter((r) => (r.author?.name || "").toLowerCase().includes(t.v.toLowerCase()));
+            if (t.k === "category") filtered = filtered.filter((r) => r.categories.some(c => c.name.toLowerCase() === t.v.toLowerCase()));
+            if (t.k === "tag") filtered = filtered.filter((r) => r.tags.some(tag => tag.name.toLowerCase() === t.v.toLowerCase()));
+            if (t.k === "before") filtered = filtered.filter((r) => new Date(r.published_at) <= new Date(t.v));
+            if (t.k === "after") filtered = filtered.filter((r) => new Date(r.published_at) >= new Date(t.v));
+            if (t.k === "rating") filtered = filtered.filter((r) => (t.op === ">" ? r.rating_average > t.v : r.rating_average < t.v));
           });
-          if (filters.types.length) filtered = filtered.filter((r) => filters.types.includes(r.type));
-          if (filters.categories.length) filtered = filtered.filter((r) => filters.categories.includes(r.category));
-          if (filters.tags.length) filtered = filtered.filter((r) => r.tags.some((x) => filters.tags.includes(x)));
-          if (filters.owners.length) filtered = filtered.filter((r) => filters.owners.includes(r.owner));
-          if (filters.favoritesOnly) filtered = filtered.filter((r) => isFav(r.id) || r.favorite);
+          
+          // Filtrage par filtres sélectionnés
+          if (filters.categories.length) filtered = filtered.filter((r) => 
+            r.categories.some(c => filters.categories.includes(c.name))
+          );
+          if (filters.tags.length) filtered = filtered.filter((r) => 
+            r.tags.some(t => filters.tags.includes(t.name))
+          );
+          if (filters.authors.length) filtered = filtered.filter((r) => 
+            filters.authors.includes(r.author?.name || "")
+          );
+          if (filters.featuredOnly) filtered = filtered.filter((r) => r.is_featured);
           if (filters.unreadOnly) filtered = filtered.filter((r) => !isRead(r.id));
-          if (filters.dateFrom) filtered = filtered.filter((r) => new Date(r.createdAt) >= new Date(filters.dateFrom));
-          if (filters.dateTo) filtered = filtered.filter((r) => new Date(r.createdAt) <= new Date(filters.dateTo));
-          if (filters.sizeMin) filtered = filtered.filter((r) => r.sizeBytes >= filters.sizeMin);
-          if (filters.sizeMax) filtered = filtered.filter((r) => r.sizeBytes <= filters.sizeMax);
+          if (filters.dateFrom) filtered = filtered.filter((r) => new Date(r.published_at) >= new Date(filters.dateFrom));
+          if (filters.dateTo) filtered = filtered.filter((r) => new Date(r.published_at) <= new Date(filters.dateTo));
+          if (filters.ratingMin) filtered = filtered.filter((r) => r.rating_average >= filters.ratingMin);
+          if (filters.ratingMax) filtered = filtered.filter((r) => r.rating_average <= filters.ratingMax);
 
+          // Tri
           if (sort?.length) {
             filtered.sort((a, b) => {
               for (const { key, dir } of sort) {
-                const va = a[key];
-                const vb = b[key];
+                let va = a[key];
+                let vb = b[key];
+                
+                // Gestion des valeurs imbriquées
+                if (key === "author") {
+                  va = a.author?.name;
+                  vb = b.author?.name;
+                }
+                
                 if (va == null && vb == null) continue;
                 if (va == null) return dir === "asc" ? -1 : 1;
                 if (vb == null) return dir === "asc" ? 1 : -1;
@@ -205,6 +209,7 @@ export default function MediaLibrary({
               return 0;
             });
           }
+          
           const total = filtered.length;
           const start = (page - 1) * perPage;
           const data = filtered.slice(start, start + perPage);
@@ -219,7 +224,7 @@ export default function MediaLibrary({
     return () => {
       cancelled = true;
     };
-  }, [page, perPage, debouncedSearch, filters, sort, items, fetchMedia]);
+  }, [page, perPage, debouncedSearch, filters, sort, articles, fetchArticles]);
 
   // Persistance préférences
   useEffect(() => {
@@ -281,7 +286,9 @@ export default function MediaLibrary({
         setPerPage={setPerPage}
         loadMode={loadMode}
         setLoadMode={setLoadMode}
-        ownersOptions={ownersOptions}
+        authorsOptions={authorsOptions}
+        categoriesOptions={categoriesOptions}
+        tagsOptions={tagsOptions}
       />
 
       {loading && viewRows.length === 0 ? (
@@ -291,8 +298,8 @@ export default function MediaLibrary({
           gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))',
           gridAutoRows: 'max-content'
         }}>
-          {viewRows.map((it) => (
-            <GridCard key={it.id} item={it} routeBase={routeBase} />
+          {viewRows.map((article) => (
+            <GridCard key={article.id} item={article} routeBase={routeBase} />
           ))}
         </div>
       ) : (
@@ -308,7 +315,7 @@ export default function MediaLibrary({
       )}
 
       <div className="mt-6 text-xs text-slate-500 hidden">
-        Taille totale page: {formatBytes(viewRows.reduce((s, r) => s + (r.sizeBytes || 0), 0))}
+        {viewRows.length} articles affichés
       </div>
     </div>
   );

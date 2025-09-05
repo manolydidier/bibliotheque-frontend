@@ -1,5 +1,5 @@
 // ------------------------------
-// File: media-library/parts/FiltersPanel.jsx
+// File: media-library/parts/FiltersPanel.jsx (Adapté pour les articles)
 // ------------------------------
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { 
@@ -17,18 +17,20 @@ import {
   FaChevronDown,
   FaChevronRight,
   FaRocket,
-  FaMagic
+  FaMagic,
+  FaUser,
+  FaTag,
+  FaCalendar,
+  FaThumbsUp
 } from "react-icons/fa";
 import { Toggle } from "../shared/atoms/atoms";
-import { TYPES, CATS, TAGS } from "../shared/constants";
-import { toBytes } from "../shared/utils/query";
-import { formatBytes, cls } from "../shared/utils/format";
+import { cls } from "../shared/utils/format";
 
 // Hook optimisé pour filtres sauvegardés avec style
 const useSavedFilters = () => {
   const [savedFilters, setSavedFilters] = useState(() => {
     try {
-      const saved = localStorage.getItem('media-filters');
+      const saved = localStorage.getItem('article-filters');
       return saved ? JSON.parse(saved) : [];
     } catch { return []; }
   });
@@ -43,13 +45,13 @@ const useSavedFilters = () => {
     };
     const updated = [newFilter, ...savedFilters.slice(0, 4)]; // Max 5 filtres
     setSavedFilters(updated);
-    localStorage.setItem('media-filters', JSON.stringify(updated));
+    localStorage.setItem('article-filters', JSON.stringify(updated));
   }, [savedFilters]);
 
   const deleteFilter = useCallback((id) => {
     const updated = savedFilters.filter(f => f.id !== id);
     setSavedFilters(updated);
-    localStorage.setItem('media-filters', JSON.stringify(updated));
+    localStorage.setItem('article-filters', JSON.stringify(updated));
   }, [savedFilters]);
 
   return { savedFilters, saveFilter, deleteFilter };
@@ -59,7 +61,7 @@ const useSavedFilters = () => {
 const useSearchHistory = () => {
   const [history, setHistory] = useState(() => {
     try {
-      const saved = localStorage.getItem('media-search-history');
+      const saved = localStorage.getItem('article-search-history');
       return saved ? JSON.parse(saved) : [];
     } catch { return []; }
   });
@@ -71,7 +73,7 @@ const useSearchHistory = () => {
       ...history.filter(h => h.term !== search)
     ].slice(0, 5);
     setHistory(newHistory);
-    localStorage.setItem('media-search-history', JSON.stringify(newHistory));
+    localStorage.setItem('article-search-history', JSON.stringify(newHistory));
   }, [history]);
 
   return { history, addToHistory };
@@ -90,7 +92,9 @@ export default function FiltersPanel({
   setPerPage,
   loadMode,
   setLoadMode,
-  ownersOptions,
+  authorsOptions,
+  categoriesOptions,
+  tagsOptions,
 }) {
   const [local, setLocal] = useState(filters);
   const [q, setQ] = useState(search);
@@ -110,10 +114,10 @@ export default function FiltersPanel({
 
   // Stats des filtres actifs
   const activeFiltersCount = useMemo(() => {
-    return local.types.length + local.categories.length + local.tags.length + 
-           local.owners.length + (local.favoritesOnly ? 1 : 0) + (local.unreadOnly ? 1 : 0) +
+    return local.categories.length + local.tags.length + local.authors.length + 
+           (local.featuredOnly ? 1 : 0) + (local.unreadOnly ? 1 : 0) +
            (local.dateFrom ? 1 : 0) + (local.dateTo ? 1 : 0) + 
-           (local.sizeMin > 0 ? 1 : 0) + (local.sizeMax > 0 ? 1 : 0);
+           (local.ratingMin > 0 ? 1 : 0) + (local.ratingMax < 5 ? 1 : 0);
   }, [local]);
 
   // Actions
@@ -124,9 +128,9 @@ export default function FiltersPanel({
 
   const resetFilters = () => {
     const empty = { 
-      types: [], categories: [], tags: [], owners: [], 
-      favoritesOnly: false, unreadOnly: false, 
-      dateFrom: "", dateTo: "", sizeMin: 0, sizeMax: 0 
+      categories: [], tags: [], authors: [], 
+      featuredOnly: false, unreadOnly: false, 
+      dateFrom: "", dateTo: "", ratingMin: 0, ratingMax: 5 
     };
     setLocal(empty);
     setFilters(empty);
@@ -178,7 +182,7 @@ export default function FiltersPanel({
     const isExpanded = expandedSections[sectionKey] ?? defaultExpanded;
     
     const colorClasses = {
-      blue: "from-blue-500/90 to-blue-600/90",
+      blue: "from-blue-800 to-blue-900",
       purple: "from-purple-500/90 to-purple-600/90", 
       emerald: "from-emerald-500/90 to-emerald-600/90",
       orange: "from-orange-500/90 to-orange-600/90"
@@ -261,7 +265,7 @@ export default function FiltersPanel({
                   setSearchFocused(false);
                   setTimeout(() => setShowHistory(false), 200);
                 }}
-                placeholder="Rechercher dans la médiathèque... 🔍"
+                placeholder="Rechercher des articles... 🔍"
                 className={cls(
                   "w-full pl-12 pr-12 py-3 rounded-xl font-medium",
                   "bg-white/80 backdrop-blur-sm border-2 border-white/50",
@@ -358,22 +362,22 @@ export default function FiltersPanel({
             className={cls(
               'flex items-center gap-3 px-6 py-3 rounded-xl font-bold transition-all duration-200 relative overflow-hidden shadow-lg',
               activeFiltersCount > 0
-                ? 'bg-gradient-to-r from-blue-800 to-blue-900 text-white shadow-blue-500/25 animate-pulse'
+                ? 'bg-gradient-to-r from-blue-800 to-blue-900 text-white shadow-blue-500/25 animate-none'
                 : 'bg-white/80 text-slate-700 border-2 border-white/50 hover:bg-white/90 hover:border-blue-300'
             )}
           >
-            <FaFilter className={activeFiltersCount > 0 ? "animate-spin" : ""} />
+            <FaFilter className={activeFiltersCount > 0 ? "animate-none" : ""} />
             <span>Filtres</span>
             {activeFiltersCount > 0 && (
-              <span className="bg-white text-blue-900 text-xs px-2 py-1 rounded-full font-black min-w-[24px] text-center animate-bounce">
+              <span className="bg-white text-blue-900 text-xs px-2 py-1 rounded-full font-black min-w-[24px] text-center animate-pulse">
                 {activeFiltersCount}
               </span>
             )}
           </button>
 
           {/* Export avec style */}
-          <button hidden
-            onClick={() => window.dispatchEvent(new CustomEvent("medialib:export"))}
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("articlelib:export"))}
             className="p-3 text-slate-600 hover:text-slate-900 transition-all duration-200 bg-white/80 backdrop-blur-sm rounded-xl border-2 border-white/50 hover:bg-white/90 hover:scale-110 shadow-lg"
             title="Export CSV"
           >
@@ -467,40 +471,16 @@ export default function FiltersPanel({
           >
             <div className="space-y-6 pb-10  overflow-auto max-h-96 pr-2 w-80">
               
-              {/* Types */}
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-6 h-6 bg-gradient-to-br from-blue-700 to-blue-900 rounded-lg flex items-center justify-center">
-                    <span className="text-white font-bold text-xs">📄</span>
-                  </div>
-                  <label className="font-semibold text-slate-800 text-sm">Types de fichiers</label>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {TYPES.map(t => (
-                    <AnimatedChip
-                      key={t}
-                      active={local.types.includes(t)}
-                      onClick={() => setLocal(s => ({ 
-                        ...s, 
-                        types: s.types.includes(t) ? s.types.filter(x => x !== t) : [...s.types, t] 
-                      }))}
-                    >
-                      {t}
-                    </AnimatedChip>
-                  ))}
-                </div>
-              </div>
-
               {/* Catégories */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
-                  <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                  <div className="w-6 h-6 bg-gradient-to-br from-blue-800 to-blue-900 rounded-lg flex items-center justify-center">
                     <span className="text-white font-bold text-xs">📁</span>
                   </div>
                   <label className="font-semibold text-slate-800 text-sm">Catégories</label>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {CATS.map(c => (
+                  {categoriesOptions.map(c => (
                     <AnimatedChip
                       key={c}
                       active={local.categories.includes(c)}
@@ -524,7 +504,7 @@ export default function FiltersPanel({
                   <label className="font-semibold text-slate-800 text-sm">Tags</label>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {TAGS.map(t => (
+                  {tagsOptions.map(t => (
                     <AnimatedChip
                       key={t}
                       active={local.tags.includes(t)}
@@ -539,26 +519,26 @@ export default function FiltersPanel({
                 </div>
               </div>
 
-              {/* Propriétaires */}
-              {ownersOptions.length > 0 && (
+              {/* Auteurs */}
+              {authorsOptions.length > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <div className="w-6 h-6 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center">
                       <span className="text-white font-bold text-xs">👤</span>
                     </div>
-                    <label className="font-semibold text-slate-800 text-sm">Propriétaires</label>
+                    <label className="font-semibold text-slate-800 text-sm">Auteurs</label>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    {ownersOptions.map(o => (
+                    {authorsOptions.map(a => (
                       <AnimatedChip
-                        key={o}
-                        active={local.owners.includes(o)}
+                        key={a}
+                        active={local.authors.includes(a)}
                         onClick={() => setLocal(s => ({ 
                           ...s, 
-                          owners: s.owners.includes(o) ? s.owners.filter(x => x !== o) : [...s.owners, o] 
+                          authors: s.authors.includes(a) ? s.authors.filter(x => x !== a) : [...s.authors, a] 
                         }))}
                       >
-                        {o}
+                        {a}
                       </AnimatedChip>
                     ))}
                   </div>
@@ -587,8 +567,8 @@ export default function FiltersPanel({
                 
                 <div className="space-y-3">
                   {[
-                    { key: "favoritesOnly", label: "Favoris uniquement", icon: FaStar, desc: "Afficher seulement mes favoris", color: "text-yellow-500" },
-                    { key: "unreadOnly", label: "Non lus seulement", icon: FaEye, desc: "Fichiers pas encore consultés", color: "text-green-500" }
+                    { key: "featuredOnly", label: "Articles vedettes", icon: FaStar, desc: "Articles mis en avant", color: "text-yellow-500" },
+                    { key: "unreadOnly", label: "Non lus seulement", icon: FaEye, desc: "Articles pas encore consultés", color: "text-green-500" }
                   ].map(({ key, label, icon: Icon, desc, color }) => (
                     <div key={key} className="flex items-start gap-3 p-3 bg-white/30 rounded-lg hover:bg-white/40 transition-all duration-200 hover:scale-[1.02]">
                       <div className="flex-shrink-0 pt-0.5">
@@ -615,16 +595,16 @@ export default function FiltersPanel({
                   <div className="w-6 h-6 bg-gradient-to-br from-blue-700 to-blue-900 rounded-lg flex items-center justify-center">
                     <span className="text-white font-bold text-xs">📊</span>
                   </div>
-                  <h5 className="font-semibold text-slate-800 text-sm">Critères de taille et date</h5>
+                  <h5 className="font-semibold text-slate-800 text-sm">Critères de date et notation</h5>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { label: "Taille min", key: "sizeMin", placeholder: "10MB", icon: "📏" },
-                    { label: "Taille max", key: "sizeMax", placeholder: "500MB", icon: "📐" },
+                    { label: "Note min", key: "ratingMin", placeholder: "0", type: "number", min: 0, max: 5, step: 0.1, icon: "⭐" },
+                    { label: "Note max", key: "ratingMax", placeholder: "5", type: "number", min: 0, max: 5, step: 0.1, icon: "⭐" },
                     { label: "Date début", key: "dateFrom", type: "date", icon: "📅" },
                     { label: "Date fin", key: "dateTo", type: "date", icon: "📆" }
-                  ].map(({ label, key, placeholder, type = "text", icon }) => (
+                  ].map(({ label, key, placeholder, type = "text", min, max, step, icon }) => (
                     <div key={key} className="space-y-1">
                       <label className="block text-xs font-medium text-slate-700 flex items-center gap-1">
                         <span className="text-xs">{icon}</span>
@@ -633,17 +613,14 @@ export default function FiltersPanel({
                       <input 
                         type={type}
                         placeholder={placeholder}
+                        min={min}
+                        max={max}
+                        step={step}
                         className="w-full px-3 py-2 rounded-lg bg-white/80 backdrop-blur-sm border border-white/50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white/90 transition-all duration-200 text-sm shadow-sm hover:shadow-md"
-                        value={
-                          key === "sizeMin" ? (local.sizeMin ? formatBytes(local.sizeMin) : "") :
-                          key === "sizeMax" ? (local.sizeMax ? formatBytes(local.sizeMax) : "") :
-                          local[key]
-                        }
+                        value={local[key]}
                         onChange={(e) => setLocal(s => ({ 
                           ...s, 
-                          [key]: key.includes("size") 
-                            ? toBytes(e.target.value) || 0 
-                            : e.target.value 
+                          [key]: type === "number" ? parseFloat(e.target.value) || 0 : e.target.value 
                         }))}
                       />
                     </div>
@@ -768,7 +745,7 @@ export default function FiltersPanel({
                 )}
               >
                 <span className="relative z-10 flex items-center justify-center gap-2">
-                  <FaMagic className={saveName.trim() ? "animate-spin" : ""} />
+                  <FaMagic className={saveName.trim() ? "animate-ping" : ""} />
                   Sauvegarder
                 </span>
                 {/* Effet shimmer pour le bouton actif */}

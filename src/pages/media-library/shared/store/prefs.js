@@ -1,7 +1,16 @@
-// ------------------------------
-// File: media-library/shared/store/prefs.js
-// ------------------------------
-export function getStore(k, def) {
-  try { return JSON.parse(localStorage.getItem(k) || JSON.stringify(def)); }
-  catch { return def; }
-}
+export const getStore = (key, defaultValue) => {
+  try {
+    const item = window.localStorage.getItem(key);
+    return item ? JSON.parse(item) : defaultValue;
+  } catch (error) {
+    return defaultValue;
+  }
+};
+
+export const setStore = (key, value) => {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error('Error saving to localStorage', error);
+  }
+};
