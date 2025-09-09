@@ -17,7 +17,7 @@ import Accueil from './pages/UserManagementDashboard/Components/Accueil/Accueil'
 import Backoffice from './pages/UserManagementDashboard/Components/Backoffice/Backoffice';
 import AlbumDetailPage from './pages/UserManagementDashboard/Components/Backoffice/Album/AlbumDetailPage';
 import AlbumPhoto from './pages/UserManagementDashboard/Components/Backoffice/Album/AlbumPhoto';
-import Visualiseur from './pages/UserManagementDashboard/Components/Visualiseur/Visualiseur';
+import Visualiseur from './pages/media-library/Visualiseur/Visualiseur';
 
 // Layouts
 import DashboardLayout from './layouts/DashboardLayout';
@@ -35,7 +35,10 @@ import ArticlesPage from './pages/media-library/ArticlesPage';
 
 function AuthInitializer({ children }) {
   const dispatch = useDispatch();
-  
+  //   useEffect(() => {
+  //   // Vider tout le localStorage lors du montage du composant
+  //   localStorage.clear();
+  // }, []); 
   useEffect(() => {
     const hasToken = localStorage.getItem('tokenGuard');
     if (hasToken) {
@@ -82,7 +85,8 @@ export default function App() {
                   <Route element={<DefaultLayout />}>
                     <Route path="/settings" element={<UserManagementDashboard />} />
                      <Route path="/articles" element={<ArticlesPage/>} />
-                      <Route path="/visualiseur/:photoName" element={<Visualiseur />} />
+                      <Route path="/articles/:show" element={<Visualiseur />} />
+                     
                   </Route>
                 </Route>
 
