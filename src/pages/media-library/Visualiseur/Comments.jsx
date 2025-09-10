@@ -108,6 +108,7 @@ function ApproveModal({ open, onClose, onConfirm, comment }) {
 }
 
 /* ------------------ /user (Laravel) ------------------ */
+/** Hook interne (fallback) si on ne passe PAS de props d'auth depuis Visualiseur */
 function useMeFromLaravel() {
   const [me, setMe] = useState({ user: null, roles: [], permissions: [] });
   const [loading, setLoading] = useState(false);
@@ -172,14 +173,22 @@ export default function Comments({
   infinite = false,
   isLoading: extLoading = false,
   error: extError = null,
+
+  /** ⬇️ Nouveaux props pour injecter l’auth/permissions depuis Visualiseur */
+  meOverride = null,          // { user, roles, permissions }
+  tokenOverride = null,       // string (Bearer)
+  rightsOverride = null,      // { isModerator, canDeleteAny }
 }) {
   /* ========= Utilisateur + permissions ========= */
-  const { me, loading: meLoading, token } = useMeFromLaravel();
+  const internal = useMeFromLaravel();
+  const me = meOverride ?? internal.me;
+  const meLoading = meOverride ? false : internal.loading;
+  const token = tokenOverride ?? internal.token;
+
+  const computed = useMemo(() => computeRights(me?.permissions), [me?.permissions]);
+  const { isModerator, canDeleteAny } = rightsOverride ?? computed;
+
   const currentUser = me.user;
-  const { isModerator, canDeleteAny } = useMemo(
-    () => computeRights(me.permissions),
-    [me.permissions]
-  );
 
   /* ========= API Comments ========= */
   const axiosi = useMemo(() => makeAxios(token), [token]);
@@ -201,12 +210,13 @@ export default function Comments({
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(extLoading);
   const [localError, setLocalError] = useState(extError);
-// Auto-dismiss de l'erreur globale après 4.5s
-useEffect(() => {
-  if (!localError) return;
-  const t = setTimeout(() => setLocalError(null), 4500);
-  return () => clearTimeout(t);
-}, [localError]);
+
+  // Auto-dismiss de l'erreur globale après 4.5s
+  useEffect(() => {
+    if (!localError) return;
+    const t = setTimeout(() => setLocalError(null), 4500);
+    return () => clearTimeout(t);
+  }, [localError]);
 
   // réponses: id -> { items, page, last_page, per_page, open, loading, error }
   const [repliesMap, setRepliesMap] = useState({});
@@ -285,11 +295,11 @@ useEffect(() => {
   function theCommentStatus(c){ return c?.status; }
 
   const isSelf = useCallback((node) => {
-    const uid = currentUser?.id;
+    const uid = me?.user?.id;
     const ownerId = node?.author_id ?? node?._raw?.user?.id ?? node?._raw?.user_id ?? null;
     if (!uid || !ownerId) return false;
     return String(uid) === String(ownerId);
-  }, [currentUser?.id]);
+  }, [me?.user?.id]);
 
   const isVisible = useCallback((node) => {
     if (isModerator) return true;
@@ -611,7 +621,6 @@ useEffect(() => {
 
           return (
           <div key={c.id} className="group relative flex mb-6 pb-6 border-b border-gray-200/50 last:border-b-0 last:mb-0 last:pb-0">
-            {/* Actions au survol (racine) */}
             {(showDeleteThis || isModerator) && (
               <div className="absolute right-0 top-0 flex items-center gap-2 bg-white/90 backdrop-blur px-2 py-1 rounded-bl-lg border border-gray-200
                               opacity-0 group-hover:opacity-100 transition-opacity duration-150">
@@ -653,7 +662,7 @@ useEffect(() => {
               </div>
             )}
 
-            {/* Avatar (inchangé) */}
+            {/* Avatar */}
             <div
               className="w-10 h-10 rounded-full mr-3 flex-shrink-0 overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center"
               style={{ backgroundColor: !c.avatar ? c.color : undefined }}
@@ -785,7 +794,7 @@ useEffect(() => {
                           </div>
                         )}
 
-                        {/* Avatar reply (inchangé) */}
+                        {/* Avatar reply */}
                         <div
                           className="w-8 h-8 rounded-full mr-3 flex-shrink-0 overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center"
                           style={{ backgroundColor: !rep.avatar ? rep.color : undefined }}

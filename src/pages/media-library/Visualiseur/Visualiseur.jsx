@@ -1,5 +1,5 @@
 // src/media-library/Visualiseur.jsx
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   FaBars, FaUpload, FaUser, FaFolderOpen,
@@ -13,6 +13,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   RadialBarChart, RadialBar
 } from "recharts";
+import axios from "axios";
 import { fetchArticle, fetchSimilarArticles, buildArticleShowUrl, DEBUG_HTTP } from "../api/articles";
 import { formatDate } from "../shared/utils/format";
 import Comments from "./Comments";
@@ -75,6 +76,63 @@ const iconBgForType = (type) => {
 /* Palette pour les charts */
 const CHART_COLORS = ["#2563eb", "#16a34a", "#9333ea", "#f59e0b", "#ef4444", "#06b6d4", "#64748b"];
 
+/* ---------------- Auth / Permissions (centralisé ici) ---------------- */
+/** Récupération /user + token côté Visualiseur, pour propager aux enfants */
+function useMeFromLaravel() {
+  const [me, setMe] = useState({ user: null, roles: [], permissions: [] });
+  const [loading, setLoading] = useState(false);
+
+  const token = useMemo(() => {
+    try {
+      return (
+        localStorage.getItem("auth_token") ||
+        sessionStorage.getItem("auth_token") ||
+        localStorage.getItem("tokenGuard") ||
+        sessionStorage.getItem("tokenGuard") ||
+        null
+      );
+    } catch { return null; }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!token) { setMe({ user: null, roles: [], permissions: [] }); return; }
+      try {
+        setLoading(true);
+        const { data } = await axios.get('/user', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        const user = data?.user || data || null;
+        const roles = data?.roles || user?.roles || [];
+        const permissions = data?.permissions || user?.permissions || [];
+        if (!cancelled) setMe({ user, roles, permissions });
+      } catch {
+        if (!cancelled) setMe({ user: null, roles: [], permissions: [] });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [token]);
+
+  return { me, loading, token };
+}
+function computeRights(permissions = []) {
+  const list = Array.isArray(permissions) ? permissions : [];
+  const isModerator = list.some(p =>
+    String(p?.resource).toLowerCase() === "comments" &&
+    /(moderateur|approver|approve|manage|admin|gerer)/i.test(String(p?.name))
+  );
+  const canDeleteAny =
+    isModerator ||
+    list.some(p =>
+      String(p?.resource).toLowerCase() === "comments" &&
+      /(supprimer|delete|remove)/i.test(String(p?.name))
+    );
+  return { isModerator, canDeleteAny };
+}
+
 /* ---------------- Visualiseur ---------------- */
 export default function Visualiseur() {
   const params = useParams();
@@ -84,6 +142,10 @@ export default function Visualiseur() {
     const candidate = params?.slug ?? params?.show ?? params?.photoName ?? params?.id ?? fallback ?? "";
     return sanitizeParam(candidate);
   }, [params]);
+
+  // ⬇️ AUTH centralisée ici
+  const { me, loading: meLoading, token } = useMeFromLaravel();
+  const rights = useMemo(() => computeRights(me?.permissions), [me?.permissions]);
 
   const [article, setArticle] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -299,6 +361,11 @@ export default function Visualiseur() {
                 similarLoading={similarLoading}
                 onOpenSimilar={(slugOrId) => navigate(`/articles/${slugOrId}`)}
                 selectedFile={selectedFile}
+
+                /* ⬇️ On propage l’auth & les droits ici */
+                me={me}
+                token={token}
+                rights={rights}
               />
             </div>
           </div>
@@ -764,7 +831,7 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
   if (type === "excel" || type === "word") {
     return (
       <div className="w-full flex flex-col">
-        <div className="w-full bg-white border border-gray-200/50 rounded-xl overflow-hidden">
+        <div className="w-full bg.white border border-gray-200/50 rounded-xl overflow-hidden">
           <div className="bg-gray-100 p-3 flex items-center border-b border-gray-200/50">
             {type === "excel" ? <FaFileExcel className="text-green-600 mr-3 text-2xl" /> : <FaFileWord className="text-blue-600 mr-3 text-2xl" />}
             <span className="font-medium text-gray-800 text-lg">{title}</span>
@@ -862,7 +929,7 @@ function Metadonnees({ article, currentType, currentTitle }) {
           <tbody className="divide-y divide-gray-200/50">
             {rows.map(([k, v]) => (
               <tr key={k} className="hover:bg-gray-50/50 transition-colors">
-                <td className="px-6 py-4 text-sm font-medium text-gray-800 bg-gray-50/50 border-r border-gray-200/50">{k}</td>
+                <td className="px-6 py-4 text.sm font-medium text-gray-800 bg-gray-50/50 border-r border-gray-200/50">{k}</td>
                 <td className="px-6 py-4 text-sm text-gray-700">{v || "—"}</td>
               </tr>
             ))}
@@ -1038,7 +1105,7 @@ function SeoPanel({ article }) {
   );
 }
 
-function DetailsPanel({ article, currentType, currentTitle, similar, similarLoading, onOpenSimilar, selectedFile }) {
+function DetailsPanel({ article, currentType, currentTitle, similar, similarLoading, onOpenSimilar, selectedFile, me, token, rights }) {
   const tags = article?.tags || [];
 
   // Prépare des commentaires initiaux (niveau 0) pour affichage instantané
@@ -1054,7 +1121,7 @@ function DetailsPanel({ article, currentType, currentTitle, similar, similarLoad
 
   return (
     <aside className="w-1/3 p-6">
-      <h2 className="text-xl font-bold text-gray-800 mb-5 flex items-center">
+      <h2 className="text-xl font-bold text-gray-800 mb-5 flex items.center">
         <FaInfoCircle className="mr-2 text-blue-600" />
         Détails du fichier
       </h2>
@@ -1064,7 +1131,7 @@ function DetailsPanel({ article, currentType, currentTitle, similar, similarLoad
             {iconForType(currentType, "text-2xl")}
           </div>
           <div className="ml-4">
-            <h3 className="font-bold text-gray-800">{currentTitle}</h3>
+            <h3 className="font.bold text-gray-800">{currentTitle}</h3>
             <p className="text-sm text-gray-500">{currentType ? currentType.toUpperCase() : "—"} • —</p>
           </div>
         </div>
@@ -1098,6 +1165,11 @@ function DetailsPanel({ article, currentType, currentTitle, similar, similarLoad
           key={article?.id}                         // remount quand l’article change
           articleId={article?.id}                   // CRUCIAL: drive la requête /comments
           initialComments={initialTopLevelApproved} // affichage instantané côté client
+
+          /* ⬇️ Injection des infos auth/permissions depuis Visualiseur */
+          meOverride={me}
+          tokenOverride={token}
+          rightsOverride={rights}
         />
       )}
     </aside>
