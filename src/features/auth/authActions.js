@@ -270,6 +270,7 @@ export const fetchCurrentUser = () => async (dispatch) => {
   try {
     const { data } = await axios.get('/user');
     const user = data.user || data;
+// console.log(data);
 
     try { getActiveStorage().setItem(AUTH_USER_KEY, JSON.stringify(user)); } catch {}
 

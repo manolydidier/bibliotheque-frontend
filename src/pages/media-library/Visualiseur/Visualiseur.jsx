@@ -16,6 +16,7 @@ import {
 import { fetchArticle, fetchSimilarArticles, buildArticleShowUrl, DEBUG_HTTP } from "../api/articles";
 import { formatDate } from "../shared/utils/format";
 import Comments from "./Comments";
+import Toaster from "../../../component/toast/Toaster";
 
 /* ---------------- Helpers ---------------- */
 const sanitizeParam = (x) => {
@@ -927,6 +928,7 @@ function StatsCharts({ article }) {
 
   return (
     <div className="w-full h-full p-6 space-y-8">
+      <Toaster/>
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-5">
         <KpiCard label="Vues" value={views} icon={<FaEye />} />
