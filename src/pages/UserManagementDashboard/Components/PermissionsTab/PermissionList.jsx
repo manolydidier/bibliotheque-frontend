@@ -71,7 +71,7 @@ const RolePermissionsManager = () => {
   const API_BASE_STORAGE = import.meta.env.VITE_API_STORAGE_URL;
 
   useEffect(() => {
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('tokenGuard');
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     }

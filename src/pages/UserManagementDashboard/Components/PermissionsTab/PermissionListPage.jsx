@@ -46,7 +46,7 @@ const PermissionListPage = ({  }) => {
 
   // Configuration Axios
   useEffect(() => {
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('tokenGuard');
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     }

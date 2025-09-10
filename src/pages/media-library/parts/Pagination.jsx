@@ -1,13 +1,14 @@
 // ------------------------------
-// File: media-library/parts/Pagination.jsx (version améliorée)
+// File: media-library/parts/Pagination.jsx (version avec Font Awesome)
 // ------------------------------
 import { useMemo, useState, useCallback } from "react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  FaChevronLeft,
-  FaChevronRight,
-  FaAngleDoubleLeft,
-  FaAngleDoubleRight,
-} from "react-icons/fa";
+  faChevronLeft,
+  faChevronRight,
+  faAngleDoubleLeft,
+  faAngleDoubleRight
+} from "@fortawesome/free-solid-svg-icons";
 
 /**
  * Pagination — composant accessible, réactif et stylé (Tailwind)
@@ -172,7 +173,7 @@ export default function Pagination({
             disabled={!canPrev}
             onClick={() => go(1)}
           >
-            <FaAngleDoubleLeft />
+            <FontAwesomeIcon icon={faAngleDoubleLeft} />
           </button>
         )}
 
@@ -183,7 +184,7 @@ export default function Pagination({
           disabled={!canPrev}
           onClick={() => go(current - 1)}
         >
-          <FaChevronLeft />
+          <FontAwesomeIcon icon={faChevronLeft} />
         </button>
 
         {/* Pages numériques (compact sur mobile) */}
@@ -218,7 +219,7 @@ export default function Pagination({
           disabled={!canNext}
           onClick={() => go(current + 1)}
         >
-          <FaChevronRight />
+          <FontAwesomeIcon icon={faChevronRight} />
         </button>
 
         {showFirstLast && (
@@ -229,13 +230,13 @@ export default function Pagination({
             disabled={!canNext}
             onClick={() => go(pages)}
           >
-            <FaAngleDoubleRight />
+            <FontAwesomeIcon icon={faAngleDoubleRight} />
           </button>
         )}
 
         {showJump && (
-          <div className="ml-1 flex items-center gap-2 text-white">
-            <label htmlFor="jump" className="sr-only text-white">
+          <div className="ml-1 flex items-center gap-2">
+            <label htmlFor="jump" className="sr-only">
               Aller à la page
             </label>
             <input
@@ -254,7 +255,7 @@ export default function Pagination({
                 }
               }}
               placeholder="Aller à…"
-              className="h-9 w-24 text-white rounded-md border border-blue-200 bg-white px-3 text-sm placeholder:text-blue-400/70 focus:outline-none focus:ring-2 focus:ring-blue-400/60 dark:border-blue-700 text-blue-400/80 "
+              className="h-9 w-24 rounded-md border border-blue-200 bg-white px-3 text-sm placeholder:text-blue-400/70 focus:outline-none focus:ring-2 focus:ring-blue-400/60 dark:border-blue-700 dark:bg-slate-900"
             />
           </div>
         )}
