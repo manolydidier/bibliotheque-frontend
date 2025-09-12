@@ -1,4 +1,3 @@
-// src/components/share/ShareButton.jsx
 import React from "react";
 import { FaShareAlt } from "react-icons/fa";
 import ShareModal from "./ShareModal";
@@ -9,19 +8,11 @@ import {
   shareOnWhatsApp,
   shareOnWhatsAppToNumber,
   shareByEmailAuto,
+  showToast, // << on utilise le toast
 } from "./shareUtils";
 
 /**
  * Bouton de partage réutilisable.
- *
- * Props:
- * - title, excerpt, url, articleId
- * - variant: "button" | "icon"
- * - label: texte du bouton
- * - className / buttonProps
- * - channels: ["email","emailAuto","facebook","whatsapp","whatsappNumber"]
- * - emailEndpoint: endpoint API pour l'envoi auto (def: "/share/email")
- * - defaultWhatsNumber: pré-remplissage champ WA
  */
 export default function ShareButton({
   title,
@@ -37,18 +28,15 @@ export default function ShareButton({
   defaultWhatsNumber = "",
 }) {
   const [open, setOpen] = React.useState(false);
-
-  const defs = React.useMemo(
-    () => buildShareDefaults({ title, excerpt, url }),
-    [title, excerpt, url]
-  );
+  const defs = React.useMemo(() => buildShareDefaults({ title, excerpt, url }), [title, excerpt, url]);
 
   const onEmailMailto = ({ to }) => {
-    shareByEmailMailto({ to, subject: defs.subject, body: defs.body });
+    // mailto — trace en base (fire & forget) si articleId
+    shareByEmailMailto({ to, subject: defs.subject, body: defs.body, articleId });
     setOpen(false);
   };
 
-  const onEmailAuto = async ({ to }) => {
+  const onEmailAuto = async ({ to, senderEmail, senderName }) => {
     try {
       await shareByEmailAuto({
         to: String(to || "").split(/[;,]/),
@@ -56,31 +44,33 @@ export default function ShareButton({
         body: defs.body,
         url: defs.url,
         articleId,
+        senderEmail,
+        senderName,
         endpoint: emailEndpoint,
       });
-      alert("E-mail envoyé ✅");
+      // le toast de succès est déjà appelé dans shareByEmailAuto()
       setOpen(false);
     } catch (e) {
-      console.error("Echec envoi auto, fallback mailto", e);
-      shareByEmailMailto({ to, subject: defs.subject, body: defs.body });
-      setOpen(false);
+      console.error("Echec envoi auto", e);
+      showToast("Échec de l’envoi automatique. Réessayez.", "error");
+      // ❌ PAS de fallback mailto (on reste cohérent)
     }
   };
 
   const onFacebook = () => {
-    shareOnFacebook({ url: defs.url, quote: title || "" });
+    shareOnFacebook({ articleId, quote: title || "", title, excerpt });
     setOpen(false);
   };
 
   const onWhatsAppGeneral = () => {
     const text = defs.body || defs.url || document.title;
-    shareOnWhatsApp({ text });
+    shareOnWhatsApp({ text, articleId });
     setOpen(false);
   };
 
   const onWhatsAppToNumber = ({ phone }) => {
     const text = defs.body || defs.url || document.title;
-    shareOnWhatsAppToNumber({ phone, text });
+    shareOnWhatsAppToNumber({ phone, text, articleId });
     setOpen(false);
   };
 

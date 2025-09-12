@@ -4,7 +4,8 @@ import { useTags } from "../../../../../../hooks/UseTags";
 import { FaPenAlt, FaTrashAlt } from "react-icons/fa";
 import TagModal from "../../Modals/TagModal";
 import LoadingComponent from "../../../../../../component/loading/LoadingComponent";
-import ArticleList from "../../Modals/ArticleModal";
+// import ArticleList from "../../Modals/ArticleModal";
+import ArticleList from "../../Modals/MediaModal";
 export default function TagsTab() {
 
     const { tags, loading, error, createTag, deleteTag, researchTag } = useTags();

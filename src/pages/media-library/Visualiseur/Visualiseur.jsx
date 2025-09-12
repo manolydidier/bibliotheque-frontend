@@ -3,10 +3,9 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   FaFolderOpen,
-  FaArrowLeft, FaArrowRight, FaRedo, FaExpand, FaDownload, FaShareAlt,
+  FaArrowLeft, FaArrowRight, FaRedo, FaExpand, FaDownload,
   FaExternalLinkAlt, FaChevronLeft, FaChevronRight, FaSearchPlus, FaSearchMinus,
-  FaFilePdf, FaFileExcel, FaFileWord, FaImage, FaFileVideo, FaFile, FaTag, FaStar, FaClock, FaEye, FaComment, FaChartBar, FaHistory, FaInfoCircle, FaSearch, FaPlus, FaPlay, FaTimes,
-  FaFacebook, FaEnvelope, FaWhatsapp
+  FaFilePdf, FaFileExcel, FaFileWord, FaImage, FaFileVideo, FaFile, FaTag, FaStar, FaClock, FaEye, FaComment, FaChartBar, FaHistory, FaInfoCircle, FaSearch, FaPlus, FaPlay, FaTimes
 } from "react-icons/fa";
 import {
   ResponsiveContainer,
@@ -20,6 +19,9 @@ import { formatDate } from "../shared/utils/format";
 import Comments from "./Comments";
 import TagManagerModal from "./TagManagerModal";
 import Toaster from "../../../component/toast/Toaster";
+
+// ✅ Nouveau : bouton de partage réutilisable
+import ShareButton from "../Visualiseur/share/ShareButton";
 
 /* ---------------- Helpers ---------------- */
 const sanitizeParam = (x) => {
@@ -270,12 +272,6 @@ export default function Visualiseur() {
   const [tagModalOpen, setTagModalOpen] = useState(false);
   const previewRef = useRef(null);
 
-  // Partage
-  const [shareOpen, setShareOpen] = useState(false);
-  const [emailTo, setEmailTo] = useState("");
-  const [whatsNumber, setWhatsNumber] = useState("");
-  const [sending, setSending] = useState(false);
-
   /* ------- Load article ------- */
   useEffect(() => {
     let mounted = true;
@@ -385,6 +381,14 @@ export default function Visualiseur() {
     return () => { mounted = false; };
   }, [article?.id]);
 
+  // ✅ Données de partage transmises au ShareButton du Toolbar
+  const shareData = useMemo(() => ({
+    title: article?.title || "",
+    excerpt: article?.excerpt || article?.title || "",
+    url: typeof window !== "undefined" ? window.location.href : "",
+    articleId: article?.id ?? null
+  }), [article]);
+
   /* ------- Loading / errors ------- */
   if (loading) {
     return (
@@ -422,8 +426,6 @@ export default function Visualiseur() {
 
       {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* NOTE: TopBar a été supprimé à ta demande */}
-
         {/* Body */}
         <div className="flex-1 overflow-auto p-6">
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 overflow-hidden">
@@ -432,7 +434,7 @@ export default function Visualiseur() {
               onRefresh={() => setActiveTab("Aperçu")}
               onFullscreen={() => setFullscreen(true)}
               onDownload={downloadCurrent}
-              onShare={shareCurrent}
+              shareData={shareData} // ✅ nouveau
             />
 
             <div className="flex">
@@ -523,117 +525,6 @@ export default function Visualiseur() {
         </div>
       )}
 
-      {/* MODAL DE PARTAGE */}
-      {shareOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShareOpen(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-gray-200 p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-semibold text-gray-800">Partager</h3>
-              <button onClick={() => setShareOpen(false)} className="text-gray-500 hover:text-gray-800" aria-label="Fermer">
-                <FaTimes />
-              </button>
-            </div>
-
-            <p className="text-sm text-gray-600 mb-4 truncate">{article?.title || "Sans titre"}</p>
-
-            {/* Lien */}
-            <div className="mb-4">
-              <label className="block text-xs text-gray-500 mb-1">Lien</label>
-              <div className="flex gap-2">
-                <input
-                  value={(typeof window !== "undefined" ? window.location.href : "")}
-                  readOnly
-                  className="flex-1 px-3 py-2 rounded-lg border border-gray-300 text-sm bg-gray-50 focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try { await navigator.clipboard.writeText(window.location.href); alert("Lien copié"); } catch {}
-                  }}
-                  className="px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white hover:bg-gray-50"
-                >
-                  Copier
-                </button>
-              </div>
-            </div>
-
-            {/* E-mail */}
-            <div className="space-y-2 mb-5">
-              <label className="block text-xs text-gray-500">Destinataires (e-mails ; séparés par des ;)</label>
-              <input
-                value={emailTo}
-                onChange={(e) => setEmailTo(e.target.value)}
-                placeholder="ex: ami@ex.com;collègue@ex.com"
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={shareByEmailAuto}
-                  disabled={sending || !emailTo.trim()}
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium disabled:opacity-50"
-                >
-                  <FaEnvelope />
-                  {sending ? "Envoi…" : "Envoyer par e-mail (auto)"}
-                </button>
-                <button
-                  onClick={shareByEmailMailto}
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-medium"
-                >
-                  <FaEnvelope />
-                  Ouvrir votre e-mail
-                </button>
-              </div>
-            </div>
-
-            {/* WhatsApp */}
-            <div className="space-y-2 mb-5">
-              <label className="block text-xs text-gray-500">Numéro WhatsApp (optionnel, format international 33612345678)</label>
-              <input
-                value={whatsNumber}
-                onChange={(e) => setWhatsNumber(e.target.value.replace(/[^\d]/g, ""))}
-                placeholder="Ex: 33612345678"
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={shareOnWhatsAppToNumber}
-                  disabled={!whatsNumber}
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white font-medium disabled:opacity-50"
-                >
-                  <FaWhatsapp />
-                  WhatsApp (numéro)
-                </button>
-                <button
-                  onClick={shareOnWhatsAppGeneral}
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-green-50 hover:bg-green-100 text-green-700 font-medium border border-green-200"
-                >
-                  <FaWhatsapp />
-                  WhatsApp (général)
-                </button>
-              </div>
-            </div>
-
-            {/* Facebook */}
-            <div className="space-y-3">
-              <button
-                onClick={shareOnFacebook}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#1877F2] hover:bg-[#1463c8] text-white font-medium"
-              >
-                <FaFacebook />
-                Partager sur Facebook
-              </button>
-            </div>
-
-            <div className="mt-4 text-right">
-              <button onClick={() => setShareOpen(false)} className="px-4 py-2 rounded-lg text-gray-700 bg-gray-100 hover:bg-gray-200">
-                Fermer
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Tag Manager Modal */}
       {article?.id && (
         <TagManagerModal
@@ -672,103 +563,6 @@ export default function Visualiseur() {
     const a = document.createElement("a");
     a.href = currentUrl; a.download = "";
     document.body.appendChild(a); a.click(); a.remove();
-  }
-
-  // Partage helpers
-  function openCenteredPopup(href, width = 700, height = 600) {
-    try {
-      const topWin = window.top ?? window;
-      const y = topWin?.outerHeight ? topWin.outerHeight / 2 + topWin.screenY - height / 2 : 100;
-      const x = topWin?.outerWidth ? topWin.outerWidth / 2 + topWin.screenX - width / 2 : 100;
-      window.open(href, "_blank", `noopener,noreferrer,width=${width},height=${height},left=${x},top=${y}`);
-    } catch {
-      window.open(href, "_blank", "noopener,noreferrer");
-    }
-  }
-
-  function buildShareDefaults() {
-    const url = typeof window !== "undefined" ? window.location.href : "";
-    const subject = `[Partage] ${article?.title || "Contenu à découvrir"}`;
-    const body = (article?.excerpt || article?.title || "Je partage ce contenu avec toi.") + (url ? `\n\n${url}` : "");
-    return { url, subject, body };
-  }
-
-  // E-mail (auto via API)
-  async function shareByEmailAuto() {
-    const { subject, body, url } = buildShareDefaults();
-    const recipients = emailTo.split(/[;,]/).map(s => s.trim()).filter(Boolean);
-    if (!recipients.length) { alert("Ajoute au moins une adresse e-mail."); return; }
-
-    try {
-      setSending(true);
-      const baseURL = (import.meta?.env?.VITE_API_BASE_URL || "").replace(/\/+$/,"");
-      const client = axios.create({
-        baseURL: baseURL || "/",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          ...(localStorage.getItem("tokenGuard") ? { Authorization: `Bearer ${localStorage.getItem("tokenGuard")}` } : {})
-        },
-        timeout: 20000,
-      });
-
-      // ⚠️ Adapte l’endpoint côté serveur
-      await client.post("/share/email", {
-        to: recipients,
-        subject,
-        body,
-        url,
-        article_id: article?.id ?? null,
-      });
-
-      alert("E-mail envoyé ✅");
-      setShareOpen(false);
-    } catch (e) {
-      console.error("Echec envoi API, fallback mailto", e);
-      // Fallback mailto
-      shareByEmailMailto();
-    } finally {
-      setSending(false);
-    }
-  }
-
-  // E-mail (mailto)
-  function shareByEmailMailto() {
-    const { subject, body } = buildShareDefaults();
-    const href = `mailto:${encodeURIComponent(emailTo)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.location.href = href;
-  }
-
-  // WhatsApp (général)
-  function shareOnWhatsAppGeneral() {
-    const { url, body } = buildShareDefaults();
-    const txt = body || url || document.title;
-    const href = `https://api.whatsapp.com/send?text=${encodeURIComponent(txt)}`;
-    openCenteredPopup(href, 560, 650);
-    setShareOpen(false);
-  }
-
-  // WhatsApp vers numéro
-  function shareOnWhatsAppToNumber() {
-    if (!whatsNumber) return;
-    const { url, body } = buildShareDefaults();
-    const txt = body || url || document.title;
-    const href = `https://wa.me/${encodeURIComponent(whatsNumber)}?text=${encodeURIComponent(txt)}`;
-    openCenteredPopup(href, 560, 650);
-    setShareOpen(false);
-  }
-
-  // Facebook
-  function shareOnFacebook() {
-    const { url } = buildShareDefaults();
-    const fb = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}${article?.title ? `&quote=${encodeURIComponent(article.title)}` : ""}`;
-    openCenteredPopup(fb, 700, 600);
-    setShareOpen(false);
-  }
-
-  // Ouvre modal
-  function shareCurrent() {
-    setShareOpen(true);
   }
 }
 
@@ -900,7 +694,7 @@ function Sidebar({ open, toggle, mediaCount, tags, mediaList, selectedFile, onSe
   );
 }
 
-function Toolbar({ onBack, onRefresh, onFullscreen, onDownload, onShare }) {
+function Toolbar({ onBack, onRefresh, onFullscreen, onDownload, shareData }) {
   return (
     <div className="border-b border-gray-200/30 p-4 flex justify-between items-center bg-gradient-to-r from-white/50 to-transparent">
       <div className="flex items-center space-x-2">
@@ -940,13 +734,16 @@ function Toolbar({ onBack, onRefresh, onFullscreen, onDownload, onShare }) {
           <FaDownload className="mr-2" />
           <span>Télécharger</span>
         </button>
-        <button
-          onClick={onShare}
-          className="px-4 py-2 rounded-xl text-gray-600 hover:text-purple-600 hover:bg-purple-50 border border-gray-300 transition-all duration-200 flex items-center"
-        >
-          <FaShareAlt className="mr-2" />
-          <span>Partager</span>
-        </button>
+
+        {/* ✅ Bouton de partage réutilisable */}
+        <ShareButton
+          title={shareData?.title}
+          excerpt={shareData?.excerpt}
+          url={shareData?.url}
+          articleId={shareData?.articleId}
+          // canaux par défaut: email, emailAuto, facebook, whatsapp, whatsappNumber
+          // tu peux réduire avec channels={["email","facebook"]} si besoin
+        />
       </div>
     </div>
   );

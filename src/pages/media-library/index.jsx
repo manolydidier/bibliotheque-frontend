@@ -1,3 +1,9 @@
+// ------------------------------
+// File: src/media-library/ArticleLibrary.jsx
+// Container de la lib articles (grid/list + filtres + pagination/infinite)
+// - Sécurise "filters" (jamais undefined)
+// - Facettes optionnelles (authors/categories/tags) pour alimenter FiltersPanel
+// ------------------------------
 import { useEffect, useMemo, useRef, useState } from "react";
 import FiltersPanel from "./parts/FiltersPanel";
 import GridCard from "./parts/GridCard";
@@ -8,6 +14,7 @@ import { parseSearch } from "./shared/utils/query";
 import { getStore } from "./shared/store/prefs";
 import { isFav, isRead } from "./shared/store/markers";
 
+// --- helpers ---
 const PREF_KEY = "articlelib:prefs";
 
 function getCategoryFromTitle(title = "") {
@@ -20,6 +27,37 @@ function getCategoryFromTitle(title = "") {
   return "Article";
 }
 
+// Forme par défaut du filtre (ne JAMAIS changer les clés)
+const DEFAULT_FILTERS = {
+  categories: [],
+  tags: [],
+  authors: [],
+  featuredOnly: false,
+  stickyOnly: false,
+  unreadOnly: false, // client-side only
+  dateFrom: "",
+  dateTo: "",
+  ratingMin: 0,
+  ratingMax: 5,
+};
+
+// Force n’importe quelle valeur en filtre "propre"
+const toSafeFilters = (maybe) => {
+  const f = maybe && typeof maybe === "object" ? maybe : {};
+  return {
+    categories: Array.isArray(f.categories) ? f.categories : [],
+    tags: Array.isArray(f.tags) ? f.tags : [],
+    authors: Array.isArray(f.authors) ? f.authors : [],
+    featuredOnly: !!f.featuredOnly,
+    stickyOnly: !!f.stickyOnly,
+    unreadOnly: !!f.unreadOnly,
+    dateFrom: typeof f.dateFrom === "string" ? f.dateFrom : "",
+    dateTo: typeof f.dateTo === "string" ? f.dateTo : "",
+    ratingMin: Number.isFinite(f.ratingMin) ? f.ratingMin : 0,
+    ratingMax: Number.isFinite(f.ratingMax) ? f.ratingMax : 5,
+  };
+};
+
 export default function ArticleLibrary({
   articles = [],
   fetchArticles,                 // async ({ page, perPage, search, filters, sort }) => { data, total, facets? }
@@ -30,34 +68,24 @@ export default function ArticleLibrary({
 }) {
   const persisted = getStore(PREF_KEY, {});
 
-  const [view, setView]             = useState(persisted.view || initialView);
-  const [perPage, setPerPage]       = useState(persisted.perPage || perPageOptions[0]);
-  const [page, setPage]             = useState(1);
-  const [search, setSearch]         = useState("");
-  const debouncedSearch             = useDebouncedValue(search);
-  const [filtersOpen, setFiltersOpen]= useState(false);
-  const [filters, setFilters]       = useState(
-    persisted.filters || {
-      categories: [],
-      tags: [],
-      authors: [],
-      featuredOnly: false,
-      stickyOnly: false,
-      unreadOnly: false, // local only
-      dateFrom: "",
-      dateTo: "",
-      ratingMin: 0,
-      ratingMax: 5,
-    }
-  );
-  const [sort, setSort]             = useState([{ key: "published_at", dir: "desc" }]);
-  const [loadMode, setLoadMode]     = useState(persisted.loadMode || defaultLoadMode);
+  const [view, setView]       = useState(persisted.view || initialView);
+  const [perPage, setPerPage] = useState(persisted.perPage || perPageOptions[0]);
+  const [page, setPage]       = useState(1);
+  const [search, setSearch]   = useState("");
 
-  const [rows, setRows]             = useState([]);
-  const [total, setTotal]           = useState(0);
-  const [loading, setLoading]       = useState(false);
+  const debouncedSearch = useDebouncedValue(search);
 
-  // Facettes renvoyées par le back
+  // IMPORTANT : filters ne peut jamais être undefined
+  const [filters, setFilters] = useState(toSafeFilters(persisted.filters || DEFAULT_FILTERS));
+
+  const [sort, setSort]       = useState([{ key: "published_at", dir: "desc" }]);
+  const [loadMode, setLoadMode] = useState(persisted.loadMode || defaultLoadMode);
+
+  const [rows, setRows]   = useState([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  // Facettes back (optionnel)
   const [facetAuthors, setFacetAuthors]       = useState(null);
   const [facetCategories, setFacetCategories] = useState(null);
   const [facetTags, setFacetTags]             = useState(null);
@@ -68,7 +96,7 @@ export default function ArticleLibrary({
       // [{id,name,count}]
       return facetAuthors.map(a => ({ id: a.id, name: a.name, count: a.count }));
     }
-    // fallback client: noms strings
+    // fallback client: noms strings uniques
     const set = new Set();
     (articles || []).forEach((a) => {
       const fullName =
@@ -83,10 +111,8 @@ export default function ArticleLibrary({
 
   const categoriesOptions = useMemo(() => {
     if (Array.isArray(facetCategories)) {
-      // [{id,name,count}]
       return facetCategories.map(c => ({ id: c.id, name: c.name, count: c.count }));
     }
-    // fallback client
     const set = new Set();
     (articles || []).forEach((a) => {
       if (Array.isArray(a?.categories) && a.categories.length) {
@@ -100,10 +126,8 @@ export default function ArticleLibrary({
 
   const tagsOptions = useMemo(() => {
     if (Array.isArray(facetTags)) {
-      // [{id,name,count}]
       return facetTags.map(t => ({ id: t.id, name: t.name, count: t.count }));
     }
-    // fallback client
     const set = new Set();
     (articles || []).forEach((a) => (a?.tags || []).forEach((t) => t?.name && set.add(t.name)));
     return Array.from(set).sort();
@@ -144,9 +168,10 @@ export default function ArticleLibrary({
     async function load() {
       setLoading(true);
       try {
+        const safe = toSafeFilters(filters); // ← garanti propre
         if (fetchArticles) {
           const { data, total, facets } = await fetchArticles({
-            page, perPage, search: debouncedSearch, filters, sort,
+            page, perPage, search: debouncedSearch, filters: safe, sort,
           });
           if (cancelled) return;
           setRows(data ?? []);
@@ -217,36 +242,36 @@ export default function ArticleLibrary({
             if (key === "sticky")   filtered = filtered.filter((r) => !!r?.is_sticky);
           });
 
-          // Filtres UI (attention: ici, filters.categories/tags/authors sont des NOMS, pas des IDs)
-          if (filters.categories?.length) {
+          // Filtres UI (safe)
+          if (safe.categories?.length) {
             filtered = filtered.filter((r) => {
               const names = (r?.categories || []).map((c) => c?.name);
               const fallback = getCategoryFromTitle(r?.title);
-              return names.some((n) => filters.categories.includes(n)) || filters.categories.includes(fallback);
+              return names.some((n) => safe.categories.includes(n)) || safe.categories.includes(fallback);
             });
           }
-          if (filters.tags?.length) {
+          if (safe.tags?.length) {
             filtered = filtered.filter((r) =>
-              (r?.tags || []).some((tg) => filters.tags.includes(tg?.name))
+              (r?.tags || []).some((tg) => safe.tags.includes(tg?.name))
             );
           }
-          if (filters.authors?.length) {
+          if (safe.authors?.length) {
             filtered = filtered.filter((r) => {
               const name =
                 r?.author?.name ||
                 [r?.author?.first_name, r?.author?.last_name].filter(Boolean).join(" ") ||
                 r?.author_name ||
                 (r?.author_id ? `Auteur #${r.author_id}` : "");
-              return filters.authors.includes(name);
+              return safe.authors.includes(name);
             });
           }
-          if (filters.featuredOnly) filtered = filtered.filter((r) => !!r?.is_featured);
-          if (filters.stickyOnly)   filtered = filtered.filter((r) => !!r?.is_sticky);
-          if (filters.unreadOnly)   filtered = filtered.filter((r) => !isRead(r?.id));
-          if (filters.dateFrom)     filtered = filtered.filter((r) => new Date(r?.published_at) >= new Date(filters.dateFrom));
-          if (filters.dateTo)       filtered = filtered.filter((r) => new Date(r?.published_at) <= new Date(filters.dateTo));
-          if (filters.ratingMin > 0) filtered = filtered.filter((r) => (parseFloat(r?.rating_average) || 0) >= filters.ratingMin);
-          if (filters.ratingMax < 5) filtered = filtered.filter((r) => (parseFloat(r?.rating_average) || 0) <= filters.ratingMax);
+          if (safe.featuredOnly) filtered = filtered.filter((r) => !!r?.is_featured);
+          if (safe.stickyOnly)   filtered = filtered.filter((r) => !!r?.is_sticky);
+          if (safe.unreadOnly)   filtered = filtered.filter((r) => !isRead(r?.id));
+          if (safe.dateFrom)     filtered = filtered.filter((r) => new Date(r?.published_at) >= new Date(safe.dateFrom));
+          if (safe.dateTo)       filtered = filtered.filter((r) => new Date(r?.published_at) <= new Date(safe.dateTo));
+          if (safe.ratingMin > 0) filtered = filtered.filter((r) => (parseFloat(r?.rating_average) || 0) >= safe.ratingMin);
+          if (safe.ratingMax < 5) filtered = filtered.filter((r) => (parseFloat(r?.rating_average) || 0) <= safe.ratingMax);
 
           if (sort?.length) {
             filtered.sort((a, b) => {
@@ -293,16 +318,15 @@ export default function ArticleLibrary({
 
   // Persist prefs
   useEffect(() => {
-    localStorage.setItem(PREF_KEY, JSON.stringify({ view, perPage, filters, loadMode }));
+    localStorage.setItem(PREF_KEY, JSON.stringify({ view, perPage, filters: toSafeFilters(filters), loadMode }));
   }, [view, perPage, filters, loadMode]);
 
   // Reset page on criteria change
   useEffect(() => setPage(1), [debouncedSearch, filters, perPage]);
 
-  // Infinite scroll (inchangé)
+  // Infinite scroll
   const sentinelRef = useRef(null);
   const [infiniteRows, setInfiniteRows] = useState([]);
-
   useEffect(() => { if (loadMode === "infinite") setInfiniteRows([]); }, [debouncedSearch, filters, sort, perPage, loadMode]);
   useEffect(() => {
     if (loadMode !== "infinite") return;
@@ -332,12 +356,10 @@ export default function ArticleLibrary({
   return (
     <div className="p-4 md:p-6 mt-8 w-full max-w-[1600px] mx-auto flex flex-col gap-6">
       <FiltersPanel
-        open={filtersOpen}
-        setOpen={setFiltersOpen}
         search={search}
         setSearch={setSearch}
         filters={filters}
-        setFilters={setFilters}
+        setFilters={(f) => setFilters(toSafeFilters(f))}
         view={view}
         setView={setView}
         perPage={perPage}
@@ -375,18 +397,7 @@ export default function ArticleLibrary({
           <button
             onClick={() => {
               setSearch("");
-              setFilters({
-                categories: [],
-                tags: [],
-                authors: [],
-                featuredOnly: false,
-                stickyOnly: false,
-                unreadOnly: false,
-                dateFrom: "",
-                dateTo: "",
-                ratingMin: 0,
-                ratingMax: 5,
-              });
+              setFilters(DEFAULT_FILTERS);
             }}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >

@@ -1,7 +1,9 @@
 // ------------------------------
-// File: media-library/parts/FiltersPanel.jsx
-// Improved version with better performance, accessibility, and UX
-// + Universal normalizers for categories/tags/authors props
+// File: src/media-library/parts/FiltersPanel.jsx
+// Improved + robust
+// - Normalise les props options (categories/tags/authors) quel que soit le shape
+// - Evite filters undefined via défaut interne
+// - SUPPRIME TOUS LES CHIFFRES D'AFFICHAGE (pills, chips, badge total)
 // ------------------------------
 import { useEffect, useState, useCallback, useMemo, useRef, useLayoutEffect } from "react";
 import {
@@ -12,7 +14,7 @@ import {
 import { cls } from "../shared/utils/format";
 
 /* -------------------------------------------
-   Constants and Configuration
+   Constants
 ------------------------------------------- */
 const SEARCH_HINTS = [
   'Ex : ia startup after:2024-01-01',
@@ -36,17 +38,30 @@ const STORAGE_KEYS = {
   SEARCH_HISTORY: "article-search-history",
 };
 
+// Défault filters (même forme que le container)
+const DEFAULT_FILTERS = {
+  categories: [],
+  tags: [],
+  authors: [],
+  featuredOnly: false,
+  stickyOnly: false,
+  unreadOnly: false,
+  dateFrom: "",
+  dateTo: "",
+  ratingMin: 0,
+  ratingMax: 5,
+};
+
 /* -------------------------------------------
-   Custom Hooks
+   Hooks utilitaires
 ------------------------------------------- */
 
-// Improved typewriter hook with better performance
 function useTypewriter(textList, enabled) {
   const [state, setState] = useState({
     text: "",
     currentIndex: 0,
     position: 0,
-    direction: 1, // 1 = writing, -1 = erasing
+    direction: 1,
   });
 
   useEffect(() => {
@@ -54,61 +69,55 @@ function useTypewriter(textList, enabled) {
       setState(prev => ({ ...prev, text: "" }));
       return;
     }
-
     const currentText = textList[state.currentIndex] || "";
     const { position, direction } = state;
 
     const isAtEnd = position === currentText.length && direction === 1;
-    theLoop: {
-      const isAtStart = position === 0 && direction === -1;
+    const isAtStart = position === 0 && direction === -1;
 
-      const getDelay = () => {
-        if (isAtEnd) return ANIMATION_DELAYS.TYPEWRITER_END;
-        if (isAtStart) return ANIMATION_DELAYS.TYPEWRITER_START;
-        return direction === 1 ? ANIMATION_DELAYS.TYPEWRITER_WRITE : ANIMATION_DELAYS.TYPEWRITER_ERASE;
-      };
+    const getDelay = () => {
+      if (isAtEnd) return ANIMATION_DELAYS.TYPEWRITER_END;
+      if (isAtStart) return ANIMATION_DELAYS.TYPEWRITER_START;
+      return direction === 1 ? ANIMATION_DELAYS.TYPEWRITER_WRITE : ANIMATION_DELAYS.TYPEWRITER_ERASE;
+    };
 
-      const timer = setTimeout(() => {
-        setState(prev => {
-          if (prev.direction === 1) {
-            const nextPos = Math.min(currentText.length, prev.position + 1);
-            return {
-              ...prev,
-              position: nextPos,
-              text: currentText.slice(0, nextPos),
-              direction: nextPos === currentText.length ? -1 : 1,
-            };
-          } else {
-            const nextPos = Math.max(0, prev.position - 1);
-            return {
-              ...prev,
-              position: nextPos,
-              text: currentText.slice(0, nextPos),
-              direction: nextPos === 0 ? 1 : -1,
-              currentIndex: nextPos === 0 ? (prev.currentIndex + 1) % textList.length : prev.currentIndex,
-            };
-          }
-        });
-      }, getDelay());
+    const timer = setTimeout(() => {
+      setState(prev => {
+        if (prev.direction === 1) {
+          const nextPos = Math.min(currentText.length, prev.position + 1);
+          return {
+            ...prev,
+            position: nextPos,
+            text: currentText.slice(0, nextPos),
+            direction: nextPos === currentText.length ? -1 : 1,
+          };
+        } else {
+          const nextPos = Math.max(0, prev.position - 1);
+          return {
+            ...prev,
+            position: nextPos,
+            text: currentText.slice(0, nextPos),
+            direction: nextPos === 0 ? 1 : -1,
+            currentIndex: nextPos === 0 ? (prev.currentIndex + 1) % textList.length : prev.currentIndex,
+          };
+        }
+      });
+    }, getDelay());
 
-      return () => clearTimeout(timer);
-    }
+    return () => clearTimeout(timer);
   }, [textList, enabled, state.currentIndex, state.position, state.direction]);
 
   return state.text;
 }
 
-// Improved localStorage hooks with error handling and validation
 function useLocalStorage(key, defaultValue, validator = null) {
   const [value, setValue] = useState(() => {
     try {
       const stored = localStorage.getItem(key);
       if (!stored) return defaultValue;
-
       const parsed = JSON.parse(stored);
       return validator ? validator(parsed) : parsed;
-    } catch (error) {
-      console.warn(`Failed to load ${key} from localStorage:`, error);
+    } catch {
       return defaultValue;
     }
   });
@@ -117,54 +126,34 @@ function useLocalStorage(key, defaultValue, validator = null) {
     try {
       setValue(newValue);
       localStorage.setItem(key, JSON.stringify(newValue));
-    } catch (error) {
-      console.warn(`Failed to save ${key} to localStorage:`, error);
-    }
+    } catch {}
   }, [key]);
 
   const removeValue = useCallback(() => {
     try {
       setValue(defaultValue);
       localStorage.removeItem(key);
-    } catch (error) {
-      console.warn(`Failed to remove ${key} from localStorage:`, error);
-    }
+    } catch {}
   }, [key, defaultValue]);
 
   return [value, updateValue, removeValue];
 }
 
-// Saved filters hook with improved validation
 const useSavedFilters = () => {
   const validateFilters = useCallback((data) => {
     if (!Array.isArray(data)) return [];
     return data.filter(item =>
-      item &&
-      typeof item === 'object' &&
-      typeof item.name === 'string' &&
-      item.filters &&
-      typeof item.id !== 'undefined'
-    ).slice(0, 10); // Limit to 10 items
+      item && typeof item === 'object' && typeof item.name === 'string' && item.filters && typeof item.id !== 'undefined'
+    ).slice(0, 10);
   }, []);
 
-  const [savedFilters, setSavedFilters, clearSavedFilters] = useLocalStorage(
-    STORAGE_KEYS.FILTERS,
-    [],
-    validateFilters
-  );
+  const [savedFilters, setSavedFilters] = useLocalStorage(STORAGE_KEYS.FILTERS, [], validateFilters);
 
   const saveFilter = useCallback((name, filters) => {
     if (!name?.trim()) return false;
-
-    const entry = {
-      id: Date.now(),
-      name: name.trim(),
-      filters,
-      createdAt: new Date().toISOString(),
-    };
-
-    const updatedFilters = [entry, ...savedFilters.filter(f => f.name !== name.trim())].slice(0, 10);
-    setSavedFilters(updatedFilters);
+    const entry = { id: Date.now(), name: name.trim(), filters, createdAt: new Date().toISOString() };
+    const updated = [entry, ...savedFilters.filter(f => f.name !== name.trim())].slice(0, 10);
+    setSavedFilters(updated);
     return true;
   }, [savedFilters, setSavedFilters]);
 
@@ -172,83 +161,56 @@ const useSavedFilters = () => {
     setSavedFilters(prev => prev.filter(f => f.id !== id));
   }, [setSavedFilters]);
 
-  return { savedFilters, saveFilter, deleteFilter, clearSavedFilters };
+  return { savedFilters, saveFilter, deleteFilter };
 };
 
-// Search history hook with improved validation
 const useSearchHistory = () => {
   const validateHistory = useCallback((data) => {
     if (!Array.isArray(data)) return [];
     return data.filter(item =>
-      item &&
-      typeof item === 'object' &&
-      typeof item.term === 'string' &&
-      item.term.trim() &&
-      typeof item.timestamp === 'number'
-    ).slice(0, 8); // Limit to 8 items
+      item && typeof item === 'object' && typeof item.term === 'string' && item.term.trim() && typeof item.timestamp === 'number'
+    ).slice(0, 8);
   }, []);
 
-  const [history, setHistory, clearHistory] = useLocalStorage(
-    STORAGE_KEYS.SEARCH_HISTORY,
-    [],
-    validateHistory
-  );
+  const [history, setHistory, clearHistory] = useLocalStorage(STORAGE_KEYS.SEARCH_HISTORY, [], validateHistory);
 
   const addToHistory = useCallback((term) => {
-    const cleanTerm = String(term || "").trim();
-    if (!cleanTerm) return;
-
-    const entry = {
-      id: Date.now(),
-      term: cleanTerm,
-      timestamp: Date.now(),
-    };
-
-    const updatedHistory = [entry, ...history.filter(h => h.term !== cleanTerm)].slice(0, 8);
-    setHistory(updatedHistory);
+    const clean = String(term || "").trim();
+    if (!clean) return;
+    const entry = { id: Date.now(), term: clean, timestamp: Date.now() };
+    const updated = [entry, ...history.filter(h => h.term !== clean)].slice(0, 8);
+    setHistory(updated);
   }, [history, setHistory]);
 
   return { history, addToHistory, clearHistory };
 };
 
-// Improved toast hook with queue support
 function useToast() {
   const [toasts, setToasts] = useState([]);
-
   const show = useCallback((message, type = "success") => {
     const id = Date.now();
-    const toast = { id, message, type };
-
-    setToasts(prev => [...prev, toast]);
-
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, ANIMATION_DELAYS.TOAST_DURATION);
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), ANIMATION_DELAYS.TOAST_DURATION);
   }, []);
-
-  const toastElements = toasts.map((toast, index) => (
+  const toastElements = toasts.map((t, i) => (
     <div
-      key={toast.id}
+      key={t.id}
       className={cls(
         "fixed right-4 z-[60] px-4 py-2 rounded-lg shadow-lg border text-sm",
         "backdrop-blur bg-white/95 transition-all duration-300",
-        toast.type === "success" ? "border-green-200 text-green-800" : "border-red-200 text-red-800",
+        t.type === "success" ? "border-green-200 text-green-800" : "border-red-200 text-red-800",
         "animate-[toast-in_240ms_ease-out]"
       )}
-      style={{
-        bottom: `${16 + index * 60}px`,
-      }}
+      style={{ bottom: `${16 + i * 60}px` }}
       role="status"
       aria-live="polite"
     >
-      {toast.message}
+      {t.message}
     </div>
   ));
-
   return { show, toastElements };
 }
 
-// Improved auto-height hook with better performance
 function useAutoHeight(isOpen, dependencies = []) {
   const wrapperRef = useRef(null);
   const contentRef = useRef(null);
@@ -260,85 +222,31 @@ function useAutoHeight(isOpen, dependencies = []) {
       setHeight(0);
       return;
     }
-
-    const newHeight = contentRef.current.scrollHeight;
-    setHeight(newHeight);
+    setHeight(contentRef.current.scrollHeight);
   }, [isOpen]);
 
   useLayoutEffect(updateHeight, [isOpen, updateHeight, ...dependencies]);
 
   useEffect(() => {
     if (!isOpen || !contentRef.current) return;
-
-    // Use ResizeObserver for better performance
     if (window.ResizeObserver) {
       resizeObserverRef.current = new ResizeObserver(updateHeight);
       resizeObserverRef.current.observe(contentRef.current);
+      return () => resizeObserverRef.current?.disconnect();
     } else {
-      // Fallback for older browsers
-      const handleResize = () => updateHeight();
-      window.addEventListener("resize", handleResize);
-      const interval = setInterval(updateHeight, 200);
-
-      return () => {
-        window.removeEventListener("resize", handleResize);
-        clearInterval(interval);
-      };
+      const onResize = () => updateHeight();
+      window.addEventListener("resize", onResize);
+      const it = setInterval(updateHeight, 200);
+      return () => { window.removeEventListener("resize", onResize); clearInterval(it); };
     }
-
-    return () => {
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
-      }
-    };
   }, [isOpen, updateHeight]);
 
   return { wrapperRef, contentRef, height };
 }
 
 /* -------------------------------------------
-   Utility Functions
+   Normalizers d'options (categories/tags/authors)
 ------------------------------------------- */
-
-// Improved filter normalization with validation
-const createFilterNormalizer = () => {
-  const normalizeArray = (value) => Array.isArray(value) ? value : [];
-  const normalizeBoolean = (value) => Boolean(value);
-  const normalizeString = (value) => String(value || "");
-  const normalizeNumber = (value, min = 0, max = 5) => {
-    const num = Number(value);
-    return Number.isFinite(num) ? Math.max(min, Math.min(max, num)) : (min + max) / 2;
-  };
-
-  return (filters = {}) => ({
-    categories: normalizeArray(filters.categories),
-    tags: normalizeArray(filters.tags),
-    authors: normalizeArray(filters.authors),
-    featuredOnly: normalizeBoolean(filters.featuredOnly),
-    stickyOnly: normalizeBoolean(filters.stickyOnly),
-    unreadOnly: normalizeBoolean(filters.unreadOnly),
-    dateFrom: normalizeString(filters.dateFrom),
-    dateTo: normalizeString(filters.dateTo),
-    ratingMin: normalizeNumber(filters.ratingMin, 0, 5),
-    ratingMax: normalizeNumber(filters.ratingMax, 0, 5),
-  });
-};
-
-// Debounced function utility
-function useDebounce(value, delay) {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-
-  useEffect(() => {
-    const handler = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(handler);
-  }, [value, delay]);
-
-  return debouncedValue;
-}
-
-/* ===== New: universal normalizers for options props (categories/tags/authors) ==== */
-
-// Extract an array regardless of wrapper shape ([], {data:[]}, {items:[]}, {records:[]})
 const extractArray = (src) => {
   if (Array.isArray(src)) return src;
   if (src && Array.isArray(src.data)) return src.data;
@@ -347,16 +255,13 @@ const extractArray = (src) => {
   return [];
 };
 
-// Normalize an options list to objects: { id, name, count? }
 const normalizeOptionsList = (input, kind) => {
   return extractArray(input)
     .map((o) => {
-      if (typeof o === "string") return { id: o, name: o, count: 0 };
+      if (typeof o === "string") return { id: o, name: o };
       if (!o || typeof o !== "object") return null;
-
       const id =
         o.id ?? o.value ?? o.slug ?? o.code ?? o.key ?? null;
-
       const displayName =
         o.name ??
         o.title ??
@@ -365,17 +270,14 @@ const normalizeOptionsList = (input, kind) => {
           ? [o.first_name, o.last_name].filter(Boolean).join(" ").trim()
           : o.slug) ??
         (id != null ? `#${id}` : null);
-
-      const count = o.count ?? o.article_count ?? o.total ?? o.n ?? 0;
-
       if (id == null || !displayName) return null;
-      return { id, name: displayName, count };
+      return { id, name: displayName };
     })
     .filter(Boolean);
 };
 
 /* -------------------------------------------
-   UI Components
+   UI parts
 ------------------------------------------- */
 
 const Chip = ({ active, onClick, children, index = 0, disabled = false }) => (
@@ -401,7 +303,7 @@ const Chip = ({ active, onClick, children, index = 0, disabled = false }) => (
   </button>
 );
 
-const Pill = ({ label, icon, count = 0, open, onToggle, disabled = false }) => (
+const Pill = ({ label, icon, open, onToggle, disabled = false }) => (
   <button
     type="button"
     onClick={onToggle}
@@ -418,16 +320,8 @@ const Pill = ({ label, icon, count = 0, open, onToggle, disabled = false }) => (
   >
     <span className="text-sm text-slate-700" aria-hidden="true">{icon}</span>
     <span className="text-sm font-medium">{label}</span>
-    {count > 0 && (
-      <span className="text-[11px] px-1.5 py-0.5 rounded-md font-bold bg-blue-600 text-white">
-        {count}
-      </span>
-    )}
     <FaChevronDown
-      className={cls(
-        "text-xs opacity-70 transition-transform",
-        open ? "rotate-180" : ""
-      )}
+      className={cls("text-xs opacity-70 transition-transform", open ? "rotate-180" : "")}
       aria-hidden="true"
     />
   </button>
@@ -442,9 +336,7 @@ const ToggleButton = ({ active, onClick, icon, label, disabled = false }) => (
       "h-10 px-3 rounded-lg border inline-flex items-center gap-2 transition-colors",
       "disabled:opacity-50 disabled:cursor-not-allowed",
       "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200",
-      active
-        ? "bg-blue-50 text-blue-700 border-blue-200"
-        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+      active ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
     )}
     aria-pressed={active}
   >
@@ -473,179 +365,117 @@ const InputWithIcon = ({ icon, onChange, label, ...props }) => (
 );
 
 /* -------------------------------------------
-   Main Component
+   Main component
 ------------------------------------------- */
 export default function FiltersPanel({
-  open, setOpen, // legacy compatibility
   search, setSearch,
-  filters, setFilters,
+  filters: rawFilters = DEFAULT_FILTERS,       // ← valeur par défaut robuste
+  setFilters,
   view, setView,
   perPage, setPerPage,
+  loadMode, setLoadMode, // (optionnel)
   authorsOptions = [],
   categoriesOptions = [],
   tagsOptions = [],
 }) {
-  // Normalize and validate props (universal)
-  const safeAuthors = useMemo(
-    () => normalizeOptionsList(authorsOptions, "authors"),
-    [authorsOptions]
-  );
-  const safeCategories = useMemo(
-    () => normalizeOptionsList(categoriesOptions, "categories"),
-    [categoriesOptions]
-  );
-  const safeTags = useMemo(
-    () => normalizeOptionsList(tagsOptions, "tags"),
-    [tagsOptions]
-  );
+  // Normalise options (peu importe la forme)
+  const safeAuthors    = useMemo(() => normalizeOptionsList(authorsOptions, "authors"), [authorsOptions]);
+  const safeCategories = useMemo(() => normalizeOptionsList(categoriesOptions, "categories"), [categoriesOptions]);
+  const safeTags       = useMemo(() => normalizeOptionsList(tagsOptions, "tags"), [tagsOptions]);
 
-  // Initialize normalizer
-  const normalizeFilters = useMemo(() => createFilterNormalizer(), []);
+  // Normalizer des filters
+  const normalizeFilters = useMemo(() => {
+    const normalizeArray = (v) => Array.isArray(v) ? v : [];
+    const normalizeBool  = (v) => !!v;
+    const normalizeStr   = (v) => (typeof v === "string" ? v : "");
+    const normalizeNum   = (v, min, max) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : min;
+    };
+    return (f = {}) => ({
+      categories: normalizeArray(f.categories),
+      tags:       normalizeArray(f.tags),
+      authors:    normalizeArray(f.authors),
+      featuredOnly: normalizeBool(f.featuredOnly),
+      stickyOnly:   normalizeBool(f.stickyOnly),
+      unreadOnly:   normalizeBool(f.unreadOnly),
+      dateFrom:   normalizeStr(f.dateFrom),
+      dateTo:     normalizeStr(f.dateTo),
+      ratingMin:  normalizeNum(f.ratingMin, 0, 5),
+      ratingMax:  normalizeNum(f.ratingMax, 0, 5),
+    });
+  }, []);
 
-  // State management
-  const [localFilters, setLocalFilters] = useState(() => normalizeFilters(filters));
-  const [searchQuery, setSearchQuery] = useState(String(search || ""));
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [activeMenu, setActiveMenu] = useState(null);
+  const [localFilters, setLocalFilters] = useState(() => normalizeFilters(rawFilters));
+  const [searchQuery, setSearchQuery]   = useState(String(search || ""));
+  const [isExpanded, setIsExpanded]     = useState(false);
+  const [activeMenu, setActiveMenu]     = useState(null);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveModalName, setSaveModalName] = useState("");
 
-  // Search UI state
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showSearchHistory, setShowSearchHistory] = useState(false);
   const [isHistoryPinned, setIsHistoryPinned] = useState(false);
 
-  // Refs
   const dropdownRef = useRef(null);
   const searchWrapperRef = useRef(null);
   const pillsScrollerRef = useRef(null);
 
-  // Custom hooks
   const { savedFilters, saveFilter, deleteFilter } = useSavedFilters();
   const { history: searchHistory, addToHistory, clearHistory } = useSearchHistory();
   const { show: showToast, toastElements } = useToast();
-  const { wrapperRef, contentRef, height } = useAutoHeight(isExpanded, [
-    activeMenu, localFilters, savedFilters
-  ]);
+  const { wrapperRef, contentRef, height } = useAutoHeight(isExpanded, [activeMenu, localFilters, savedFilters]);
 
-  // Debounced search for better performance
-  const debouncedSearch = useDebounce(searchQuery, 300);
+  // Sync externes → internes
+  useEffect(() => setLocalFilters(normalizeFilters(rawFilters)), [rawFilters, normalizeFilters]);
+  useEffect(() => setSearchQuery(String(search || "")), [search]);
 
-  // Animated placeholder
-  const animatedHint = useTypewriter(SEARCH_HINTS, !searchQuery.length);
-
-  // Pill shadows state
-  const [pillShadows, setPillShadows] = useState({ left: false, right: false });
-
-  // Update pill shadows
-  const updatePillShadows = useCallback(() => {
-    const element = pillsScrollerRef.current;
-    if (!element) return;
-
-    setPillShadows({
-      left: element.scrollLeft > 4,
-      right: element.scrollLeft + element.clientWidth < element.scrollWidth - 4,
-    });
-  }, []);
-
-  // Calculate filter counts
-  const filterCounts = useMemo(() => ({
-    categories: localFilters.categories.length,
-    tags: localFilters.tags.length,
-    authors: localFilters.authors.length,
-    options: [
-      localFilters.featuredOnly,
-      localFilters.stickyOnly,
-      localFilters.unreadOnly,
-    ].filter(Boolean).length,
-    dates: (localFilters.dateFrom || localFilters.dateTo) ? 1 : 0,
-    rating: (localFilters.ratingMin > 0 || localFilters.ratingMax < 5) ? 1 : 0,
-  }), [localFilters]);
-
-  const totalActiveFilters = useMemo(() =>
-    Object.values(filterCounts).reduce((sum, count) => sum + count, 0),
-    [filterCounts]
-  );
-
-  // Sync effects
-  useEffect(() => {
-    setLocalFilters(normalizeFilters(filters));
-  }, [filters, normalizeFilters]);
-
-  useEffect(() => {
-    setSearchQuery(String(search || ""));
-  }, [search]);
-
-  // Update pill shadows on relevant changes
-  useEffect(() => {
-    updatePillShadows();
-  }, [isExpanded, activeMenu, updatePillShadows]);
-
-  // Outside click management
-  const handleOutsideClick = useCallback((event) => {
-    if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-      setActiveMenu(null);
-    }
-
-    if (searchWrapperRef.current &&
-        !searchWrapperRef.current.contains(event.target) &&
-        !isHistoryPinned) {
+  // Fermer menus au clic extérieur
+  const handleOutsideClick = useCallback((e) => {
+    if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setActiveMenu(null);
+    if (searchWrapperRef.current && !searchWrapperRef.current.contains(e.target) && !isHistoryPinned) {
       setShowSearchHistory(false);
     }
   }, [isHistoryPinned]);
-
   useEffect(() => {
     document.addEventListener("mousedown", handleOutsideClick);
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [handleOutsideClick]);
 
-  // Keyboard shortcuts
+  // Raccourcis
   useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape") {
-        if (showSaveModal) {
-          setShowSaveModal(false);
-        } else if (activeMenu) {
-          setActiveMenu(null);
-        } else if (isExpanded) {
-          setIsExpanded(false);
-        }
+    const onKey = (ev) => {
+      if (ev.key === "Escape") {
+        if (showSaveModal) setShowSaveModal(false);
+        else if (activeMenu) setActiveMenu(null);
+        else if (isExpanded) setIsExpanded(false);
         setShowSearchHistory(false);
         setIsHistoryPinned(false);
-        return;
       }
-
-      if (event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        const activeElement = document.activeElement;
-        const isInputFocused = activeElement && (
-          activeElement.tagName === "INPUT" ||
-          activeElement.tagName === "TEXTAREA" ||
-          activeElement.contentEditable === "true"
-        );
-
-        if (!isInputFocused) {
-          event.preventDefault();
-          const searchInput = searchWrapperRef.current?.querySelector("input");
-          searchInput?.focus();
+      if (ev.key === "/" && !ev.metaKey && !ev.ctrlKey && !ev.altKey) {
+        const ae = document.activeElement;
+        const typing = ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.contentEditable === "true");
+        if (!typing) {
+          ev.preventDefault();
+          searchWrapperRef.current?.querySelector("input")?.focus();
         }
       }
     };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [showSaveModal, activeMenu, isExpanded]);
 
-  // Action handlers
+  // Actions
   const handleApplyFilters = useCallback(() => {
     setFilters(normalizeFilters(localFilters));
     setActiveMenu(null);
-    showToast("Filtres appliqués avec succès", "success");
+    showToast("Filtres appliqués", "success");
   }, [localFilters, setFilters, normalizeFilters, showToast]);
 
   const handleResetFilters = useCallback(() => {
-    const emptyFilters = normalizeFilters({});
-    setLocalFilters(emptyFilters);
-    setFilters(emptyFilters);
+    const empty = normalizeFilters(DEFAULT_FILTERS);
+    setLocalFilters(empty);
+    setFilters(empty);
     setActiveMenu(null);
     showToast("Filtres réinitialisés", "success");
   }, [setFilters, normalizeFilters, showToast]);
@@ -659,63 +489,34 @@ export default function FiltersPanel({
 
   const generateSuggestedName = useCallback(() => {
     const parts = [];
-    if (localFilters.categories.length) parts.push(`${localFilters.categories.length} cat`);
-    if (localFilters.tags.length) parts.push(`${localFilters.tags.length} tags`);
-    if (localFilters.authors.length) parts.push(`${localFilters.authors.length} auteurs`);
     if (localFilters.featuredOnly) parts.push("vedettes");
     if (localFilters.stickyOnly) parts.push("épinglés");
     if (localFilters.unreadOnly) parts.push("non lus");
     if (localFilters.dateFrom || localFilters.dateTo) parts.push("période");
     if (localFilters.ratingMin > 0 || localFilters.ratingMax < 5) parts.push("note");
-
-    const baseName = parts.length ? parts.join(" • ") : "Filtre personnalisé";
-    return baseName.length > 32 ? baseName.slice(0, 32) + "…" : baseName;
+    const base = parts.length ? parts.join(" • ") : "Filtre personnalisé";
+    return base.length > 32 ? base.slice(0, 32) + "…" : base;
   }, [localFilters]);
 
   const handleSaveFilter = useCallback((name) => {
-    const trimmedName = String(name || "").trim();
-    if (!trimmedName) return false;
-
-    const success = saveFilter(trimmedName, normalizeFilters(localFilters));
-    if (success) {
-      showToast(`Filtre "${trimmedName}" sauvegardé`, "success");
-    } else {
-      showToast("Erreur lors de la sauvegarde", "error");
-    }
-    return success;
+    const trimmed = String(name || "").trim();
+    if (!trimmed) return false;
+    const ok = saveFilter(trimmed, normalizeFilters(localFilters));
+    showToast(ok ? `Filtre "${trimmed}" sauvegardé` : "Erreur lors de la sauvegarde", ok ? "success" : "error");
+    return ok;
   }, [localFilters, saveFilter, normalizeFilters, showToast]);
 
-  // Filter section clear handlers
-  const clearHandlers = useMemo(() => ({
-    categories: () => setLocalFilters(prev => ({ ...prev, categories: [] })),
-    tags: () => setLocalFilters(prev => ({ ...prev, tags: [] })),
-    authors: () => setLocalFilters(prev => ({ ...prev, authors: [] })),
-    options: () => setLocalFilters(prev => ({
-      ...prev,
-      featuredOnly: false,
-      stickyOnly: false,
-      unreadOnly: false
-    })),
-    dates: () => setLocalFilters(prev => ({ ...prev, dateFrom: "", dateTo: "" })),
-    rating: () => setLocalFilters(prev => ({ ...prev, ratingMin: 0, ratingMax: 5 })),
-  }), []);
-
-  // Render helpers (now expects normalized options)
+  // Helpers render options (SANS compter)
   const renderOptionChips = (options, type) => {
     if (!options.length) {
       return <div className="text-sm text-slate-500">Aucun {type} disponible</div>;
     }
-
     return (
       <div className="flex flex-wrap gap-2">
         {options.map((opt, index) => {
           const label = typeof opt === "string" ? opt : (opt.name ?? `#${opt.id}`);
           const value = typeof opt === "string" ? opt : opt.id;
-          const count = typeof opt === "object" ? opt.count : null;
-
-          // Align comparisons (string/number) to avoid ghost selections
           const isActive = (localFilters[type] || []).some((v) => String(v) === String(value));
-
           return (
             <Chip
               key={String(value)}
@@ -728,7 +529,7 @@ export default function FiltersPanel({
                   : [...prev[type], value]
               }))}
             >
-              {label}{typeof count === 'number' ? ` (${count})` : ''}
+              {label}
             </Chip>
           );
         })}
@@ -736,20 +537,20 @@ export default function FiltersPanel({
     );
   };
 
-  // Main render
+  // UI
+  const animatedHint = useTypewriter(SEARCH_HINTS, !searchQuery.length);
+
   return (
     <div className="bg-white border-b border-slate-200 sticky top-0 z-40">
-      {/* Main header */}
+      {/* Header */}
       <div className="px-6 py-3">
         <div className="flex items-center justify-between gap-4">
-          {/* Search section */}
+          {/* Search */}
           <div
             ref={searchWrapperRef}
             className={cls(
               "relative flex-1 min-w-[320px] max-w-[560px] transition-all duration-200 z-[70]",
-              isSearchFocused
-                ? "scale-[1.01] drop-shadow-[0_8px_24px_rgba(59,130,246,.10)]"
-                : "scale-[1] drop-shadow-none"
+              isSearchFocused ? "scale-[1.01] drop-shadow-[0_8px_24px_rgba(59,130,246,.10)]" : "scale-[1] drop-shadow-none"
             )}
           >
             <input
@@ -757,14 +558,8 @@ export default function FiltersPanel({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              onFocus={() => {
-                setIsSearchFocused(true);
-                setShowSearchHistory(true);
-              }}
-              onBlur={() => {
-                setIsSearchFocused(false);
-                if (!isHistoryPinned) setShowSearchHistory(false);
-              }}
+              onFocus={() => { setIsSearchFocused(true); setShowSearchHistory(true); }}
+              onBlur={() => { setIsSearchFocused(false); if (!isHistoryPinned) setShowSearchHistory(false); }}
               placeholder=""
               className={cls(
                 "w-full pl-10 pr-20 h-10 rounded-xl border bg-white text-slate-900",
@@ -776,8 +571,6 @@ export default function FiltersPanel({
               aria-label="Recherche d'articles"
               autoComplete="off"
             />
-
-            {/* Animated placeholder */}
             {!searchQuery.length && (
               <div className="pointer-events-none absolute left-10 right-20 top-1/2 -translate-y-1/2 text-slate-400 text-sm select-none">
                 <span className="inline-flex items-center gap-2">
@@ -791,34 +584,23 @@ export default function FiltersPanel({
                 </span>
               </div>
             )}
-
-            {/* Search icon */}
             <FaSearch
               className={cls(
                 "absolute left-3 top-1/2 -translate-y-1/2 transition-all duration-200",
-                isSearchFocused
-                  ? "text-blue-500 translate-x-[1px] scale-110"
-                  : "text-slate-400 translate-x-0 scale-100"
+                isSearchFocused ? "text-blue-500 translate-x-[1px] scale-110" : "text-slate-400 translate-x-0 scale-100"
               )}
               aria-hidden="true"
             />
-
-            {/* Search actions */}
             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  setIsHistoryPinned(prev => !prev);
-                  setShowSearchHistory(prev => !prev);
-                }}
+                onClick={() => { setIsHistoryPinned((p) => !p); setShowSearchHistory((p) => !p); }}
                 title={isHistoryPinned ? "Masquer l'historique" : "Afficher l'historique"}
                 className={cls(
                   "h-8 w-8 rounded-lg border inline-flex items-center justify-center transition-all duration-200",
                   "active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200",
-                  isHistoryPinned
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                  isHistoryPinned ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                 )}
                 aria-pressed={isHistoryPinned}
               >
@@ -850,14 +632,8 @@ export default function FiltersPanel({
               )}
             </div>
 
-            {/* Search history dropdown */}
             {showSearchHistory && searchHistory.length > 0 && (
-              <div
-                className={cls(
-                  "absolute left-0 right-0 top-[44px] transition-all duration-200 z-[80]",
-                  "opacity-100 translate-y-0 pointer-events-auto motion-safe:animate-[dropdown-in_.14s_ease-out]"
-                )}
-              >
+              <div className="absolute left-0 right-0 top-[44px] transition-all duration-200 z-[80] opacity-100 translate-y-0 pointer-events-auto animate-[dropdown-in_.14s_ease-out]">
                 <div className="bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
                   <div className="px-3 py-2 text-xs text-slate-600 border-b border-slate-100 flex items-center justify-between">
                     <span className="inline-flex items-center gap-2">
@@ -872,15 +648,12 @@ export default function FiltersPanel({
                     </button>
                   </div>
                   <div className="max-h-56 overflow-y-auto">
-                    {searchHistory.map((historyItem, index) => (
+                    {searchHistory.map((h, index) => (
                       <button
-                        key={historyItem.id}
+                        key={h.id}
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => {
-                          setSearchQuery(historyItem.term);
-                          setTimeout(handleSearch, 0);
-                        }}
+                        onClick={() => { setSearchQuery(h.term); setTimeout(handleSearch, 0); }}
                         className={cls(
                           "w-full text-left px-3 py-2 text-sm text-slate-700 flex items-center gap-2 transition-all duration-150",
                           "hover:bg-slate-50 focus-visible:outline-none focus-visible:bg-slate-100 active:scale-[0.98]"
@@ -888,9 +661,9 @@ export default function FiltersPanel({
                         style={{ transitionDelay: `${Math.min(index, 6) * ANIMATION_DELAYS.HISTORY_STAGGER}ms` }}
                       >
                         <FaSearch className="text-slate-400 text-xs" aria-hidden="true" />
-                        <span className="flex-1 truncate">{historyItem.term}</span>
+                        <span className="flex-1 truncate">{h.term}</span>
                         <span className="text-[11px] text-slate-400">
-                          {new Date(historyItem.timestamp).toLocaleDateString()}
+                          {new Date(h.timestamp).toLocaleDateString()}
                         </span>
                       </button>
                     ))}
@@ -900,9 +673,8 @@ export default function FiltersPanel({
             )}
           </div>
 
-          {/* Right controls */}
+          {/* Contrôles droite */}
           <div className="flex items-center gap-3">
-            {/* View toggle */}
             <div className="flex bg-white rounded-xl border border-slate-200 p-1" role="tablist">
               {[
                 { key: "grid", icon: FaThLarge, label: "Vue grille" },
@@ -926,7 +698,6 @@ export default function FiltersPanel({
               ))}
             </div>
 
-            {/* Items per page */}
             <label className="relative">
               <span className="sr-only">Éléments par page</span>
               <select
@@ -941,16 +712,13 @@ export default function FiltersPanel({
               </select>
             </label>
 
-            {/* Filters toggle */}
             <button
               type="button"
               onClick={() => setIsExpanded(prev => !prev)}
               className={cls(
                 "h-10 px-4 rounded-xl font-medium inline-flex items-center gap-2 border transition-colors",
                 "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200",
-                isExpanded
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "bg-white text-slate-700 border-slate-200 hover:bg-blue-50 hover:border-blue-300"
+                isExpanded ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-700 border-slate-200 hover:bg-blue-50 hover:border-blue-300"
               )}
               title="Afficher/Masquer les filtres"
               aria-expanded={isExpanded}
@@ -958,14 +726,9 @@ export default function FiltersPanel({
             >
               <FaFilter aria-hidden="true" />
               <span>Filtres</span>
-              {totalActiveFilters > 0 && (
-                <span className="text-[11px] px-1.5 py-0.5 rounded-md font-bold bg-white text-blue-700">
-                  {totalActiveFilters}
-                </span>
-              )}
+              {/* (Plus de badge de nombre de filtres actifs) */}
             </button>
 
-            {/* Export button */}
             <button
               type="button"
               onClick={() => window.dispatchEvent(new CustomEvent("articlelib:export"))}
@@ -978,7 +741,7 @@ export default function FiltersPanel({
         </div>
       </div>
 
-      {/* Filters panel */}
+      {/* Panneau des filtres */}
       <div
         id="filters-panel"
         ref={wrapperRef}
@@ -989,68 +752,53 @@ export default function FiltersPanel({
         <div ref={contentRef}>
           {isExpanded && (
             <div ref={dropdownRef} className="bg-gradient-to-b from-blue-50 to-white">
-              {/* Filter pills and actions */}
+              {/* Pills */}
               <div className="relative">
-                {/* Shadow gradients */}
-                {pillShadows.left && (
-                  <div className="pointer-events-none absolute left-0 top-0 h-full w-8 bg-gradient-to-r from-white via-white/70 to-transparent z-10" />
-                )}
-                {pillShadows.right && (
-                  <div className="pointer-events-none absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-white via-white/70 to-transparent z-10" />
-                )}
-
                 <div
                   ref={pillsScrollerRef}
-                  onScroll={updatePillShadows}
                   className="px-6 pt-4 pb-2 flex gap-2 overflow-x-auto no-scrollbar"
                   style={{ scrollbarWidth: "none" }}
                 >
                   <Pill
                     label="Catégories"
                     icon={<FaTag />}
-                    count={filterCounts.categories}
                     open={activeMenu === "categories"}
                     onToggle={() => setActiveMenu(activeMenu === "categories" ? null : "categories")}
                   />
                   <Pill
                     label="Tags"
                     icon={<FaTag />}
-                    count={filterCounts.tags}
                     open={activeMenu === "tags"}
                     onToggle={() => setActiveMenu(activeMenu === "tags" ? null : "tags")}
                   />
                   <Pill
                     label="Auteurs"
                     icon={<FaUser />}
-                    count={filterCounts.authors}
                     open={activeMenu === "authors"}
                     onToggle={() => setActiveMenu(activeMenu === "authors" ? null : "authors")}
                   />
                   <Pill
                     label="Options"
                     icon={<FaFilter />}
-                    count={filterCounts.options}
                     open={activeMenu === "options"}
                     onToggle={() => setActiveMenu(activeMenu === "options" ? null : "options")}
                   />
                   <Pill
                     label="Période"
                     icon={<FaCalendar />}
-                    count={filterCounts.dates}
                     open={activeMenu === "dates"}
                     onToggle={() => setActiveMenu(activeMenu === "dates" ? null : "dates")}
                   />
                   <Pill
                     label="Note"
                     icon={<FaThumbsUp />}
-                    count={filterCounts.rating}
                     open={activeMenu === "rating"}
                     onToggle={() => setActiveMenu(activeMenu === "rating" ? null : "rating")}
                   />
+
                   <Pill
                     label="Sauvegardes"
                     icon={<FaBookmark />}
-                    count={savedFilters.length}
                     open={activeMenu === "saved"}
                     onToggle={() => setActiveMenu(activeMenu === "saved" ? null : "saved")}
                   />
@@ -1059,14 +807,7 @@ export default function FiltersPanel({
                     <button
                       type="button"
                       onClick={handleResetFilters}
-                      disabled={totalActiveFilters === 0}
-                      className={cls(
-                        "h-10 px-3 rounded-xl border inline-flex items-center gap-2 transition-colors",
-                        "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200",
-                        totalActiveFilters > 0
-                          ? "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
-                          : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-                      )}
+                      className="h-10 px-3 rounded-xl border inline-flex items-center gap-2 transition-colors bg-white text-slate-700 border-slate-200 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
                       title="Réinitialiser tous les filtres"
                     >
                       <FaEraser aria-hidden="true" />
@@ -1085,40 +826,40 @@ export default function FiltersPanel({
                 </div>
               </div>
 
-              {/* Filter sections */}
+              {/* Sections */}
               <div className="px-6 pb-6 space-y-3">
-                {/* Categories */}
                 <FilterSection
                   visible={activeMenu === "categories"}
                   title="Catégories"
-                  onClear={filterCounts.categories > 0 ? clearHandlers.categories : undefined}
+                  onClear={localFilters.categories.length ? () => setLocalFilters(p => ({ ...p, categories: [] })) : undefined}
                 >
                   {renderOptionChips(safeCategories, 'categories')}
                 </FilterSection>
 
-                {/* Tags */}
                 <FilterSection
                   visible={activeMenu === "tags"}
                   title="Tags"
-                  onClear={filterCounts.tags > 0 ? clearHandlers.tags : undefined}
+                  onClear={localFilters.tags.length ? () => setLocalFilters(p => ({ ...p, tags: [] })) : undefined}
                 >
                   {renderOptionChips(safeTags, 'tags')}
                 </FilterSection>
 
-                {/* Authors */}
                 <FilterSection
                   visible={activeMenu === "authors"}
                   title="Auteurs"
-                  onClear={filterCounts.authors > 0 ? clearHandlers.authors : undefined}
+                  onClear={localFilters.authors.length ? () => setLocalFilters(p => ({ ...p, authors: [] })) : undefined}
                 >
                   {renderOptionChips(safeAuthors, 'authors')}
                 </FilterSection>
 
-                {/* Quick options */}
                 <FilterSection
                   visible={activeMenu === "options"}
                   title="Options rapides"
-                  onClear={filterCounts.options > 0 ? clearHandlers.options : undefined}
+                  onClear={
+                    (localFilters.featuredOnly || localFilters.stickyOnly || localFilters.unreadOnly)
+                      ? () => setLocalFilters(p => ({ ...p, featuredOnly: false, stickyOnly: false, unreadOnly: false }))
+                      : undefined
+                  }
                 >
                   <div className="flex flex-wrap gap-3">
                     <ToggleButton
@@ -1142,11 +883,10 @@ export default function FiltersPanel({
                   </div>
                 </FilterSection>
 
-                {/* Date range */}
                 <FilterSection
                   visible={activeMenu === "dates"}
                   title="Période"
-                  onClear={filterCounts.dates > 0 ? clearHandlers.dates : undefined}
+                  onClear={(localFilters.dateFrom || localFilters.dateTo) ? () => setLocalFilters(p => ({ ...p, dateFrom: "", dateTo: "" })) : undefined}
                 >
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <InputWithIcon
@@ -1166,11 +906,10 @@ export default function FiltersPanel({
                   </div>
                 </FilterSection>
 
-                {/* Rating range */}
                 <FilterSection
                   visible={activeMenu === "rating"}
                   title="Note moyenne"
-                  onClear={filterCounts.rating > 0 ? clearHandlers.rating : undefined}
+                  onClear={(localFilters.ratingMin > 0 || localFilters.ratingMax < 5) ? () => setLocalFilters(p => ({ ...p, ratingMin: 0, ratingMax: 5 })) : undefined}
                 >
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <InputWithIcon
@@ -1204,17 +943,13 @@ export default function FiltersPanel({
                   </div>
                 </FilterSection>
 
-                {/* Saved filters */}
                 <FilterSection
                   visible={activeMenu === "saved"}
                   title="Filtres sauvegardés"
                   action={
                     <button
                       type="button"
-                      onClick={() => {
-                        setSaveModalName(generateSuggestedName());
-                        setShowSaveModal(true);
-                      }}
+                      onClick={() => { setSaveModalName(generateSuggestedName()); setShowSaveModal(true); }}
                       className="h-9 px-3 rounded-lg bg-blue-600 text-white inline-flex items-center gap-2 hover:bg-blue-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
                       title="Sauvegarder les filtres actuels"
                     >
@@ -1229,34 +964,32 @@ export default function FiltersPanel({
                     </div>
                   ) : (
                     <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
-                      {savedFilters.map((savedFilter) => (
-                        <div key={savedFilter.id} className="py-2 flex items-center justify-between gap-3">
+                      {savedFilters.map((sf) => (
+                        <div key={sf.id} className="py-2 flex items-center justify-between gap-3">
                           <div className="flex-1 min-w-0">
                             <button
                               type="button"
                               onClick={() => {
-                                setLocalFilters(normalizeFilters(savedFilter.filters));
-                                setFilters(normalizeFilters(savedFilter.filters));
+                                const cleaned = normalizeFilters(sf.filters);
+                                setLocalFilters(cleaned);
+                                setFilters(cleaned);
                                 setActiveMenu(null);
-                                showToast(`Filtre "${savedFilter.name}" chargé`, "success");
+                                showToast(`Filtre "${sf.name}" chargé`, "success");
                               }}
                               className="text-left text-sm text-slate-800 hover:text-slate-900 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 rounded"
-                              title={`Charger le filtre: ${savedFilter.name}`}
+                              title={`Charger le filtre: ${sf.name}`}
                             >
-                              <div className="font-medium truncate">{savedFilter.name}</div>
+                              <div className="font-medium truncate">{sf.name}</div>
                               <div className="text-xs text-slate-500">
-                                Créé le {new Date(savedFilter.createdAt).toLocaleDateString()}
+                                Créé le {new Date(sf.createdAt).toLocaleDateString()}
                               </div>
                             </button>
                           </div>
                           <button
                             type="button"
-                            onClick={() => {
-                              deleteFilter(savedFilter.id);
-                              showToast("Filtre supprimé", "success");
-                            }}
+                            onClick={() => { deleteFilter(sf.id); showToast("Filtre supprimé", "success"); }}
                             className="text-red-500 hover:text-red-700 transition-colors p-1 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-red-200"
-                            title={`Supprimer le filtre: ${savedFilter.name}`}
+                            title={`Supprimer le filtre: ${sf.name}`}
                           >
                             <FaTrash />
                           </button>
@@ -1276,15 +1009,10 @@ export default function FiltersPanel({
         <SaveModal
           initialValue={saveModalName}
           onClose={() => setShowSaveModal(false)}
-          onSave={(name) => {
-            if (handleSaveFilter(name)) {
-              setShowSaveModal(false);
-            }
-          }}
+          onSave={(name) => { if (handleSaveFilter(name)) setShowSaveModal(false); }}
         />
       )}
 
-      {/* Toast notifications */}
       {toastElements}
     </div>
   );
@@ -1296,7 +1024,6 @@ export default function FiltersPanel({
 
 function FilterSection({ visible, title, children, onClear, action }) {
   if (!visible) return null;
-
   return (
     <div className="transition-all origin-top opacity-100 translate-y-0 scale-[1]">
       <section className="rounded-2xl border border-blue-200 bg-white shadow-sm p-4">
@@ -1323,69 +1050,41 @@ function FilterSection({ visible, title, children, onClear, action }) {
   );
 }
 
-/* -------------------------------------------
-   Save Modal Component
-------------------------------------------- */
 function SaveModal({ initialValue = "", onSave, onClose }) {
   const [name, setName] = useState(initialValue);
   const modalRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Handle outside clicks
   useEffect(() => {
-    const handleOutsideClick = (event) => {
-      if (modalRef.current && !modalRef.current.contains(event.target)) {
-        onClose?.();
-      }
-    };
-
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
+    const outside = (e) => { if (modalRef.current && !modalRef.current.contains(e.target)) onClose?.(); };
+    document.addEventListener("mousedown", outside);
+    return () => document.removeEventListener("mousedown", outside);
   }, [onClose]);
 
-  // Handle keyboard events
   useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape") {
-        onClose?.();
-      } else if (event.key === "Enter" && name.trim()) {
-        onSave?.(name.trim());
-      }
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose?.();
+      else if (e.key === "Enter" && name.trim()) onSave?.(name.trim());
     };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [name, onSave, onClose]);
 
-  // Auto focus and select
   useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
+    inputRef.current?.focus();
+    inputRef.current?.select();
   }, []);
 
-  const handleSubmit = (event) => {
-    event.preventDefault();
-    if (name.trim()) {
-      onSave?.(name.trim());
-    }
+  const submit = (e) => {
+    e.preventDefault();
+    if (name.trim()) onSave?.(name.trim());
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="save-modal-title"
-    >
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="save-modal-title">
       <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm animate-fade-in" />
-
-      <div
-        ref={modalRef}
-        className="relative w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-2xl animate-scale-in"
-      >
-        <form onSubmit={handleSubmit} className="p-4">
+      <div ref={modalRef} className="relative w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-2xl animate-scale-in">
+        <form onSubmit={submit} className="p-4">
           <button
             type="button"
             onClick={onClose}
@@ -1397,12 +1096,8 @@ function SaveModal({ initialValue = "", onSave, onClose }) {
 
           <div className="space-y-4 pt-2">
             <div>
-              <h2 id="save-modal-title" className="text-base font-semibold text-slate-900">
-                Sauvegarder le filtre
-              </h2>
-              <p className="text-sm text-slate-500 mt-1">
-                Donnez un nom descriptif à cette configuration de filtres.
-              </p>
+              <h2 id="save-modal-title" className="text-base font-semibold text-slate-900">Sauvegarder le filtre</h2>
+              <p className="text-sm text-slate-500 mt-1">Donnez un nom descriptif à cette configuration de filtres.</p>
             </div>
 
             <div>
@@ -1435,9 +1130,7 @@ function SaveModal({ initialValue = "", onSave, onClose }) {
                 className={cls(
                   "h-9 px-4 rounded-lg font-medium transition-colors inline-flex items-center gap-2",
                   "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200",
-                  name.trim()
-                    ? "bg-blue-600 text-white hover:bg-blue-700"
-                    : "bg-slate-200 text-slate-500 cursor-not-allowed"
+                  name.trim() ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-500 cursor-not-allowed"
                 )}
               >
                 <FaSave className="text-xs" aria-hidden="true" />
@@ -1452,33 +1145,15 @@ function SaveModal({ initialValue = "", onSave, onClose }) {
 }
 
 /* -------------------------------------------
-   Styles injection
+   Styles
 ------------------------------------------- */
 const COMPONENT_STYLES = `
-  @keyframes toast-in {
-    from { opacity: 0; transform: translateY(6px) }
-    to { opacity: 1; transform: translateY(0) }
-  }
-  @keyframes fade-in {
-    from { opacity: 0 }
-    to { opacity: 1 }
-  }
-  @keyframes scale-in {
-    from { opacity: 0.6; transform: scale(0.98) }
-    to { opacity: 1; transform: scale(1) }
-  }
-  @keyframes dropdown-in {
-    from { opacity: 0; transform: translateY(-4px) scale(0.98) }
-    to { opacity: 1; transform: translateY(0) scale(1) }
-  }
-  @keyframes dropdown-out {
-    from { opacity: 1; transform: translateY(0) scale(1) }
-    to { opacity: 0; transform: translateY(-4px) scale(0.98) }
-  }
-  @keyframes caret-blink {
-    0%, 49% { opacity: 1 }
-    50%, 100% { opacity: 0 }
-  }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: translateY(0) } }
+  @keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes scale-in { from { opacity: 0.6; transform: scale(0.98) } to { opacity: 1; transform: scale(1) } }
+  @keyframes dropdown-in { from { opacity: 0; transform: translateY(-4px) scale(0.98) } to { opacity: 1; transform: translateY(0) scale(1) } }
+  @keyframes dropdown-out { from { opacity: 1; transform: translateY(0) scale(1) } to { opacity: 0; transform: translateY(-4px) scale(0.98) } }
+  @keyframes caret-blink { 0%,49% { opacity: 1 } 50%,100% { opacity: 0 } }
 
   .animate-[toast-in_240ms_ease-out] { animation: toast-in 0.24s ease-out both; }
   .animate-fade-in { animation: fade-in 0.16s ease-out both; }
@@ -1491,10 +1166,9 @@ const COMPONENT_STYLES = `
   .no-scrollbar::-webkit-scrollbar { display: none; }
 `;
 
-// Inject styles if not already present
 if (typeof document !== "undefined" && !document.getElementById("improved-filters-panel-styles")) {
-  const styleElement = document.createElement("style");
-  styleElement.id = "improved-filters-panel-styles";
-  styleElement.textContent = COMPONENT_STYLES;
-  document.head.appendChild(styleElement);
+  const style = document.createElement("style");
+  style.id = "improved-filters-panel-styles";
+  style.textContent = COMPONENT_STYLES;
+  document.head.appendChild(style);
 }

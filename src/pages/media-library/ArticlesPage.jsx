@@ -1,6 +1,61 @@
-import { useState, useEffect, useMemo } from 'react';
-import ArticleLibrary from '../media-library/index';
-import axios from 'axios';
+// ------------------------------
+// File: src/pages/ArticlesPage.jsx
+// - Charge la liste initiale d’articles (affichage rapide)
+// - Fournit fetchArticlesWithFilters au composant ArticleLibrary
+// - Normalise toujours "filters" pour éviter toute erreur
+// ------------------------------
+import { useState, useEffect, useMemo } from "react";
+import ArticleLibrary from "../media-library/index"; // adapte ce chemin si besoin
+import axios from "axios";
+
+/** Forme par défaut des filtres */
+const DEFAULT_FILTERS = {
+  categories: [],
+  tags: [],
+  authors: [],
+  featuredOnly: false,
+  stickyOnly: false,
+  unreadOnly: false, // côté client seulement
+  dateFrom: "",
+  dateTo: "",
+  ratingMin: 0,
+  ratingMax: 5,
+};
+
+/** Force n’importe quelle valeur en filtre “propre” et jamais undefined */
+function toSafeFilters(maybe) {
+  const f = maybe && typeof maybe === "object" ? maybe : {};
+  return {
+    categories: Array.isArray(f.categories) ? f.categories : [],
+    tags: Array.isArray(f.tags) ? f.tags : [],
+    authors: Array.isArray(f.authors) ? f.authors : [],
+    featuredOnly: !!f.featuredOnly,
+    stickyOnly: !!f.stickyOnly,
+    unreadOnly: !!f.unreadOnly,
+    dateFrom: typeof f.dateFrom === "string" ? f.dateFrom : "",
+    dateTo: typeof f.dateTo === "string" ? f.dateTo : "",
+    ratingMin: Number.isFinite(f.ratingMin) ? f.ratingMin : 0,
+    ratingMax: Number.isFinite(f.ratingMax) ? f.ratingMax : 5,
+  };
+}
+
+/** Test “entier-like” (ex: 12 ou "12") */
+const isIntegerLike = (v) => {
+  if (Number.isInteger(v)) return true;
+  if (typeof v === "string" && v.trim() !== "" && Number.isInteger(Number(v))) return true;
+  return false;
+};
+
+/** Sépare un tableau de valeurs en IDs numériques et NOMS/SLUGS (strings) */
+function splitIdsAndNames(arr = []) {
+  const ids = [];
+  const names = [];
+  for (const v of arr) {
+    if (isIntegerLike(v)) ids.push(String(parseInt(v, 10)));
+    else if (v != null && String(v).trim() !== "") names.push(String(v).trim());
+  }
+  return { ids, names };
+}
 
 function ArticlesPage() {
   const [articles, setArticles] = useState([]);
@@ -11,14 +66,14 @@ function ArticlesPage() {
     const instance = axios.create({
       baseURL: import.meta.env.VITE_API_BASE_URL,
       headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
+        Accept: "application/json",
+        "Content-Type": "application/json",
       },
       timeout: 20000,
     });
 
     instance.interceptors.request.use((config) => {
-      const token = localStorage.getItem('tokenGuard');
+      const token = localStorage.getItem("tokenGuard");
       if (token) config.headers.Authorization = `Bearer ${token}`;
       return config;
     });
@@ -26,16 +81,19 @@ function ArticlesPage() {
     return instance;
   }, []);
 
+  // Chargement initial simple (liste brute)
   useEffect(() => {
     const fetchArticles = async () => {
       try {
         setLoading(true);
-        const res = await axiosInstance.get('/articles');
-        if (!res.data || !res.data.data) throw new Error('Format de réponse invalide');
-        setArticles(res.data.data || []);
+        const res = await axiosInstance.get("/articles");
+        const payload = res?.data || {};
+        const list = payload.data || payload || [];
+        if (!Array.isArray(list)) throw new Error("Format de réponse invalide");
+        setArticles(list);
       } catch (err) {
-        console.error('Erreur lors du chargement:', err);
-        setError(err.message || 'Erreur inconnue');
+        console.error("Erreur lors du chargement:", err);
+        setError(err?.message || "Erreur inconnue");
       } finally {
         setLoading(false);
       }
@@ -43,56 +101,71 @@ function ArticlesPage() {
     fetchArticles();
   }, [axiosInstance]);
 
-  // Requête “serveur” avec filtres/tri/facettes
+  // Requête “serveur” avec filtres/tri/facettes — robuste
   const fetchArticlesWithFilters = async ({ page, perPage, search, filters, sort }) => {
     try {
+      const f = toSafeFilters(filters); // ← NE PEUT PLUS ÊTRE undefined
+
+      // Construit les paramètres selon ton contrôleur Laravel
       const params = new URLSearchParams({
         page: String(page),
         per_page: String(perPage),
-        search: search || '',
-        include_facets: '1',
-        facet_fields: 'categories,tags,authors',
+        include_facets: "1",
+        facet_fields: "categories,tags,authors",
       });
 
-      // Catégories (IDs si possible)
-      if (filters.categories?.length) {
-        const areIds = filters.categories.some((v) => Number.isInteger(v));
-        params.append(areIds ? 'category_ids' : 'categories', filters.categories.join(','));
+      if (search && String(search).trim() !== "") {
+        params.set("search", String(search).trim());
       }
 
-      // Tags (IDs si possible)
-      if (filters.tags?.length) {
-        const areIds = filters.tags.some((v) => Number.isInteger(v));
-        params.append(areIds ? 'tag_ids' : 'tags', filters.tags.join(','));
+      // Catégories : autorise mélange IDs / noms
+      if (f.categories.length) {
+        const { ids: catIds, names: catNames } = splitIdsAndNames(f.categories);
+        if (catIds.length) params.append("category_ids", catIds.join(","));
+        if (catNames.length) params.append("categories", catNames.join(","));
       }
 
-      // Auteurs (IDs)
-      if (filters.authors?.length) {
-        const ids = filters.authors.filter((v) => Number.isInteger(v));
-        if (ids.length) params.append('author_ids', ids.join(','));
+      // Tags : autorise mélange IDs / noms
+      if (f.tags.length) {
+        const { ids: tagIds, names: tagNames } = splitIdsAndNames(f.tags);
+        if (tagIds.length) params.append("tag_ids", tagIds.join(","));
+        if (tagNames.length) params.append("tags", tagNames.join(","));
       }
 
-      if (filters.featuredOnly) params.append('featured', '1');
-      if (filters.stickyOnly)  params.append('sticky', '1');
-      if (filters.dateFrom)    params.append('date_from', filters.dateFrom);
-      if (filters.dateTo)      params.append('date_to', filters.dateTo);
-      if (filters.ratingMin > 0) params.append('rating_min', String(filters.ratingMin));
-      if (filters.ratingMax < 5) params.append('rating_max', String(filters.ratingMax));
+      // Auteurs : le contrôleur accepte surtout des IDs (author_id / author_ids)
+      if (f.authors.length) {
+        const { ids: authorIds } = splitIdsAndNames(f.authors);
+        if (authorIds.length) params.append("author_ids", authorIds.join(","));
+        // (si tu veux supporter des noms côté back, il faudra adapter le contrôleur)
+      }
 
-      if (sort?.length) {
-        params.append('sort', sort.map((s) => `${s.key},${s.dir}`).join(';'));
+      // Flags & bornes
+      if (f.featuredOnly) params.append("featured", "1");
+      if (f.stickyOnly)  params.append("sticky", "1");
+      if (f.dateFrom)    params.append("date_from", f.dateFrom);
+      if (f.dateTo)      params.append("date_to", f.dateTo);
+      if (f.ratingMin > 0) params.append("rating_min", String(f.ratingMin));
+      if (f.ratingMax < 5) params.append("rating_max", String(f.ratingMax));
+
+      // Tri multi-colonnes
+      if (Array.isArray(sort) && sort.length) {
+        params.append(
+          "sort",
+          sort.map((s) => `${s.key},${s.dir}`).join(";")
+        );
       }
 
       const res = await axiosInstance.get(`/articles?${params.toString()}`);
-      if (!res.data || !res.data.data) throw new Error('Format de réponse invalide');
+      const payload = res?.data || {};
 
+      // format attendu: { data: [...], meta: { total, facets } } ou { data: [...], total, facets }
       return {
-        data: res.data.data || [],
-        total: res.data.meta?.total || res.data.total || 0,
-        facets: res.data.meta?.facets || null,
+        data: payload.data || [],
+        total: payload.meta?.total ?? payload.total ?? 0,
+        facets: payload.meta?.facets ?? payload.facets ?? null,
       };
     } catch (err) {
-      console.error('Erreur lors du filtrage:', err);
+      console.error("Erreur lors du filtrage:", err);
       return { data: [], total: 0, facets: null };
     }
   };
