@@ -3,9 +3,8 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import axios from "axios";
 import {
   FaUser, FaSpinner, FaTrash, FaThumbsUp, FaThumbsDown,
-  FaCheck, FaTimes, FaBan, FaStar, FaEnvelope, FaInfoCircle
+  FaCheck, FaTimes, FaBan, FaStar, FaEnvelope, FaSmile, FaEyeSlash
 } from "react-icons/fa";
-import { toast } from "../../../component/toast/toast"; // ⬅️ ajuste le chemin si besoin
 
 /* ------------------ axios helpers ------------------ */
 function makeAxios(token) {
@@ -49,6 +48,71 @@ function extractLaravelError(err) {
     if (lines.length) return lines.join('\n');
   }
   return d?.message || err.message || 'Erreur inconnue';
+}
+
+/* ------------------ Emoji picker (no deps) ------------------ */
+function EmojiPopover({ onSelect, onClose, title = "Emojis pro" }) {
+  const EMOJIS = [
+     "😀","😁","😂","🤣","😊","😍","😘","😎","🙂","🙃","🤩","😇","🤔","🤨","😅","😭","😡",
+    "👍","👎","🙏","👏","💯","🔥","✨","🎉","✅","❌","⚠️","💡","📌","📣","⏳","📅","📝","🔗","❤️","🚀",
+    "📚","📖","🗂️","🗃️","🗄️","🗒️","📑","📄","🧾","📎","🖇️","📌","🏷️",
+    "📝","🖊️","🖋️","🖨️","🧮","📊","📈","📉","📅","⏰","⏳","📍","🔗","🔒",
+    "💼","📬","📨","📣","🔍","✅","❌","⚠️","💡","🤝","🚀","🏛️","⚖️","🧠","🧩","🧪","🧬",
+    "🔧","🔨","🛠️","💻","🖥️","🗑️","📡","🌐","💾","📀","🎯","📷","🎥","🎬","🎨",
+    "🎵","🎶","🎼","🎤","🎧","📱","📲","💡","🔔","🛎️","💰","💳","🛒","🏆","🥇","🥈","🥉",
+    "⚽","🏀","🏈","⚾","🎾","🏐","🏉","🎱","🏓","🏸","🥅","⛳","🏒","🏑","🥍","🏏",
+    "🚴‍♂️","🚴‍♀️","🏋️‍♂️","🏋️‍♀️","🤸‍♂️","🤸‍♀️","🤼‍♂️","🤼‍♀️","🤽‍♂️","🤽‍♀️","🤾‍♂️","🤾‍♀️",
+  ];
+  return (
+    <div
+      className="absolute bottom-full mb-2 right-0 w-72 max-h-64 overflow-auto bg-white border border-gray-200 rounded-xl shadow-lg p-2 z-50"
+      role="dialog"
+      aria-label="Sélecteur d’emojis"
+      onClick={(e)=>e.stopPropagation()}
+    >
+      <div className="flex items-center justify-between mb-2 px-1">
+        <span className="text-xs font-medium text-gray-600">{title}</span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 hover:text-gray-700 p-1 rounded"
+          aria-label="Fermer"
+          title="Fermer"
+        >
+          <FaTimes />
+        </button>
+      </div>
+      <div className="grid grid-cols-8 gap-1 text-xl">
+        {EMOJIS.map(e => (
+          <button
+            key={e}
+            type="button"
+            className="hover:bg-gray-100 rounded p-1"
+            onClick={() => onSelect(e)}
+            aria-label={`emoji ${e}`}
+            title={e}
+          >
+            {e}
+          </button>
+        ))}
+      </div>
+      <div className="text-[11px] text-gray-400 mt-2 text-right">Échap pour fermer</div>
+    </div>
+  );
+}
+
+/* Insère du texte au niveau du curseur d'un <textarea> */
+function insertAtCursor(textareaEl, currentValue, toInsert, setValue) {
+  if (!textareaEl) { setValue((currentValue || "") + toInsert); return; }
+  const start = textareaEl.selectionStart ?? (currentValue?.length || 0);
+  const end = textareaEl.selectionEnd ?? (currentValue?.length || 0);
+  const next = (currentValue || "").slice(0, start) + toInsert + (currentValue || "").slice(end);
+  setValue(next);
+  requestAnimationFrame(() => {
+    textareaEl.focus();
+    const pos = start + toInsert.length;
+    textareaEl.setSelectionRange(pos, pos);
+  });
 }
 
 /* -------- Helpers pagination -------- */
@@ -108,7 +172,6 @@ function ApproveModal({ open, onClose, onConfirm, comment }) {
 }
 
 /* ------------------ /user (Laravel) ------------------ */
-/** Hook interne (fallback) si on ne passe PAS de props d'auth depuis Visualiseur */
 function useMeFromLaravel() {
   const [me, setMe] = useState({ user: null, roles: [], permissions: [] });
   const [loading, setLoading] = useState(false);
@@ -138,7 +201,7 @@ function useMeFromLaravel() {
         const roles = data?.roles || user?.roles || [];
         const permissions = data?.permissions || user?.permissions || [];
         if (!cancelled) setMe({ user, roles, permissions });
-      } catch {
+      } catch (e) {
         if (!cancelled) setMe({ user: null, roles: [], permissions: [] });
       } finally {
         if (!cancelled) setLoading(false);
@@ -173,22 +236,14 @@ export default function Comments({
   infinite = false,
   isLoading: extLoading = false,
   error: extError = null,
-
-  /** ⬇️ Nouveaux props pour injecter l’auth/permissions depuis Visualiseur */
-  meOverride = null,          // { user, roles, permissions }
-  tokenOverride = null,       // string (Bearer)
-  rightsOverride = null,      // { isModerator, canDeleteAny }
 }) {
   /* ========= Utilisateur + permissions ========= */
-  const internal = useMeFromLaravel();
-  const me = meOverride ?? internal.me;
-  const meLoading = meOverride ? false : internal.loading;
-  const token = tokenOverride ?? internal.token;
-
-  const computed = useMemo(() => computeRights(me?.permissions), [me?.permissions]);
-  const { isModerator, canDeleteAny } = rightsOverride ?? computed;
-
+  const { me, loading: meLoading, token } = useMeFromLaravel();
   const currentUser = me.user;
+  const { isModerator, canDeleteAny } = useMemo(
+    () => computeRights(me.permissions),
+    [me.permissions]
+  );
 
   /* ========= API Comments ========= */
   const axiosi = useMemo(() => makeAxios(token), [token]);
@@ -198,6 +253,9 @@ export default function Comments({
   const seed = useMemo(() => Math.random().toString(36).slice(2, 7), []);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showEmojiComment, setShowEmojiComment] = useState(false);
+  const commentRef = useRef(null);
+  const emojiCommentWrapRef = useRef(null);
 
   const [comments, setComments] = useState(() =>
     (initialComments || []).map((c, i) => normalizeComment(c, seed, i))
@@ -205,18 +263,14 @@ export default function Comments({
 
   const [replyTo, setReplyTo] = useState(null);
   const [replyText, setReplyText] = useState("");
+  const [showEmojiReply, setShowEmojiReply] = useState(false);
+  const replyRef = useRef(null);
+  const emojiReplyWrapRef = useRef(null);
 
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(extLoading);
   const [localError, setLocalError] = useState(extError);
-
-  // Auto-dismiss de l'erreur globale après 4.5s
-  useEffect(() => {
-    if (!localError) return;
-    const t = setTimeout(() => setLocalError(null), 4500);
-    return () => clearTimeout(t);
-  }, [localError]);
 
   // réponses: id -> { items, page, last_page, per_page, open, loading, error }
   const [repliesMap, setRepliesMap] = useState({});
@@ -238,9 +292,8 @@ export default function Comments({
         setHasMore(current_page < last_page);
       })
       .catch(err => {
-        const msg = extractLaravelError(err);
-        toast.error(msg, { duration: 4000, position: "top-right" });
-        setLocalError(msg);
+        console.error("Erreur chargement commentaires:", err);
+        setLocalError(extractLaravelError(err));
       })
       .finally(() => setLoading(false));
   }, [articleId, page, api, seed, perPage]);
@@ -258,8 +311,31 @@ export default function Comments({
     return () => obs.disconnect();
   }, [infinite, canLoad]);
 
+  /* ========= Fermer les popovers avec Échap + clic extérieur ========= */
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        setShowEmojiComment(false);
+        setShowEmojiReply(false);
+      }
+    };
+    const onDown = (e) => {
+      const inComment = emojiCommentWrapRef.current?.contains(e.target);
+      const inReply = emojiReplyWrapRef.current?.contains(e.target);
+      if (!inComment) setShowEmojiComment(false);
+      if (!inReply) setShowEmojiReply(false);
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mousedown", onDown);
+    };
+  }, []);
+
   /* ========= Utils ========= */
   function getRandomColor(key = "") {
+    // Gardé pour compat, mais non utilisé pour l’UI (on force le bleu).
     let hash = 0;
     for (let i = 0; i < key.length; i++) hash = key.charCodeAt(i) + ((hash << 5) - hash);
     const c = (hash & 0x00ffffff).toString(16).toUpperCase();
@@ -269,7 +345,6 @@ export default function Comments({
     const u = c?.user || {};
     const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ').trim();
     const displayName = u.username || fullName || c?.guest_name || "Anonyme";
-    theCommentStatus(c);
     const email = u.email || c?.guest_email || "";
     const avatar = u.avatar_url_full || u.avatar_url || null;
     const created = c?.created_at ? new Date(c.created_at) : null;
@@ -281,9 +356,11 @@ export default function Comments({
       email,
       avatar,
       date: created ? created.toLocaleDateString() : "—",
+      created_ts: created ? created.getTime() : 0,
       content: c?.content || c?.body || "",
-      color: getRandomColor(`${seed}${i}`),
+      color: getRandomColor(`${seed}${i}`), // non affiché, conservé pour compat
       status: c?.status || "approved",
+      featured: !!(c?.featured ?? c?.is_featured ?? c?.pinned ?? c?._pinned),
       like_count: c?.like_count ?? 0,
       dislike_count: c?.dislike_count ?? 0,
       reply_count: c?.reply_count ?? 0,
@@ -292,14 +369,13 @@ export default function Comments({
       _raw: c,
     };
   }
-  function theCommentStatus(c){ return c?.status; }
 
   const isSelf = useCallback((node) => {
-    const uid = me?.user?.id;
+    const uid = currentUser?.id;
     const ownerId = node?.author_id ?? node?._raw?.user?.id ?? node?._raw?.user_id ?? null;
     if (!uid || !ownerId) return false;
     return String(uid) === String(ownerId);
-  }, [me?.user?.id]);
+  }, [currentUser?.id]);
 
   const isVisible = useCallback((node) => {
     if (isModerator) return true;
@@ -308,7 +384,15 @@ export default function Comments({
     return false;
   }, [isModerator, isSelf]);
 
-  const visibleComments = useMemo(() => comments.filter(isVisible), [comments, isVisible]);
+  // 🔝 Les "mis en avant" en premier, puis par date desc
+  const visibleComments = useMemo(() => {
+    return [...comments]
+      .filter(isVisible)
+      .sort((a, b) => {
+        if (a.featured !== b.featured) return b.featured - a.featured;
+        return (b.created_ts || 0) - (a.created_ts || 0);
+      });
+  }, [comments, isVisible]);
 
   const canSeeDeleteFor = useCallback((node) => {
     return isModerator || canDeleteAny || isSelf(node);
@@ -317,11 +401,7 @@ export default function Comments({
   /* ========= Actions ========= */
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
-    if (!token) {
-      toast.info("Connectez-vous pour commenter.", { duration: 3000, position: "top-right" });
-      setLocalError("Authentification requise.");
-      return;
-    }
+    if (!token) { setLocalError("Authentification requise."); return; }
     const val = comment.trim();
     if (!val) return;
 
@@ -333,14 +413,9 @@ export default function Comments({
       const mapped = normalizeComment(created, seed, comments.length);
       setComments(prev => [mapped, ...prev]);
       setComment("");
-      toast.success(
-        mapped.status === "approved" ? "Commentaire publié." : "Commentaire envoyé (en attente de modération).",
-        { duration: 2500, position: "top-right" }
-      );
     } catch (err) {
-      const msg = extractLaravelError(err);
-      toast.error(msg, { duration: 4000, position: "top-right" });
-      setLocalError(msg);
+      console.error("Erreur envoi:", err);
+      setLocalError(extractLaravelError(err));
     } finally {
       setSubmitting(false);
     }
@@ -363,20 +438,14 @@ export default function Comments({
       } else {
         setComments(prev => prev.filter(c => c.id !== id));
       }
-      toast.success("Commentaire supprimé.", { duration: 2200, position: "top-right" });
     } catch (err) {
-      const msg = extractLaravelError(err);
-      toast.error(msg, { duration: 4000, position: "top-right" });
-      setLocalError(msg);
+      console.error("Erreur suppression:", err);
+      setLocalError(extractLaravelError(err));
     }
   }, [api]);
 
   const handleReply = useCallback(async (parentId, content) => {
-    if (!token) {
-      toast.info("Connectez-vous pour répondre.", { duration: 3000, position: "top-right" });
-      setLocalError("Authentification requise.");
-      return;
-    }
+    if (!token) { setLocalError("Authentification requise."); return; }
     const text = (content || "").trim();
     if (!text) return;
 
@@ -388,15 +457,9 @@ export default function Comments({
         return { ...prev, [parentId]: { ...r, open: true, items: [mapped, ...(r.items || [])] } };
       });
       setComments(prev => prev.map(c => c.id === parentId ? { ...c, reply_count: (c.reply_count || 0) + 1 } : c));
-
-      toast.success(
-        mapped.status === "approved" ? "Réponse publiée." : "Réponse envoyée (en attente de modération).",
-        { duration: 2500, position: "top-right" }
-      );
     } catch (err) {
-      const msg = extractLaravelError(err);
-      toast.error(msg, { duration: 4000, position: "top-right" });
-      setLocalError(msg);
+      console.error("Erreur réponse:", err);
+      setLocalError(extractLaravelError(err));
     }
   }, [api, seed, token]);
 
@@ -413,9 +476,8 @@ export default function Comments({
       const action = target?._liked ? "unlike" : "like";
       await api.like(id, action === "like" ? "like" : "unlike");
     } catch (err) {
-      const msg = extractLaravelError(err);
-      toast.error(msg, { duration: 3000, position: "top-right" });
-      setLocalError(msg);
+      console.error("Erreur like:", err);
+      setLocalError(extractLaravelError(err));
     }
   }, [api, comments]);
 
@@ -432,9 +494,8 @@ export default function Comments({
       const action = target?._disliked ? "undislike" : "dislike";
       await api.dislike(id, action === "dislike" ? "dislike" : "undislike");
     } catch (err) {
-      const msg = extractLaravelError(err);
-      toast.error(msg, { duration: 3000, position: "top-right" });
-      setLocalError(msg);
+      console.error("Erreur dislike:", err);
+      setLocalError(extractLaravelError(err));
     }
   }, [api, comments]);
 
@@ -447,11 +508,9 @@ export default function Comments({
     try {
       const updated = await api.approve(approveFor.id, notes || null);
       setComments(prev => prev.map(c => c.id === approveFor.id ? normalizeComment(updated, seed) : c));
-      toast.success("Commentaire approuvé.", { duration: 2200, position: "top-right" });
       closeApproveModal();
     } catch (err) {
-      const msg = extractLaravelError(err);
-      toast.error(msg, { duration: 4000, position: "top-right" });
+      setLocalError(extractLaravelError(err));
     }
   };
 
@@ -459,10 +518,8 @@ export default function Comments({
     try {
       const updated = await api.reject(id, notes);
       setComments(prev => prev.map(c => c.id === id ? normalizeComment(updated, seed) : c));
-      toast.info("Commentaire rejeté.", { duration: 2400, position: "top-right" });
     } catch (err) {
-      const msg = extractLaravelError(err);
-      toast.error(msg, { duration: 4000, position: "top-right" });
+      setLocalError(extractLaravelError(err));
     }
   }, [api, seed]);
 
@@ -470,10 +527,8 @@ export default function Comments({
     try {
       const updated = await api.spam(id, notes);
       setComments(prev => prev.map(c => c.id === id ? normalizeComment(updated, seed) : c));
-      toast.info("Marqué comme spam.", { duration: 2200, position: "top-right" });
     } catch (err) {
-      const msg = extractLaravelError(err);
-      toast.error(msg, { duration: 4000, position: "top-right" });
+      setLocalError(extractLaravelError(err));
     }
   }, [api, seed]);
 
@@ -481,10 +536,8 @@ export default function Comments({
     try {
       const updated = await api.feature(id, featured);
       setComments(prev => prev.map(c => c.id === id ? normalizeComment(updated, seed) : c));
-      toast.success("Commentaire mis en avant.", { duration: 2200, position: "top-right" });
     } catch (err) {
-      const msg = extractLaravelError(err);
-      toast.error(msg, { duration: 4000, position: "top-right" });
+      setLocalError(extractLaravelError(err));
     }
   }, [api, seed]);
 
@@ -508,7 +561,7 @@ export default function Comments({
           ...prev,
           [parentId]: {
             ...r,
-            items: merged, // on garde tout, filtre à l’affichage
+            items: merged,
             page: current_page,
             last_page,
             per_page: per,
@@ -519,11 +572,9 @@ export default function Comments({
         };
       });
     } catch (err) {
-      const msg = extractLaravelError(err);
-      toast.error(msg, { duration: 3500, position: "top-right" });
       setRepliesMap(prev => {
         const r = prev[parentId] || {};
-        return { ...prev, [parentId]: { ...r, loading: false, error: msg } };
+        return { ...prev, [parentId]: { ...r, loading: false, error: extractLaravelError(err) } };
       });
     }
   }, [api, seed]);
@@ -553,7 +604,7 @@ export default function Comments({
   /* ---------------- UI ---------------- */
   const meBanner = currentUser && (
     <div className="mb-4 flex items-center gap-3 text-sm text-gray-700 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2">
-      <div className="w-6 h-6 rounded-full overflow-hidden bg-blue-200 flex items-center justify-center text-white">
+      <div className="w-6 h-6 rounded-full overflow-hidden border border-blue-200 bg-blue-50 flex items-center justify-center text-blue-700">
         {currentUser.avatar_url ? (
           <img src={currentUser.avatar_url} alt="avatar" className="w-full h-full object-cover" />
         ) : (
@@ -582,22 +633,8 @@ export default function Comments({
         </div>
       ) : meBanner}
 
-     {localError && (
-        <div
-          role="alert"
-          className="relative mb-4 p-3 pl-4 pr-10 bg-red-100 border border-red-200 text-red-700 rounded-md text-sm whitespace-pre-line"
-        >
-          <span className="block">{localError}</span>
-          <button
-            type="button"
-            onClick={() => setLocalError(null)}
-            aria-label="Fermer l’alerte"
-            className="absolute top-2.5 right-2.5 inline-flex items-center justify-center w-6 h-6 rounded hover:bg-red-200/60 focus:outline-none"
-            title="Fermer"
-          >
-            <FaTimes className="w-3.5 h-3.5" />
-          </button>
-        </div>
+      {localError && (
+        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md text-sm whitespace-pre-line">{localError}</div>
       )}
 
       <div className="comment-box bg-white p-5 rounded-xl mb-6 border border-gray-200/50 shadow-sm overflow-y-auto" style={{ maxHeight: "520px" }}>
@@ -615,12 +652,20 @@ export default function Comments({
         {visibleComments.map((c) => {
           const r = repliesMap[c.id] || {};
           const visibleReplies = (r.items || []).filter(isVisible);
-          const hasVisibleReplies = visibleReplies.length > 0;
-          const showToggle = (!r.open && (c.reply_count ?? 0) > 0) || (r.open && hasVisibleReplies);
+          const hasReplies = (c.reply_count ?? 0) > 0 || visibleReplies.length > 0;
+          const showToggle = hasReplies || r.open;
           const showDeleteThis = canSeeDeleteFor(c);
 
+          // 🎨 Style spécial pour les mis en avant (racine)
+          const wrapperBase = "group relative flex mb-6 pb-6 border-b last:border-b-0 last:mb-0 last:pb-0";
+          const wrapperFeatured =
+            "bg-amber-50/60 border-amber-300 rounded-xl ring-1 ring-amber-300/60 p-3 -mx-3 px-4";
+          const borderLine = "border-b border-gray-200/50";
+          const containerClass = `${wrapperBase} ${c.featured ? wrapperFeatured : borderLine}`;
+
           return (
-          <div key={c.id} className="group relative flex mb-6 pb-6 border-b border-gray-200/50 last:border-b-0 last:mb-0 last:pb-0">
+          <div key={c.id} className={containerClass}>
+            {/* Actions au survol (racine) */}
             {(showDeleteThis || isModerator) && (
               <div className="absolute right-0 top-0 flex items-center gap-2 bg-white/90 backdrop-blur px-2 py-1 rounded-bl-lg border border-gray-200
                               opacity-0 group-hover:opacity-100 transition-opacity duration-150">
@@ -652,9 +697,16 @@ export default function Comments({
                         <FaBan /> <span>Spam</span>
                       </div>
                     </button>
-                    <button onClick={() => handleFeature(c.id, true)} className="text-yellow-600 hover:text-yellow-800 text-xs" title="Mettre en avant">
+
+                    {/* Toggle "En avant" */}
+                    <button
+                      onClick={() => handleFeature(c.id, !c.featured)}
+                      className={`${c.featured ? "text-amber-600 hover:text-amber-700" : "text-yellow-600 hover:text-yellow-800"} text-xs`}
+                      title={c.featured ? "Retirer de l'avant" : "Mettre en avant"}
+                    >
                       <div className="flex flex-col items-center">
-                        <FaStar /> <span>En avant</span>
+                        <FaStar />
+                        <span>{c.featured ? "Retirer" : "En avant"}</span>
                       </div>
                     </button>
                   </>
@@ -662,15 +714,12 @@ export default function Comments({
               </div>
             )}
 
-            {/* Avatar */}
-            <div
-              className="w-10 h-10 rounded-full mr-3 flex-shrink-0 overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center"
-              style={{ backgroundColor: !c.avatar ? c.color : undefined }}
-            >
+            {/* Avatar (bleu si pas d'image) */}
+            <div className="w-10 h-10 rounded-full mr-3 flex-shrink-0 overflow-hidden border border-blue-200 bg-blue-100 flex items-center justify-center">
               {c.avatar ? (
                 <img src={c.avatar} alt="avatar" className="w-full h-full object-cover" onError={(e)=>{ e.currentTarget.style.display='none'; }} />
               ) : (
-                <FaUser className="text-white text-sm" />
+                <FaUser className="text-blue-600 text-sm" />
               )}
             </div>
 
@@ -678,26 +727,20 @@ export default function Comments({
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
+                  <p className="text-sm font-medium text-gray-900 truncate flex items-center gap-2">
                     {c.author}
+                    {c.featured && (
+                      <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                        <FaStar className="opacity-90" />
+                        Mis en avant
+                      </span>
+                    )}
                     {c.status !== "approved" && (
-                      <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 align-middle">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 align-middle">
                         {c.status === "pending" ? "En modération" : c.status}
                       </span>
                     )}
                   </p>
-
-                  {/* Pastille de visibilité locale */}
-                  {c.status !== "approved" && (
-                    <div className="mt-1 text-[11px] text-gray-600 inline-flex items-center gap-1">
-                      <FaInfoCircle className="opacity-70" />
-                      {isModerator
-                        ? "Visible pour la modération"
-                        : (isSelf(c) ? "Visible uniquement par vous" : null)
-                      }
-                    </div>
-                  )}
-
                   {c.email && (
                     <p className="text-xs text-gray-500 flex items-center mt-0.5">
                       <FaEnvelope className="mr-1 opacity-70" /> {c.email}
@@ -706,6 +749,16 @@ export default function Comments({
                 </div>
                 <p className="text-xs text-gray-500">{c.date}</p>
               </div>
+
+              {/* Badge AU-DESSUS du contenu quand non approuvé et visible par l'auteur */}
+              {c.status !== "approved" && isSelf(c) && (
+                <div className="mt-1">
+                  <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                    <FaEyeSlash className="opacity-70" />
+                    Vous seul(e) pouvez voir ce commentaire
+                  </span>
+                </div>
+              )}
 
               <p className="text-sm mt-1 whitespace-pre-line break-words">{c.content}</p>
 
@@ -726,11 +779,9 @@ export default function Comments({
               {showToggle && (
                 <div className="mt-2">
                   {r.open ? (
-                    hasVisibleReplies ? (
-                      <button onClick={() => closeReplies(c.id)} className="text-xs text-gray-600 hover:text-blue-700">
-                        Masquer les réponses
-                      </button>
-                    ) : null
+                    <button onClick={() => closeReplies(c.id)} className="text-xs text-gray-600 hover:text-blue-700">
+                      Masquer les réponses
+                    </button>
                   ) : (
                     <button onClick={() => openReplies(c.id)} className="text-xs text-gray-600 hover:text-blue-700">
                       Afficher les réponses{typeof c.reply_count === "number" ? ` (${c.reply_count})` : ""}
@@ -739,16 +790,8 @@ export default function Comments({
                 </div>
               )}
 
-              {/* Pastille quand ouvert mais 0 réponse visible */}
-              {r.open && !hasVisibleReplies && (
-                <div className="mt-2 inline-flex items-center gap-1 text-xs text-gray-600 bg-gray-50 border border-gray-200 px-2 py-1 rounded-full">
-                  <FaInfoCircle className="opacity-70" />
-                  Aucune réponse visible
-                </div>
-              )}
-
               {/* Bloc réponses */}
-              {(r.open && hasVisibleReplies) && (
+              {r.open && (
                 <div className="mt-3 pl-6 border-l border-gray-200">
                   {r.error && (
                     <div className="mb-2 p-2 bg-red-50 text-red-700 text-xs rounded">{r.error}</div>
@@ -794,15 +837,12 @@ export default function Comments({
                           </div>
                         )}
 
-                        {/* Avatar reply */}
-                        <div
-                          className="w-8 h-8 rounded-full mr-3 flex-shrink-0 overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center"
-                          style={{ backgroundColor: !rep.avatar ? rep.color : undefined }}
-                        >
+                        {/* Avatar réponse (bleu si pas d'image) */}
+                        <div className="w-8 h-8 rounded-full mr-3 flex-shrink-0 overflow-hidden border border-blue-200 bg-blue-100 flex items-center justify-center">
                           {rep.avatar ? (
                             <img src={rep.avatar} alt="avatar" className="w-full h-full object-cover" onError={(e)=>{ e.currentTarget.style.display='none'; }} />
                           ) : (
-                            <FaUser className="text-white text-xs" />
+                            <FaUser className="text-blue-600 text-xs" />
                           )}
                         </div>
 
@@ -817,17 +857,6 @@ export default function Comments({
                                   </span>
                                 )}
                               </p>
-
-                              {rep.status !== "approved" && (
-                                <div className="mt-0.5 text-[10px] text-gray-600 inline-flex items-center gap-1">
-                                  <FaInfoCircle className="opacity-70" />
-                                  {isModerator
-                                    ? "Visible pour la modération"
-                                    : (isSelf(rep) ? "Visible uniquement par vous" : null)
-                                  }
-                                </div>
-                              )}
-
                               {rep.email && (
                                 <p className="text-[11px] text-gray-500 flex items-center mt-0.5">
                                   <FaEnvelope className="mr-1 opacity-70" /> {rep.email}
@@ -855,7 +884,7 @@ export default function Comments({
                     );
                   })}
 
-                  {/* pagination réponses */}
+                  {/* Btn charger plus de réponses */}
                   {r.page < (r.last_page || 1) && !r.loading && (
                     <div className="mt-1">
                       <button
@@ -873,6 +902,60 @@ export default function Comments({
                       Chargement des réponses…
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* zone réponse rapide */}
+              {replyTo === c.id && (
+                <div className="mt-3">
+                  <div className="relative" ref={emojiReplyWrapRef}>
+                    <textarea
+                      ref={replyRef}
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      onFocus={() => setShowEmojiReply(false)}
+                      onClick={() => setShowEmojiReply(false)}
+                      className="w-full border border-gray-300 rounded-xl p-2 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                      rows="2"
+                      placeholder="Votre réponse…"
+                    />
+                    <div className="absolute right-3 bottom-3">
+                      <div className="relative select-none">
+                        {showEmojiReply && (
+                          <EmojiPopover
+                            onSelect={(emo) => {
+                              insertAtCursor(replyRef.current, replyText, emo, setReplyText);
+                              setShowEmojiReply(false);
+                            }}
+                            onClose={() => setShowEmojiReply(false)}
+                            title="Emojis de réponse"
+                          />
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setShowEmojiReply(v => !v); }}
+                          className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600"
+                          title="Insérer un emoji"
+                        >
+                          <FaSmile />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={async () => { await handleReply(c.id, replyText); setReplyText(""); setReplyTo(null); setShowEmojiReply(false); }}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs"
+                    >
+                      Répondre
+                    </button>
+                    <button
+                      onClick={() => { setReplyText(""); setReplyTo(null); setShowEmojiReply(false); }}
+                      className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs"
+                    >
+                      Annuler
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -902,27 +985,61 @@ export default function Comments({
 
       {/* Formulaire d’ajout */}
       <div className="flex items-start">
-        <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center mr-3 flex-shrink-0 overflow-hidden">
+        {/* Avatar utilisateur (bleu si pas d'image) */}
+        <div className="w-10 h-10 rounded-full flex items-center justify-center mr-3 flex-shrink-0 overflow-hidden border border-blue-200 bg-blue-100">
           {currentUser?.avatar_url ? (
             <img src={currentUser.avatar_url} alt="avatar" className="w-full h-full object-cover" />
           ) : (
-            <FaUser className="text-gray-600 text-sm"/>
+            <FaUser className="text-blue-600 text-sm"/>
           )}
         </div>
+
         <form className="flex-1" onSubmit={handleSubmit}>
           {!token && (
             <div className="mb-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
               Vous devez être connecté pour publier un commentaire.
             </div>
           )}
-          <textarea
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            className="w-full border border-gray-300 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-            rows="2"
-            placeholder={token ? "Ajouter un commentaire…" : "Connectez-vous pour commenter…"}
-            disabled={submitting || !token}
-          />
+
+          <div className="relative" ref={emojiCommentWrapRef}>
+            <textarea
+              ref={commentRef}
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              onFocus={() => setShowEmojiComment(false)}
+              onClick={() => setShowEmojiComment(false)}
+              className="w-full border border-gray-300 rounded-xl p-3 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              rows="2"
+              placeholder={token ? "Ajouter un commentaire…" : "Connectez-vous pour commenter…"}
+              disabled={submitting || !token}
+            />
+
+            {/* Bouton + popover emoji */}
+            <div className="absolute right-3 bottom-3">
+              <div className="relative select-none">
+                {showEmojiComment && (
+                  <EmojiPopover
+                    onSelect={(emo) => {
+                      insertAtCursor(commentRef.current, comment, emo, setComment);
+                      setShowEmojiComment(false);
+                    }}
+                    onClose={() => setShowEmojiComment(false)}
+                    title="Emojis de commentaire"
+                  />
+                )}
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setShowEmojiComment(v => !v); }}
+                  className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 disabled:opacity-50"
+                  title="Insérer un emoji"
+                  disabled={!token || submitting}
+                >
+                  <FaSmile />
+                </button>
+              </div>
+            </div>
+          </div>
+
           <button
             type="submit"
             disabled={submitting || !comment.trim() || !token}

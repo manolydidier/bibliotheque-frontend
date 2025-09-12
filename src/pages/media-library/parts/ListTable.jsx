@@ -1,8 +1,17 @@
+// ------------------------------
+// File: media-library/parts/ListTable.jsx
+// Tableau list view — compat Laravel API
+// + Partage intégré via ShareButton (bouton icône)
+// ------------------------------
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { FaRegStar, FaStar, FaEye, FaShareAlt, FaUser, FaThumbsUp, FaCalendarAlt, FaTag } from "react-icons/fa";
+import {
+  FaRegStar, FaStar, FaEye, FaThumbsUp, FaCalendarAlt, FaTag, FaUser
+} from "react-icons/fa";
 import { SortIcon } from "../shared/atoms/atoms";
 import { isFav, toggleFav, isRead, markRead } from "../shared/store/markers";
+import ShareButton from "../Visualiseur/share/ShareButton";
+
 
 function getCategoryFromTitle(title) {
   const titleLower = (title || '').toLowerCase();
@@ -43,7 +52,11 @@ const TableHeaderCell = ({ label, sortKey, sort, setSort }) => {
     });
   };
   return (
-    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-slate-600 cursor-pointer select-none hover:bg-slate-100/50" onClick={toggle}>
+    <th
+      scope="col"
+      className="px-3 py-2 text-left text-xs font-medium text-slate-600 cursor-pointer select-none hover:bg-slate-100/50"
+      onClick={toggle}
+    >
       <div className="flex items-center gap-1">
         {label}
         <SortIcon state={state} />
@@ -87,6 +100,8 @@ export default function ListTable({ rows, sort, setSort, routeBase }) {
             const formattedDate = article.published_at ? new Date(article.published_at).toLocaleDateString('fr-FR', {
               day: '2-digit', month: '2-digit', year: 'numeric'
             }) : '—';
+
+            const shareUrl = (article.url || (typeof window !== "undefined" ? `${window.location.origin}${to}` : to));
 
             return (
               <tr key={article.id} className="hover:bg-slate-50/50 transition-colors duration-200 group">
@@ -222,6 +237,7 @@ export default function ListTable({ rows, sort, setSort, routeBase }) {
 
                 <td className="px-3 py-4 text-right">
                   <div className="flex items-center gap-1 justify-end">
+                    {/* Favori */}
                     <button
                       className={`p-2 rounded-lg border transition-all duration-200 hover:scale-105 ${
                         fav ? 'text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100'
@@ -233,6 +249,7 @@ export default function ListTable({ rows, sort, setSort, routeBase }) {
                       {fav ? <FaStar size={14} /> : <FaRegStar size={14} />}
                     </button>
 
+                    {/* Ouvrir */}
                     <Link
                       to={to}
                       className="p-2 rounded-lg border text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100 hover:scale-105 transition-all duration-200 inline-flex items-center justify-center"
@@ -242,20 +259,19 @@ export default function ListTable({ rows, sort, setSort, routeBase }) {
                       <FaEye size={14} />
                     </Link>
 
-                    <button
+                    {/* Partage (icône) */}
+                    <ShareButton
+                      variant="icon"
                       className="p-2 rounded-lg border text-purple-600 bg-purple-50 border-purple-200 hover:bg-purple-100 hover:scale-105 transition-all duration-200"
-                      onClick={() => {
-                        const url = `${window.location.origin}${to}`;
-                        if (navigator.share) {
-                          navigator.share({ title: article.title, url });
-                        } else if (navigator.clipboard) {
-                          navigator.clipboard.writeText(url);
-                        }
-                      }}
-                      title="Partager"
-                    >
-                      <FaShareAlt size={14} />
-                    </button>
+                      title={article.title}
+                      excerpt={article.excerpt}
+                      url={shareUrl}
+                      articleId={article.id}
+                      channels={["email", "emailAuto", "facebook", "whatsapp", "whatsappNumber"]}
+                      emailEndpoint="/share/email"
+                      defaultWhatsNumber="33612345678"
+                      titleAttr="Partager"
+                    />
                   </div>
                 </td>
               </tr>

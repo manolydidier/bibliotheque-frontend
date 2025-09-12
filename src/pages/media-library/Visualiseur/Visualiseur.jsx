@@ -1,11 +1,12 @@
 // src/media-library/Visualiseur.jsx
-import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  FaBars, FaUpload, FaUser, FaFolderOpen,
+  FaFolderOpen,
   FaArrowLeft, FaArrowRight, FaRedo, FaExpand, FaDownload, FaShareAlt,
   FaExternalLinkAlt, FaChevronLeft, FaChevronRight, FaSearchPlus, FaSearchMinus,
-  FaFilePdf, FaFileExcel, FaFileWord, FaImage, FaFileVideo, FaFile, FaTag, FaStar, FaClock, FaEye, FaComment, FaChartBar, FaHistory, FaInfoCircle, FaSearch, FaPlus, FaPlay, FaTimes
+  FaFilePdf, FaFileExcel, FaFileWord, FaImage, FaFileVideo, FaFile, FaTag, FaStar, FaClock, FaEye, FaComment, FaChartBar, FaHistory, FaInfoCircle, FaSearch, FaPlus, FaPlay, FaTimes,
+  FaFacebook, FaEnvelope, FaWhatsapp
 } from "react-icons/fa";
 import {
   ResponsiveContainer,
@@ -17,6 +18,7 @@ import axios from "axios";
 import { fetchArticle, fetchSimilarArticles, buildArticleShowUrl, DEBUG_HTTP } from "../api/articles";
 import { formatDate } from "../shared/utils/format";
 import Comments from "./Comments";
+import TagManagerModal from "./TagManagerModal";
 import Toaster from "../../../component/toast/Toaster";
 
 /* ---------------- Helpers ---------------- */
@@ -73,25 +75,132 @@ const iconBgForType = (type) => {
   }
 };
 
+/* ---------- Colors ---------- */
+function hexToRgb(hex) {
+  const h = (hex || "").trim();
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(
+    h.length === 4 ? "#" + [...h.replace("#","")].map(x => x + x).join("") : h
+  );
+  return m ? { r: parseInt(m[1],16), g: parseInt(m[2],16), b: parseInt(m[3],16) } : null;
+}
+function makeTagPalette(color) {
+  const rgb = hexToRgb(color || "#1d4ed8");
+  if (!rgb) {
+    return {
+      bg: `color-mix(in oklab, ${color} 12%, white)`,
+      bd: `color-mix(in oklab, ${color} 35%, transparent)`,
+      dot: color,
+      text: color,
+      glow: `color-mix(in oklab, ${color} 18%, transparent)`,
+    };
+  }
+  const { r, g, b } = rgb;
+  return {
+    bg: `rgba(${r}, ${g}, ${b}, 0.08)`,
+    bd: `rgba(${r}, ${g}, ${b}, 0.28)`,
+    dot: `rgba(${r}, ${g}, ${b}, 0.95)`,
+    text: `rgb(${r}, ${g}, ${b})`,
+    glow: `rgba(${r}, ${g}, ${b}, 0.18)`,
+  };
+}
+
+/* ---------- Tri/dédoublonnage tags ---------- */
+const normalizeTags = (tags) =>
+  Array.isArray(tags)
+    ? tags
+        .filter((t) => t && (t.id != null || t.name))
+        .map((t) => ({
+          ...t,
+          _pos: t?.pivot?.position ?? t?.pivot?.order ?? t?.pivot?.pos ?? null,
+        }))
+    : [];
+
+const sortTags = (tags) => {
+  const list = normalizeTags(tags);
+  const allHavePos = list.every((t) => t._pos != null);
+  const sorted = list.sort((a, b) => {
+    if (allHavePos) return (a._pos ?? 0) - (b._pos ?? 0);
+    return (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" });
+  });
+  const seen = new Set();
+  return sorted.filter((t) => {
+    const key = String(t.id ?? t.name);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+/* ---------- Tag UI ---------- */
+function TagPill({ tag, className = "", onClick }) {
+  const pal = makeTagPalette(tag?.color);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={tag?.name}
+      className={`group inline-flex max-w-full items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border
+                  bg-white shadow-sm border-gray-200 hover:shadow transition-all hover:-translate-y-0.5
+                  focus:outline-none focus:ring-2 focus:ring-offset-1 ${className}`}
+      style={{ backdropFilter: "saturate(180%) blur(2px)" }}
+    >
+      <span
+        aria-hidden
+        className="inline-block w-2.5 h-2.5 rounded-full border border-black/5 flex-shrink-0"
+        style={{ background: pal.dot }}
+      />
+      <span className="truncate" style={{ color: pal.text }}>{tag?.name}</span>
+    </button>
+  );
+}
+
+function TagList({ tags, onAddClick, onTagClick, max = 10 }) {
+  const [expanded, setExpanded] = useState(false);
+  const sorted = useMemo(() => sortTags(tags), [tags]);
+  const visible = expanded ? sorted : sorted.slice(0, max);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {visible.map((t, i) => (
+        <TagPill key={t.id ?? `${t.name}-${i}`} tag={t} onClick={() => onTagClick?.(t)} />
+      ))}
+
+      {sorted.length > max && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="text-xs px-2 py-1 rounded border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+        >
+          {expanded ? "Voir moins" : `+${sorted.length - max} autres`}
+        </button>
+      )}
+
+      {onAddClick && (
+        <button
+          type="button"
+          onClick={onAddClick}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium
+                     border border-gray-300 text-gray-700 bg-white/80 hover:bg-gray-50 transition-all"
+          title="Gérer les tags"
+        >
+          <FaPlus className="text-gray-500" />
+          Ajouter
+        </button>
+      )}
+    </div>
+  );
+}
+
 /* Palette pour les charts */
 const CHART_COLORS = ["#2563eb", "#16a34a", "#9333ea", "#f59e0b", "#ef4444", "#06b6d4", "#64748b"];
 
-/* ---------------- Auth / Permissions (centralisé ici) ---------------- */
-/** Récupération /user + token côté Visualiseur, pour propager aux enfants */
+/* ---------------- Auth / Permissions ---------------- */
 function useMeFromLaravel() {
   const [me, setMe] = useState({ user: null, roles: [], permissions: [] });
   const [loading, setLoading] = useState(false);
 
   const token = useMemo(() => {
-    try {
-      return (
-        localStorage.getItem("auth_token") ||
-        sessionStorage.getItem("auth_token") ||
-        localStorage.getItem("tokenGuard") ||
-        sessionStorage.getItem("tokenGuard") ||
-        null
-      );
-    } catch { return null; }
+    try { return sessionStorage.getItem("tokenGuard") || null; } catch { return null; }
   }, []);
 
   useEffect(() => {
@@ -101,7 +210,8 @@ function useMeFromLaravel() {
       try {
         setLoading(true);
         const { data } = await axios.get('/user', {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          headers: { Authorization: `Bearer ${token}` },
+          withCredentials: false,
         });
         const user = data?.user || data || null;
         const roles = data?.roles || user?.roles || [];
@@ -118,6 +228,7 @@ function useMeFromLaravel() {
 
   return { me, loading, token };
 }
+
 function computeRights(permissions = []) {
   const list = Array.isArray(permissions) ? permissions : [];
   const isModerator = list.some(p =>
@@ -143,7 +254,7 @@ export default function Visualiseur() {
     return sanitizeParam(candidate);
   }, [params]);
 
-  // ⬇️ AUTH centralisée ici
+  // AUTH
   const { me, loading: meLoading, token } = useMeFromLaravel();
   const rights = useMemo(() => computeRights(me?.permissions), [me?.permissions]);
 
@@ -156,7 +267,14 @@ export default function Visualiseur() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [similar, setSimilar] = useState([]);
   const [similarLoading, setSimilarLoading] = useState(false);
+  const [tagModalOpen, setTagModalOpen] = useState(false);
   const previewRef = useRef(null);
+
+  // Partage
+  const [shareOpen, setShareOpen] = useState(false);
+  const [emailTo, setEmailTo] = useState("");
+  const [whatsNumber, setWhatsNumber] = useState("");
+  const [sending, setSending] = useState(false);
 
   /* ------- Load article ------- */
   useEffect(() => {
@@ -200,7 +318,7 @@ export default function Visualiseur() {
     return () => { mounted = false; };
   }, [idOrSlug, params]);
 
-  /* ------- Media list from article ------- */
+  /* ------- Media list ------- */
   const mediaList = useMemo(() => {
     const medias = Array.isArray(article?.media) ? article.media : [];
     if (medias.length) {
@@ -246,7 +364,7 @@ export default function Visualiseur() {
   const currentUrl   = selectedFile?.fileUrl || primaryMediaUrl(article);
   const currentTitle = selectedFile?.title || article?.title || "Sélectionnez un fichier";
 
-  /* ------- Similar articles (same categories/tags) ------- */
+  /* ------- Similar articles ------- */
   useEffect(() => {
     let mounted = true;
     if (!article?.id) return;
@@ -299,12 +417,12 @@ export default function Visualiseur() {
         similar={similar}
         similarLoading={similarLoading}
         onOpenSimilar={(slugOrId) => navigate(`/articles/${slugOrId}`)}
+        onOpenTagManager={() => setTagModalOpen(true)}
       />
 
       {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top bar */}
-        <TopBar toggleSidebar={() => setSidebarOpen((s) => !s)} />
+        {/* NOTE: TopBar a été supprimé à ta demande */}
 
         {/* Body */}
         <div className="flex-1 overflow-auto p-6">
@@ -361,8 +479,6 @@ export default function Visualiseur() {
                 similarLoading={similarLoading}
                 onOpenSimilar={(slugOrId) => navigate(`/articles/${slugOrId}`)}
                 selectedFile={selectedFile}
-
-                /* ⬇️ On propage l’auth & les droits ici */
                 me={me}
                 token={token}
                 rights={rights}
@@ -407,6 +523,130 @@ export default function Visualiseur() {
         </div>
       )}
 
+      {/* MODAL DE PARTAGE */}
+      {shareOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShareOpen(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold text-gray-800">Partager</h3>
+              <button onClick={() => setShareOpen(false)} className="text-gray-500 hover:text-gray-800" aria-label="Fermer">
+                <FaTimes />
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-4 truncate">{article?.title || "Sans titre"}</p>
+
+            {/* Lien */}
+            <div className="mb-4">
+              <label className="block text-xs text-gray-500 mb-1">Lien</label>
+              <div className="flex gap-2">
+                <input
+                  value={(typeof window !== "undefined" ? window.location.href : "")}
+                  readOnly
+                  className="flex-1 px-3 py-2 rounded-lg border border-gray-300 text-sm bg-gray-50 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try { await navigator.clipboard.writeText(window.location.href); alert("Lien copié"); } catch {}
+                  }}
+                  className="px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white hover:bg-gray-50"
+                >
+                  Copier
+                </button>
+              </div>
+            </div>
+
+            {/* E-mail */}
+            <div className="space-y-2 mb-5">
+              <label className="block text-xs text-gray-500">Destinataires (e-mails ; séparés par des ;)</label>
+              <input
+                value={emailTo}
+                onChange={(e) => setEmailTo(e.target.value)}
+                placeholder="ex: ami@ex.com;collègue@ex.com"
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={shareByEmailAuto}
+                  disabled={sending || !emailTo.trim()}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium disabled:opacity-50"
+                >
+                  <FaEnvelope />
+                  {sending ? "Envoi…" : "Envoyer par e-mail (auto)"}
+                </button>
+                <button
+                  onClick={shareByEmailMailto}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-medium"
+                >
+                  <FaEnvelope />
+                  Ouvrir votre e-mail
+                </button>
+              </div>
+            </div>
+
+            {/* WhatsApp */}
+            <div className="space-y-2 mb-5">
+              <label className="block text-xs text-gray-500">Numéro WhatsApp (optionnel, format international 33612345678)</label>
+              <input
+                value={whatsNumber}
+                onChange={(e) => setWhatsNumber(e.target.value.replace(/[^\d]/g, ""))}
+                placeholder="Ex: 33612345678"
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={shareOnWhatsAppToNumber}
+                  disabled={!whatsNumber}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white font-medium disabled:opacity-50"
+                >
+                  <FaWhatsapp />
+                  WhatsApp (numéro)
+                </button>
+                <button
+                  onClick={shareOnWhatsAppGeneral}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-green-50 hover:bg-green-100 text-green-700 font-medium border border-green-200"
+                >
+                  <FaWhatsapp />
+                  WhatsApp (général)
+                </button>
+              </div>
+            </div>
+
+            {/* Facebook */}
+            <div className="space-y-3">
+              <button
+                onClick={shareOnFacebook}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#1877F2] hover:bg-[#1463c8] text-white font-medium"
+              >
+                <FaFacebook />
+                Partager sur Facebook
+              </button>
+            </div>
+
+            <div className="mt-4 text-right">
+              <button onClick={() => setShareOpen(false)} className="px-4 py-2 rounded-lg text-gray-700 bg-gray-100 hover:bg-gray-200">
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tag Manager Modal */}
+      {article?.id && (
+        <TagManagerModal
+          open={tagModalOpen}
+          onClose={() => setTagModalOpen(false)}
+          articleId={article.id}
+          existingTags={article?.tags || []}
+          onChange={(newList) => setArticle((a) => ({ ...(a || {}), tags: newList }))}
+          meOverride={me}
+          rightsOverride={rights}
+        />
+      )}
+
       {/* Debug */}
       {DEBUG_HTTP && (
         <details className="fixed bottom-6 left-6 bg-white/90 backdrop-blur p-4 rounded-xl border border-gray-200/50 max-w-[40rem] shadow-lg">
@@ -433,23 +673,109 @@ export default function Visualiseur() {
     a.href = currentUrl; a.download = "";
     document.body.appendChild(a); a.click(); a.remove();
   }
-  async function shareCurrent() {
-    const data = { title: article?.title, text: article?.excerpt || article?.title, url: window.location.href };
+
+  // Partage helpers
+  function openCenteredPopup(href, width = 700, height = 600) {
     try {
-      if (navigator.share) {
-        await navigator.share(data);
-      } else {
-        await navigator.clipboard.writeText(data.url);
-        alert("Lien copié");
-      }
-    } catch {}
+      const topWin = window.top ?? window;
+      const y = topWin?.outerHeight ? topWin.outerHeight / 2 + topWin.screenY - height / 2 : 100;
+      const x = topWin?.outerWidth ? topWin.outerWidth / 2 + topWin.screenX - width / 2 : 100;
+      window.open(href, "_blank", `noopener,noreferrer,width=${width},height=${height},left=${x},top=${y}`);
+    } catch {
+      window.open(href, "_blank", "noopener,noreferrer");
+    }
+  }
+
+  function buildShareDefaults() {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    const subject = `[Partage] ${article?.title || "Contenu à découvrir"}`;
+    const body = (article?.excerpt || article?.title || "Je partage ce contenu avec toi.") + (url ? `\n\n${url}` : "");
+    return { url, subject, body };
+  }
+
+  // E-mail (auto via API)
+  async function shareByEmailAuto() {
+    const { subject, body, url } = buildShareDefaults();
+    const recipients = emailTo.split(/[;,]/).map(s => s.trim()).filter(Boolean);
+    if (!recipients.length) { alert("Ajoute au moins une adresse e-mail."); return; }
+
+    try {
+      setSending(true);
+      const baseURL = (import.meta?.env?.VITE_API_BASE_URL || "").replace(/\/+$/,"");
+      const client = axios.create({
+        baseURL: baseURL || "/",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          ...(localStorage.getItem("tokenGuard") ? { Authorization: `Bearer ${localStorage.getItem("tokenGuard")}` } : {})
+        },
+        timeout: 20000,
+      });
+
+      // ⚠️ Adapte l’endpoint côté serveur
+      await client.post("/share/email", {
+        to: recipients,
+        subject,
+        body,
+        url,
+        article_id: article?.id ?? null,
+      });
+
+      alert("E-mail envoyé ✅");
+      setShareOpen(false);
+    } catch (e) {
+      console.error("Echec envoi API, fallback mailto", e);
+      // Fallback mailto
+      shareByEmailMailto();
+    } finally {
+      setSending(false);
+    }
+  }
+
+  // E-mail (mailto)
+  function shareByEmailMailto() {
+    const { subject, body } = buildShareDefaults();
+    const href = `mailto:${encodeURIComponent(emailTo)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = href;
+  }
+
+  // WhatsApp (général)
+  function shareOnWhatsAppGeneral() {
+    const { url, body } = buildShareDefaults();
+    const txt = body || url || document.title;
+    const href = `https://api.whatsapp.com/send?text=${encodeURIComponent(txt)}`;
+    openCenteredPopup(href, 560, 650);
+    setShareOpen(false);
+  }
+
+  // WhatsApp vers numéro
+  function shareOnWhatsAppToNumber() {
+    if (!whatsNumber) return;
+    const { url, body } = buildShareDefaults();
+    const txt = body || url || document.title;
+    const href = `https://wa.me/${encodeURIComponent(whatsNumber)}?text=${encodeURIComponent(txt)}`;
+    openCenteredPopup(href, 560, 650);
+    setShareOpen(false);
+  }
+
+  // Facebook
+  function shareOnFacebook() {
+    const { url } = buildShareDefaults();
+    const fb = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}${article?.title ? `&quote=${encodeURIComponent(article.title)}` : ""}`;
+    openCenteredPopup(fb, 700, 600);
+    setShareOpen(false);
+  }
+
+  // Ouvre modal
+  function shareCurrent() {
+    setShareOpen(true);
   }
 }
 
 /* ---------------- Sub-UI ---------------- */
-function Sidebar({ open, toggle, mediaCount, tags, mediaList, selectedFile, onSelectFile, similar, similarLoading, onOpenSimilar }) {
+function Sidebar({ open, toggle, mediaCount, tags, mediaList, selectedFile, onSelectFile, similar, similarLoading, onOpenSimilar, onOpenTagManager }) {
   return (
-    <div className={`sidebar w-72 bg-white/90 backdrop-blur-md shadow-2xl border-r border-gray-200/30 flex-shrink-0 transition-all duration-300 ${open ? "" : "hidden"} lg:block`}>
+    <div className={`sidebar w-72 mt-32 bg-white/90 backdrop-blur-md shadow-2xl border-r border-gray-200/30 flex-shrink-0 transition-all duration-300 ${open ? "" : "hidden"} lg:block`}>
       <div className="p-5 border-b border-gray-200/30">
         <h2 className="text-xl font-bold text-gray-800 flex items-center">
           <FaFolderOpen className="mr-2 text-blue-600" />
@@ -472,9 +798,9 @@ function Sidebar({ open, toggle, mediaCount, tags, mediaList, selectedFile, onSe
             Fichiers liés
           </h3>
           <div className="space-y-3">
-            {mediaList.length ? mediaList.map((f) => (
+            {mediaList.length ? mediaList.map((f, idx) => (
               <div
-                key={f.id}
+                key={f.id ?? `media-${idx}`}
                 className={`file-item p-3 rounded-xl cursor-pointer flex items-center transition-all duration-200 border-2 ${
                   selectedFile?.id === f.id
                     ? "bg-blue-50 border-blue-300 shadow-md"
@@ -489,9 +815,7 @@ function Sidebar({ open, toggle, mediaCount, tags, mediaList, selectedFile, onSe
                   <p className="text-sm font-medium text-gray-800 truncate">{f.title}</p>
                   <p className="text-xs text-gray-500">{f.size} • {f.date}</p>
                 </div>
-                {f.favorite && (
-                  <FaStar className="ml-2 text-yellow-400 flex-shrink-0" />
-                )}
+                {f.favorite && <FaStar className="ml-2 text-yellow-400 flex-shrink-0" />}
               </div>
             )) : (
               <div className="text-sm text-gray-500 py-8 text-center">Aucun média lié à cet article.</div>
@@ -505,29 +829,23 @@ function Sidebar({ open, toggle, mediaCount, tags, mediaList, selectedFile, onSe
             <FaTag className="mr-2 text-green-500" />
             Tags
           </h3>
-          <div className="flex flex-wrap gap-2">
-            {Array.isArray(tags) && tags.length > 0 ? (
-              tags.map((t) => (
-                <span
-                  key={t.id ?? t.name}
-                  className="tag px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200 hover:scale-105"
-                  style={{
-                    background: (t.color || "#eef2ff") + "22",
-                    color: t.color || "#1d4ed8",
-                    borderColor: (t.color || "#93c5fd")
-                  }}
-                >
-                  {t.name}
-                </span>
-              ))
-            ) : (
+
+          {Array.isArray(tags) && tags.length > 0 ? (
+            <TagList tags={tags} onAddClick={onOpenTagManager} onTagClick={undefined} max={10} />
+          ) : (
+            <div className="flex items-center gap-2">
               <span className="text-xs text-gray-500 px-3 py-1.5 rounded-full bg-gray-100">Aucun tag</span>
-            )}
-            <button className="tag px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200 transition-all duration-200 flex items-center">
-              <FaPlus className="mr-1" />
-              Ajouter
-            </button>
-          </div>
+              <button
+                onClick={onOpenTagManager}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border border-gray-300 text-gray-700 bg-white/80 hover:bg-gray-50 transition-all"
+                title="Gérer les tags"
+                type="button"
+              >
+                <FaPlus className="text-gray-500" />
+                Ajouter
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Similaires */}
@@ -578,33 +896,6 @@ function Sidebar({ open, toggle, mediaCount, tags, mediaList, selectedFile, onSe
       >
         <FaTimes className="text-2xl" />
       </button>
-    </div>
-  );
-}
-
-function TopBar({ toggleSidebar }) {
-  return (
-    <div className="bg-white/80 backdrop-blur-sm shadow-sm p-4 flex justify-between items-center sticky top-0 z-10 border-b border-gray-200/30">
-      <div className="flex items-center">
-        <button
-          onClick={toggleSidebar}
-          className="mr-4 p-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-all duration-200 lg:hidden"
-        >
-          <FaBars className="text-xl" />
-        </button>
-        <h1 className="text-xl md:text-2xl font-bold text-gray-800">Visualiseur de fichiers</h1>
-      </div>
-      <div className="flex items-center space-x-3">
-        <button className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-5 py-2.5 rounded-xl flex items-center shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
-          <FaUpload className="mr-2" />
-          <span>Importer</span>
-        </button>
-        <div className="relative">
-          <button className="w-11 h-11 rounded-full bg-gradient-to-r from-gray-200 to-gray-300 flex items-center justify-center text-gray-700 hover:from-gray-300 hover:to-gray-400 transition-all duration-200 border border-gray-300">
-            <FaUser />
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -688,7 +979,6 @@ function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDown
 
   return (
     <div className="space-y-8">
-      {/* Reader */}
       {!currentUrl ? (
         <div className="text-center py-16">
           <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
@@ -698,16 +988,9 @@ function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDown
           <p className="text-gray-600 mt-2">Ajoutez un média à l’article ou ouvrez l’onglet « Médias ».</p>
         </div>
       ) : (
-        <PreviewByType
-          type={currentType}
-          url={currentUrl}
-          title={currentTitle}
-          onOpen={onOpen}
-          onDownload={onDownload}
-        />
+        <PreviewByType type={currentType} url={currentUrl} title={currentTitle} onOpen={onOpen} onDownload={onDownload} />
       )}
 
-      {/* Contenu */}
       {contentStr && (
         <div className="pt-2">
           <h3 className="text-xl font-bold text-gray-800 mb-4">Contenu</h3>
@@ -723,10 +1006,7 @@ function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDown
 }
 
 function Medias({ mediaList }) {
-  if (!mediaList.length) {
-    return <div className="text-gray-600 py-8 text-center">Aucun média lié à cet article.</div>;
-  }
-
+  if (!mediaList.length) return <div className="text-gray-600 py-8 text-center">Aucun média lié à cet article.</div>;
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
       {mediaList.map((m, i) => (
@@ -739,13 +1019,7 @@ function Medias({ mediaList }) {
               <p className="text-sm font-medium text-gray-800 truncate">{m.title}</p>
               <p className="text-xs text-gray-500">{m.size !== "—" ? `${m.size} • ` : ""}{m.date}</p>
             </div>
-            <a
-              href={m.fileUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="ml-auto text-gray-600 hover:text-blue-600 p-2 rounded-lg transition-all duration-200"
-              title="Ouvrir"
-            >
+            <a href={m.fileUrl} target="_blank" rel="noreferrer" className="ml-auto text-gray-600 hover:text-blue-600 p-2 rounded-lg transition-all duration-200" title="Ouvrir">
               <FaExternalLinkAlt />
             </a>
           </div>
@@ -768,17 +1042,11 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
           <img src={url} alt={title} className="max-w-full max-h-[60vh] rounded-xl object-contain shadow-lg" />
         </div>
         <div className="mt-6 flex flex-wrap justify-center gap-4">
-          <button
-            onClick={onOpen}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl flex items-center shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5"
-          >
+          <button onClick={onOpen} className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl flex items-center shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
             <FaExternalLinkAlt className="mr-2" />
             Voir en haute résolution
           </button>
-          <button
-            onClick={onDownload}
-            className="bg-white text-gray-700 px-6 py-3 rounded-xl border border-gray-300 flex items-center shadow hover:shadow-md transition-all duration-200 hover:bg-gray-50"
-          >
+          <button onClick={onDownload} className="bg-white text-gray-700 px-6 py-3 rounded-xl border border-gray-300 flex items-center shadow hover:shadow-md transition-all duration-200 hover:bg-gray-50">
             <FaDownload className="mr-2" />
             Télécharger
           </button>
@@ -809,17 +1077,11 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
           </div>
         </div>
         <div className="mt-6 flex flex-wrap justify-center gap-4">
-          <button
-            onClick={onOpen}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl flex items-center shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5"
-          >
+          <button onClick={onOpen} className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl flex items-center shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
             <FaExternalLinkAlt className="mr-2" />
             Ouvrir dans un onglet
           </button>
-          <button
-            onClick={onDownload}
-            className="bg-white text-gray-700 px-6 py-3 rounded-xl border border-gray-300 flex items-center shadow hover:shadow-md transition-all duration-200 hover:bg-gray-50"
-          >
+          <button onClick={onDownload} className="bg-white text-gray-700 px-6 py-3 rounded-xl border border-gray-300 flex items-center shadow hover:shadow-md transition-all duration-200 hover:bg-gray-50">
             <FaDownload className="mr-2" />
             Télécharger
           </button>
@@ -831,7 +1093,7 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
   if (type === "excel" || type === "word") {
     return (
       <div className="w-full flex flex-col">
-        <div className="w-full bg.white border border-gray-200/50 rounded-xl overflow-hidden">
+        <div className="w-full bg-white border border-gray-200/50 rounded-xl overflow-hidden">
           <div className="bg-gray-100 p-3 flex items-center border-b border-gray-200/50">
             {type === "excel" ? <FaFileExcel className="text-green-600 mr-3 text-2xl" /> : <FaFileWord className="text-blue-600 mr-3 text-2xl" />}
             <span className="font-medium text-gray-800 text-lg">{title}</span>
@@ -841,12 +1103,7 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
           </div>
         </div>
         <div className="mt-6 flex justify-center">
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl flex items-center shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5"
-          >
+          <a href={url} target="_blank" rel="noreferrer" className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl flex items-center shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
             <FaExternalLinkAlt className="mr-2" /> Ouvrir dans {type === "excel" ? "Excel" : "Word"}
           </a>
         </div>
@@ -868,12 +1125,7 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
           </div>
         </div>
         <div className="mt-6 flex justify-center">
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl flex items-center shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5"
-          >
+          <a href={url} target="_blank" rel="noreferrer" className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl flex items-center shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
             <FaExternalLinkAlt className="mr-2" /> Lire la vidéo
           </a>
         </div>
@@ -881,7 +1133,6 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
     );
   }
 
-  // other
   return (
     <div className="w-full flex flex-col items-center justify-center">
       <div className="text-center">
@@ -890,12 +1141,7 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
         </div>
         <h3 className="text-2xl font-bold text-gray-800">{title}</h3>
         <p className="text-gray-600 mt-2">Aperçu non disponible pour ce type de fichier</p>
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-6 inline-flex items-center bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5"
-        >
+        <a href={url} target="_blank" rel="noreferrer" className="mt-6 inline-flex items-center bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
           <FaDownload className="mr-2" /> Ouvrir
         </a>
       </div>
@@ -904,6 +1150,9 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
 }
 
 function Metadonnees({ article, currentType, currentTitle }) {
+  const tagList = Array.isArray(article?.tags) ? article.tags : [];
+  const sortedTagList = useMemo(() => sortTags(tagList), [tagList]);
+
   const rows = [
     ["Titre", article?.title || "—"],
     ["Nom du fichier", currentTitle || "—"],
@@ -915,7 +1164,7 @@ function Metadonnees({ article, currentType, currentTitle }) {
     ["Publié le", formatDate(article?.published_at)],
     ["Auteur", article?.author_name || (article?.author_id ? `Auteur #${article.author_id}` : "—")],
     ["Catégorie principale", firstCategory(article)],
-    ["Mots-clés (tags)", (article?.tags || []).map((t) => t.name).join(", ") || "—"],
+    ["Mots-clés (tags)", "__TAGS__"],
     ["Lecture (min)", article?.reading_time ?? "—"],
     ["Nombre de mots", article?.word_count ?? "—"],
     ["ID", article?.id ?? "—"],
@@ -927,12 +1176,34 @@ function Metadonnees({ article, currentType, currentTitle }) {
       <div className="bg-white rounded-xl border border-gray-200/50 overflow-hidden shadow-sm">
         <table className="min-w-full divide-y divide-gray-200/50">
           <tbody className="divide-y divide-gray-200/50">
-            {rows.map(([k, v]) => (
-              <tr key={k} className="hover:bg-gray-50/50 transition-colors">
-                <td className="px-6 py-4 text.sm font-medium text-gray-800 bg-gray-50/50 border-r border-gray-200/50">{k}</td>
-                <td className="px-6 py-4 text-sm text-gray-700">{v || "—"}</td>
-              </tr>
-            ))}
+            {rows.map(([k, v]) => {
+              if (v === "__TAGS__") {
+                return (
+                  <tr key={k} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="px-6 py-4 text-sm font-medium text-gray-800 bg-gray-50/50 border-r border-gray-200/50">{k}</td>
+                    <td className="px-6 py-4 text-sm text-gray-700">
+                      {sortedTagList.length ? (
+                        <div className="flex flex-wrap gap-2">
+                          {sortedTagList.map((t, i) => <TagPill key={t.id ?? `${t.name}-${i}`} tag={t} />)}
+                        </div>
+                      ) : "—"}
+                    </td>
+                  </tr>
+                );
+              }
+              return (
+                <tr key={k} className="hover:bg-gray-50/50 transition-colors">
+                  <td className="px-6 py-4 text-sm font-medium text-gray-800 bg-gray-50/50 border-r border-gray-200/50">{k}</td>
+                  <td className="px-6 py-4 text-sm text-gray-700">
+                    {Array.isArray(v) ? (v.length ? (
+                      <div className="flex flex-wrap gap-2">
+                        {v.map((t, i) => <TagPill key={t.id ?? `${t.name}-${i}`} tag={t} />)}
+                      </div>
+                    ) : "—") : (v || "—")}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -994,9 +1265,9 @@ function StatsCharts({ article }) {
   const historyBarData = Object.entries(actionsCount).map(([k, v]) => ({ name: k, count: v }));
 
   return (
-    <div className="w-full h-full p-6 space-y-8">
+    <div className="w-full h-full p-6 space-y-8 ">
       <Toaster/>
-      {/* KPIs */}
+
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-5">
         <KpiCard label="Vues" value={views} icon={<FaEye />} />
         <KpiCard label="Partages" value={shares} icon={<FaShareAlt />} />
@@ -1006,9 +1277,7 @@ function StatsCharts({ article }) {
         <KpiCard label="Mots / Lecture" value={`${words} / ${reading}min`} icon={<FaClock />} />
       </div>
 
-      {/* Charts */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        {/* Engagement pie */}
         <ChartCard title="Répartition de l'engagement" icon={<FaChartBar />}>
           {engagementData.length ? (
             <ResponsiveContainer width="100%" height={300}>
@@ -1025,7 +1294,6 @@ function StatsCharts({ article }) {
           )}
         </ChartCard>
 
-        {/* Tags bar OR History bar */}
         <ChartCard title={tagsBarData.length ? "Popularité des tags (usage global)" : "Historique des actions"} icon={<FaTag />}>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={tagsBarData.length ? tagsBarData : historyBarData} margin={{ left: 12, right: 12 }}>
@@ -1038,16 +1306,9 @@ function StatsCharts({ article }) {
           </ResponsiveContainer>
         </ChartCard>
 
-        {/* Radial rating */}
         <ChartCard title="Qualité (note moyenne)" icon={<FaStar />}>
           <ResponsiveContainer width="100%" height={300}>
-            <RadialBarChart
-              innerRadius="50%"
-              outerRadius="100%"
-              data={[{ name: "Note", value: avgRating }]}
-              startAngle={90}
-              endAngle={-270}
-            >
+            <RadialBarChart innerRadius="50%" outerRadius="100%" data={[{ name: "Note", value: avgRating }]} startAngle={90} endAngle={-270}>
               <RadialBar dataKey="value" minAngle={15} clockWise background fill="#e2e8f0" />
               <Tooltip />
               <Legend />
@@ -1108,7 +1369,6 @@ function SeoPanel({ article }) {
 function DetailsPanel({ article, currentType, currentTitle, similar, similarLoading, onOpenSimilar, selectedFile, me, token, rights }) {
   const tags = article?.tags || [];
 
-  // Prépare des commentaires initiaux (niveau 0) pour affichage instantané
   const initialTopLevelApproved = useMemo(() => {
     if (Array.isArray(article?.approved_comments)) {
       return article.approved_comments.filter(c => c?.parent_id == null);
@@ -1121,7 +1381,7 @@ function DetailsPanel({ article, currentType, currentTitle, similar, similarLoad
 
   return (
     <aside className="w-1/3 p-6">
-      <h2 className="text-xl font-bold text-gray-800 mb-5 flex items.center">
+      <h2 className="text-xl font-bold text-gray-800 mb-5 flex items-center">
         <FaInfoCircle className="mr-2 text-blue-600" />
         Détails du fichier
       </h2>
@@ -1131,7 +1391,7 @@ function DetailsPanel({ article, currentType, currentTitle, similar, similarLoad
             {iconForType(currentType, "text-2xl")}
           </div>
           <div className="ml-4">
-            <h3 className="font.bold text-gray-800">{currentTitle}</h3>
+            <h3 className="font-bold text-gray-800">{currentTitle}</h3>
             <p className="text-sm text-gray-500">{currentType ? currentType.toUpperCase() : "—"} • —</p>
           </div>
         </div>
@@ -1159,14 +1419,11 @@ function DetailsPanel({ article, currentType, currentTitle, similar, similarLoad
         </div>
       </div>
 
-      {/* Zone commentaires */}
       {article?.allow_comments !== false && (
-        <Comments 
-          key={article?.id}                         // remount quand l’article change
-          articleId={article?.id}                   // CRUCIAL: drive la requête /comments
-          initialComments={initialTopLevelApproved} // affichage instantané côté client
-
-          /* ⬇️ Injection des infos auth/permissions depuis Visualiseur */
+        <Comments
+          key={article?.id}
+          articleId={article?.id}
+          initialComments={initialTopLevelApproved}
           meOverride={me}
           tokenOverride={token}
           rightsOverride={rights}

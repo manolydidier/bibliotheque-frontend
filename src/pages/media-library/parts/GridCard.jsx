@@ -1,13 +1,19 @@
 // ------------------------------
 // File: media-library/parts/GridCard.jsx
-// Version épurée & lisible — compat Laravel API (auteur, images, dates, visibilité)
+// Version "pastel light":
+// - AUCUN dark:*
+// - Overlay clair (bg-white/55 + blur) au lieu de bg-black/40
+// - Partage via ShareButton (icône), overlay centré + bouton absolu en haut-droite
+// - Prefetch route & image, a11y, impression tracker
 // ------------------------------
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
-  FaRegStar, FaStar, FaEye, FaShareAlt, FaUser,
-  FaHeart, FaRegHeart, FaTag, FaCalendarAlt, FaClock,
+  FaRegStar, FaStar, FaEye, FaUser,
+  FaHeart, FaRegHeart, FaTag,
 } from "react-icons/fa";
+import SmartImage from "./SmartImage";
+import ShareButton from "../Visualiseur/share/ShareButton";
 import { cls } from "../shared/utils/format";
 import { isFav, toggleFav, isRead, markRead } from "../shared/store/markers";
 
@@ -41,14 +47,46 @@ const cleanSlug = (x) => {
   if (!s || s === 'undefined' || s === 'null') return null;
   return s;
 };
+
 const VISUALISEUR_BASE = "/media-library";
 // Construit /media-library/:slug (ou :id si pas de slug)
 const buildVisualiserPath = (base, rec) => {
   const slug = cleanSlug(rec?.slug);
   const id   = rec?.id != null ? String(rec.id) : null;
-  const key  = slug || id || '';                   // jamais "undefined"
+  const key  = slug || id || ''; // jamais "undefined"
   return `${base || VISUALISEUR_BASE}/${encodeURIComponent(key)}`;
 };
+
+// Préférences mouvement réduit (pour couper les grosses anims)
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  window.matchMedia &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Détection basique d'environnement "hoverable"
+const canHover = () =>
+  typeof window !== "undefined" &&
+  window.matchMedia &&
+  window.matchMedia("(hover: hover)").matches;
+
+/* =========================
+   Impression tracker (hook)
+========================= */
+function useImpression(onSeen, once = true, threshold = 0.5) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    let done = false;
+    const io = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting && (!done || !once)) {
+        onSeen?.(); done = true;
+      }
+    }, { threshold });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [onSeen, once, threshold]);
+  return ref;
+}
 
 /* =========================
    Constantes UI
@@ -117,6 +155,16 @@ export default function GridCard({ item, routeBase, onOpen }) {
     return name || "Auteur";
   }, [item.author_name, item.author, item.createdBy, item.created_by, item.author_id]);
 
+  // Formats localisés
+  const nf = useMemo(
+    () => new Intl.NumberFormat("fr-FR", { notation: "compact", maximumFractionDigits: 1 }),
+    []
+  );
+  const df = useMemo(
+    () => new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric" }),
+    []
+  );
+
   // Temps de lecture : API > estimation (200 wpm)
   const readingTime = useMemo(() => {
     if (item.reading_time) return item.reading_time;
@@ -133,21 +181,9 @@ export default function GridCard({ item, routeBase, onOpen }) {
     return null;
   }, [item.featured_image_url, item.featured_image, item.media]);
 
-  const formattedViewCount = useMemo(() => {
-    const n = Number(item.view_count || 0);
-    return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
-  }, [item.view_count]);
-
-  const formattedRating = useMemo(
-    () => (item.rating_average ? Number(item.rating_average).toFixed(1) : "0.0"),
-    [item.rating_average]
-  );
-
-  const formattedDate = useMemo(() => {
-    if (!item.published_at) return "—";
-    const d = new Date(item.published_at);
-    return isNaN(d) ? "—" : d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
-  }, [item.published_at]);
+  const formattedViewCount = useMemo(() => nf.format(Number(item.view_count || 0)), [nf, item.view_count]);
+  const formattedRating    = useMemo(() => (item.rating_average ? Number(item.rating_average).toFixed(1) : "0,0"), [item.rating_average]);
+  const formattedDate      = useMemo(() => (item.published_at ? df.format(new Date(item.published_at)) : "—"), [df, item.published_at]);
 
   const visibilityLabel = useMemo(() => {
     const v = (item.visibility || "").toString().toLowerCase().replace(/_/g, " ");
@@ -155,13 +191,16 @@ export default function GridCard({ item, routeBase, onOpen }) {
   }, [item.visibility]);
 
   /* --------- Classes réutilisées --------- */
+  const motionless = prefersReducedMotion();
+  const hoverCls   = motionless ? "" : "hover:-translate-y-3 hover:scale-[1.02]";
 
   const cardClass = cls(
     "group relative bg-white/80 backdrop-blur-md rounded-3xl border-2",
     "shadow-xl shadow-slate-200/30 overflow-hidden transition-all duration-700",
-    "hover:shadow-3xl hover:shadow-slate-300/40 hover:-translate-y-3 hover:scale-[1.02]",
+    "hover:shadow-3xl hover:shadow-slate-300/40",
     "hover:bg-white/95 hover:backdrop-blur-lg",
     "w-full max-w-none min-w-[400px]",
+    hoverCls,
     borderColor
   );
 
@@ -191,22 +230,37 @@ export default function GridCard({ item, routeBase, onOpen }) {
     onOpen?.(item);
   }, [item, onOpen]);
 
-  const onShare = useCallback(async (e) => {
-    e.stopPropagation();
-    const shareUrl = item.url || `${window.location.origin}${to}`;
+  // Prefetch (route + image HD)
+  const prefetchDetail = useCallback(() => {
+    if (imgUrl) { const im = new Image(); im.src = imgUrl; }
     try {
-      if (navigator.share)      await navigator.share({ title: item.title, url: shareUrl });
-      else if (navigator.clipboard) await navigator.clipboard.writeText(shareUrl);
+      const l = document.createElement("link");
+      l.rel = "prefetch";
+      l.href = to;
+      document.head.appendChild(l);
     } catch {}
-  }, [item.title, item.url, to]);
+  }, [imgUrl, to]);
+
+  /* --------- Impression tracker --------- */
+  const impressionRef = useImpression(() => {
+    // Event global si tu veux hooker analytics
+    window.dispatchEvent(new CustomEvent("gridcard:seen", { detail: { id: item.id } }));
+  });
+
+  /* --------- Share --------- */
+  const shareUrl = (item.url || (typeof window !== "undefined" ? `${window.location.origin}${to}` : to));
 
   /* --------- Render --------- */
   return (
     <article
+      ref={impressionRef}
+      role="article"
+      aria-labelledby={`t-${item.id}`}
       className={cardClass}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       title={item.title}
+      data-testid={`gridcard-${item.id}`}
       style={{ minHeight: "550px" }}
     >
       {/* Fond gradient doux */}
@@ -217,13 +271,49 @@ export default function GridCard({ item, routeBase, onOpen }) {
       <div className="relative h-64 bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center overflow-hidden">
         {imgUrl ? (
           <>
-            <img
+            <SmartImage
               src={imgUrl}
               alt={item.title}
-              className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110 group-hover:brightness-110 group-hover:saturate-110"
-              loading="lazy"
+              ratio="100%"
+              className="transition-all duration-700 group-hover:scale-110 group-hover:brightness-110 group-hover:saturate-110"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500" />
+            {/* Overlay CLAIR (plus de noir) */}
+            <div
+              className={cls(
+                "absolute inset-0 bg-white/55 backdrop-blur-sm flex items-center justify-center gap-6 transition-all duration-500",
+                canHover() ? (isHovered ? "opacity-100" : "opacity-0 pointer-events-none") : "opacity-100"
+              )}
+              aria-hidden={canHover() ? !isHovered : false}
+            >
+              <Link
+                to={to}
+                onMouseEnter={prefetchDetail}
+                className={cls(overlayBtnClass, "hover:text-blue-600 hover:shadow-blue-200/50", isHovered ? "translate-y-0 opacity-100 rotate-0" : "translate-y-8 opacity-100 rotate-0")}
+                style={{ transitionDelay: "0ms" }}
+                title="Lire l'article"
+                onClick={onOpenCard}
+              >
+                <FaEye size={24} />
+              </Link>
+
+              {/* Partage (icône) — bouton rendu par ShareButton */}
+              <div
+                className={cls(overlayBtnClass, "hover:text-purple-600 hover:shadow-purple-200/50", isHovered ? "translate-y-0 opacity-100 rotate-0" : "translate-y-8 opacity-100 rotate-0")}
+                style={{ transitionDelay: "200ms" }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ShareButton
+                  variant="icon"
+                  title={item.title}
+                  excerpt={item.excerpt}
+                  url={shareUrl}
+                  articleId={item.id}
+                  channels={["email", "emailAuto", "facebook", "whatsapp", "whatsappNumber"]}
+                  emailEndpoint="/share/email"
+                  defaultWhatsNumber="33612345678"
+                />
+              </div>
+            </div>
           </>
         ) : (
           <>
@@ -235,36 +325,27 @@ export default function GridCard({ item, routeBase, onOpen }) {
           </>
         )}
 
-        {/* Overlay actions (hover) */}
-        <div
-          className={cls(
-            "absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center gap-6 transition-all duration-500",
-            isHovered ? "opacity-100" : "opacity-0 pointer-events-none"
-          )}
-        >
-          <Link
-            to={to}
-            className={cls(overlayBtnClass, "hover:text-blue-600 hover:shadow-blue-200/50", isHovered ? "translate-y-0 opacity-100 rotate-0" : "translate-y-8 opacity-0 rotate-12")}
-            style={{ transitionDelay: "0ms" }}
-            title="Lire l'article"
-            onClick={onOpenCard}
-          >
-            <FaEye size={24} />
-          </Link>
-
-          <button
-            onClick={onShare}
-            className={cls(overlayBtnClass, "hover:text-purple-600 hover:shadow-purple-200/50", isHovered ? "translate-y-0 opacity-100 rotate-0" : "translate-y-8 opacity-0 rotate-12")}
-            style={{ transitionDelay: "200ms" }}
-            title="Partager"
-          >
-            <FaShareAlt size={24} />
-          </button>
+        {/* Bouton de partage ABSOLU (clair) */}
+        <div className="absolute top-4 right-4 z-20" onClick={(e) => e.stopPropagation()}>
+          <ShareButton
+            variant="icon"
+            className="p-2 rounded-2xl bg-white/95 text-slate-700 shadow-xl hover:scale-110 transition-transform"
+            title={item.title}
+            excerpt={item.excerpt}
+            url={shareUrl}
+            articleId={item.id}
+            channels={["email", "emailAuto", "facebook", "whatsapp", "whatsappNumber"]}
+            emailEndpoint="/share/email"
+            defaultWhatsNumber="33612345678"
+          />
         </div>
 
         {/* Coins : favoris / like */}
-        <div className="absolute top-4 right-4 flex gap-2">
+        <div className="absolute top-4 left-4 flex gap-2 z-20">
           <button
+            aria-label={fav ? "Retirer des favoris" : "Ajouter aux favoris"}
+            aria-pressed={fav}
+            onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onToggleFav(e)}
             onClick={onToggleFav}
             className={cls(
               "p-3 rounded-2xl transition-all duration-500 shadow-xl backdrop-blur-md transform hover:scale-125 hover:-rotate-12",
@@ -273,11 +354,15 @@ export default function GridCard({ item, routeBase, onOpen }) {
                 : "text-slate-500 bg-white/90 hover:bg-white hover:text-amber-500 shadow-slate-200/50"
             )}
             title={fav ? "Retirer des favoris" : "Ajouter aux favoris"}
+            data-testid="btn-fav"
           >
             {fav ? <FaStar size={20} /> : <FaRegStar size={20} />}
           </button>
 
           <button
+            aria-label={liked ? "Retirer des likes" : "Ajouter aux likes"}
+            aria-pressed={liked}
+            onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onToggleLike(e)}
             onClick={onToggleLike}
             className={cls(
               "p-3 rounded-2xl transition-all duration-500 shadow-xl backdrop-blur-md transform hover:scale-125 hover:rotate-12",
@@ -286,13 +371,14 @@ export default function GridCard({ item, routeBase, onOpen }) {
                 : "text-slate-500 bg-white/90 hover:bg-white hover:text-pink-500 shadow-slate-200/50"
             )}
             title={liked ? "Retirer des likes" : "Ajouter aux likes"}
+            data-testid="btn-like"
           >
             {liked ? <FaHeart size={20} /> : <FaRegHeart size={20} />}
           </button>
         </div>
 
         {/* Badges de catégorie / flags */}
-        <div className="absolute top-4 left-4">
+        <div className="absolute bottom-4 left-4 z-10">
           <div
             className={cls(
               "relative bg-white/95 backdrop-blur-md text-slate-800 px-4 py-2 rounded-2xl font-bold shadow-2xl border-2 border-white/50 transition-all duration-500 transform group-hover:scale-110",
@@ -304,7 +390,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
           </div>
         </div>
 
-        <div className="absolute bottom-4 left-4 flex gap-2">
+        <div className="absolute bottom-4 right-4 flex gap-2 z-10">
           {item.is_featured && (
             <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">⭐ À la une</div>
           )}
@@ -320,19 +406,14 @@ export default function GridCard({ item, routeBase, onOpen }) {
           {/* Texte principal */}
           <div className="flex-1">
             <div className="mb-4">
-              <h4 className="font-bold text-slate-900 text-xl leading-tight line-clamp-2 group-hover:text-slate-700 transition-colors mb-2" title={item.title}>
+              <h4 id={`t-${item.id}`} className="font-bold text-slate-900 text-xl leading-tight line-clamp-2 group-hover:text-slate-700 transition-colors mb-2" title={item.title}>
                 {item.title}
               </h4>
 
               {item.excerpt && <p className="text-slate-600 text-sm line-clamp-2 mb-3">{item.excerpt}</p>}
 
               <div className="flex items-center gap-3 mt-2">
-                {read && (
-                  <div className="flex items-center gap-2 bg-emerald-100/80 rounded-full px-3 py-1">
-                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                    <span className="text-emerald-700 text-xs font-semibold">Lu</span>
-                  </div>
-                )}
+                
                 {fav && (
                   <div className="flex items-center gap-2 bg-amber-100/80 rounded-full px-3 py-1">
                     <FaStar className="text-amber-500" size={12} />
@@ -353,19 +434,19 @@ export default function GridCard({ item, routeBase, onOpen }) {
               <Link
                 to={to}
                 onClick={onOpenCard}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl font-semibold text-sm transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                onMouseEnter={prefetchDetail}
+                className="flex items-center  gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl font-semibold text-sm transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
               >
                 <FaEye size={14} />
-                <span>Lire l'article</span>
+                <span>Lire</span>
               </Link>
-
-              <button
-                onClick={onShare}
-                className="p-2 text-slate-600 hover:text-purple-600 hover:bg-purple-100 rounded-xl transition-all duration-300 transform hover:scale-105"
-                title="Partager"
-              >
-                <FaShareAlt size={16} />
-              </button>
+                {read && (
+                  <div className="flex items-center gap-2 bg-emerald-100/80 rounded-full px-4 py-2">
+                    <div className="w-4 h-4 bg-emerald-500 rounded-full animate-pulse" />
+                    <span className="text-emerald-700 text-xs font-semibold">Lu</span>
+                  </div>
+                )}
+             
             </div>
           </div>
 
@@ -383,7 +464,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
 
               {/* Date */}
               <div className="flex items-center gap-2 bg-slate-100/80 rounded-lg px-3 py-2">
-                <div className="p-1.5 bg-slate-200/80 rounded"><FaCalendarAlt className="text-slate-600" size={12} /></div>
+                <div className="p-1.5 bg-slate-200/80 rounded"><FaTag className="text-slate-600" size={12} /></div>
                 <div className="flex-1 min-w-0">
                   <span className="font-semibold text-slate-800 text-xs block truncate">{formattedDate}</span>
                   <p className="text-slate-600 text-xs">
@@ -392,21 +473,14 @@ export default function GridCard({ item, routeBase, onOpen }) {
                 </div>
               </div>
 
-              {/* Temps de lecture */}
-              {/* <div className="flex items-center gap-2 bg-slate-100/80 rounded-lg px-3 py-2">
-                <div className="p-1.5 bg-slate-200/80 rounded"><FaClock className="text-slate-600" size={12} /></div>
-                <div className="flex-1 min-w-0">
-                  <span className="font-semibold text-slate-800 text-xs block truncate">{readingTime} min</span>
-                  <p className="text-slate-600 text-xs">Temps de lecture</p>
-                </div>
-              </div> */}
-
               {/* Visibilité */}
               {item.visibility && item.visibility !== "public" && (
                 <div className="flex items-center gap-2 bg-blue-50 rounded-lg px-3 py-2 border border-blue-100">
                   <div className="p-1.5 bg-blue-100 rounded"><FaTag className="text-blue-700" size={12} /></div>
                   <div className="flex-1 min-w-0">
-                    <span className="font-semibold text-blue-800 text-xs block truncate">{visibilityLabel}</span>
+                    <span className="font-semibold text-blue-800 text-xs block truncate">
+                      {visibilityLabel}
+                    </span>
                     <p className="text-blue-700 text-xs">Visibilité</p>
                   </div>
                 </div>
@@ -438,8 +512,6 @@ export default function GridCard({ item, routeBase, onOpen }) {
                 <div className="text-amber-700 font-bold text-sm">{formattedRating}/5</div>
                 <div className="text-amber-600 text-xs">{item.rating_count || 0} avis</div>
               </div>
-
-           
             </div>
 
             {/* Divers */}
@@ -451,6 +523,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
                   {item.categories.length} catégorie{item.categories.length > 1 ? "s" : ""}
                 </span>
               )}
+              {readingTime ? <><span>•</span><span>{readingTime} min</span></> : null}
             </div>
           </div>
         </div>
