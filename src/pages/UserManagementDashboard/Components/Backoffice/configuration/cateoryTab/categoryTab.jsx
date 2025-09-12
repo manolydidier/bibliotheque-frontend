@@ -10,8 +10,11 @@ export default function CategoryTab() {
     const [searchTerm, setSearchTerm] = useState('');
     // Filtrage local des catégories
     const filteredCategories = searchCategoriesLocal(searchTerm);
+    const [category, setCategory] = useState(null);
 
     if (loading) return <div className="loading">Chargement...</div>;
+
+    
 
     return (
         <div className="category-manager">
@@ -29,7 +32,7 @@ export default function CategoryTab() {
                     Créer
                 </button>
             </div>                
-            <CategoryModal isOpen={add} onClose={() => setAdd(false)} /> 
+            <CategoryModal isOpen={add} onClose={() => {setCategory(null); setAdd(false)}} category={category} /> 
 
             {error && (
                 <div className="error-message">
@@ -46,7 +49,7 @@ export default function CategoryTab() {
                         <div className="flex justify-between items-center">
                             <p className="font-semibold" style={{ color: category.color }}>{category.name}</p>                           
                             <div className="flex flex-row gap-3">
-                                <FaPenAlt className="text-sm text-gray-500"/>
+                                <FaPenAlt onClick={() => {setCategory(category); setAdd(true)}} style={{ cursor: 'pointer' }}  className="text-sm text-gray-500"/>
                                 <FaTrashAlt onClick={() => deleteCategory(category.id)} className="text-sm text-red-300"/>                                
                             </div>
                         </div>
