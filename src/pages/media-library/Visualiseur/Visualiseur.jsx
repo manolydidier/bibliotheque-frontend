@@ -5,7 +5,7 @@ import {
   FaFolderOpen,
   FaArrowLeft, FaArrowRight, FaRedo, FaExpand, FaDownload,
   FaExternalLinkAlt, FaChevronLeft, FaChevronRight, FaSearchPlus, FaSearchMinus,
-  FaFilePdf, FaFileExcel, FaFileWord, FaImage, FaFileVideo, FaFile, FaTag, FaStar, FaClock, FaEye, FaComment, FaChartBar, FaHistory, FaInfoCircle, FaSearch, FaPlus, FaPlay, FaTimes
+  FaFilePdf, FaFileExcel, FaFileWord, FaImage, FaFileVideo, FaFile, FaTag, FaStar, FaClock, FaEye, FaComment, FaChartBar, FaHistory, FaInfoCircle, FaSearch, FaPlus, FaPlay, FaTimes, FaShareAlt
 } from "react-icons/fa";
 import {
   ResponsiveContainer,
@@ -20,8 +20,10 @@ import Comments from "./Comments";
 import TagManagerModal from "./TagManagerModal";
 import Toaster from "../../../component/toast/Toaster";
 
-// ✅ Nouveau : bouton de partage réutilisable
+// ✅ Bouton de partage
 import ShareButton from "../Visualiseur/share/ShareButton";
+// ✅ Notation d’article
+import RatingModal, { RateButton } from "../RatingModal";
 
 /* ---------------- Helpers ---------------- */
 const sanitizeParam = (x) => {
@@ -57,23 +59,23 @@ const inferTypeFromUrl = (url) => {
 const iconForType = (type, className = "") => {
   const common = `text-xl ${className}`;
   switch (type) {
-    case "pdf":   return <FaFilePdf className={`${common} text-red-600`} />;
-    case "excel": return <FaFileExcel className={`${common} text-green-600`} />;
-    case "word":  return <FaFileWord className={`${common} text-blue-600`} />;
-    case "image": return <FaImage className={`${common} text-yellow-600`} />;
-    case "video": return <FaFileVideo className={`${common} text-purple-600`} />;
-    default:      return <FaFile className={`${common} text-blue-600`} />;
+    case "pdf":   return <FaFilePdf className={`${common} text-red-500`} />;
+    case "excel": return <FaFileExcel className={`${common} text-emerald-500`} />;
+    case "word":  return <FaFileWord className={`${common} text-blue-500`} />;
+    case "image": return <FaImage className={`${common} text-amber-500`} />;
+    case "video": return <FaFileVideo className={`${common} text-purple-500`} />;
+    default:      return <FaFile className={`${common} text-slate-500`} />;
   }
 };
 
 const iconBgForType = (type) => {
   switch (type) {
-    case "pdf": return "bg-red-50 border-red-200";
-    case "excel": return "bg-green-50 border-green-200";
-    case "word": return "bg-blue-50 border-blue-200";
-    case "image": return "bg-yellow-50 border-yellow-200";
-    case "video": return "bg-purple-50 border-purple-200";
-    default: return "bg-blue-50 border-blue-200";
+    case "pdf": return "bg-red-50 border-red-100";
+    case "excel": return "bg-emerald-50 border-emerald-100";
+    case "word": return "bg-blue-50 border-blue-100";
+    case "image": return "bg-amber-50 border-amber-100";
+    case "video": return "bg-purple-50 border-purple-100";
+    default: return "bg-slate-50 border-slate-100";
   }
 };
 
@@ -86,23 +88,23 @@ function hexToRgb(hex) {
   return m ? { r: parseInt(m[1],16), g: parseInt(m[2],16), b: parseInt(m[3],16) } : null;
 }
 function makeTagPalette(color) {
-  const rgb = hexToRgb(color || "#1d4ed8");
+  const rgb = hexToRgb(color || "#3b82f6");
   if (!rgb) {
     return {
-      bg: `color-mix(in oklab, ${color} 12%, white)`,
-      bd: `color-mix(in oklab, ${color} 35%, transparent)`,
+      bg: `color-mix(in oklab, ${color} 8%, white)`,
+      bd: `color-mix(in oklab, ${color} 20%, transparent)`,
       dot: color,
       text: color,
-      glow: `color-mix(in oklab, ${color} 18%, transparent)`,
+      glow: `color-mix(in oklab, ${color} 12%, transparent)`,
     };
   }
   const { r, g, b } = rgb;
   return {
-    bg: `rgba(${r}, ${g}, ${b}, 0.08)`,
-    bd: `rgba(${r}, ${g}, ${b}, 0.28)`,
-    dot: `rgba(${r}, ${g}, ${b}, 0.95)`,
+    bg: `rgba(${r}, ${g}, ${b}, 0.06)`,
+    bd: `rgba(${r}, ${g}, ${b}, 0.15)`,
+    dot: `rgba(${r}, ${g}, ${b}, 0.9)`,
     text: `rgb(${r}, ${g}, ${b})`,
-    glow: `rgba(${r}, ${g}, ${b}, 0.18)`,
+    glow: `rgba(${r}, ${g}, ${b}, 0.1)`,
   };
 }
 
@@ -141,14 +143,13 @@ function TagPill({ tag, className = "", onClick }) {
       type="button"
       onClick={onClick}
       title={tag?.name}
-      className={`group inline-flex max-w-full items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border
-                  bg-white shadow-sm border-gray-200 hover:shadow transition-all hover:-translate-y-0.5
-                  focus:outline-none focus:ring-2 focus:ring-offset-1 ${className}`}
-      style={{ backdropFilter: "saturate(180%) blur(2px)" }}
+      className={`group inline-flex max-w-full items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border
+                  bg-white/70 backdrop-blur-sm shadow-sm border-slate-200/60 hover:shadow-md hover:bg-white/90 
+                  transition-all duration-300 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-1 ${className}`}
     >
       <span
         aria-hidden
-        className="inline-block w-2.5 h-2.5 rounded-full border border-black/5 flex-shrink-0"
+        className="inline-block w-2 h-2 rounded-full flex-shrink-0"
         style={{ background: pal.dot }}
       />
       <span className="truncate" style={{ color: pal.text }}>{tag?.name}</span>
@@ -171,7 +172,7 @@ function TagList({ tags, onAddClick, onTagClick, max = 10 }) {
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="text-xs px-2 py-1 rounded border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+          className="text-xs px-3 py-1.5 rounded-full border border-slate-200 bg-white/70 text-slate-600 hover:bg-white/90 transition-all duration-300"
         >
           {expanded ? "Voir moins" : `+${sorted.length - max} autres`}
         </button>
@@ -181,11 +182,11 @@ function TagList({ tags, onAddClick, onTagClick, max = 10 }) {
         <button
           type="button"
           onClick={onAddClick}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium
-                     border border-gray-300 text-gray-700 bg-white/80 hover:bg-gray-50 transition-all"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium
+                     border border-slate-300/60 text-slate-600 bg-white/70 hover:bg-slate-50 transition-all duration-300"
           title="Gérer les tags"
         >
-          <FaPlus className="text-gray-500" />
+          <FaPlus className="text-slate-500" />
           Ajouter
         </button>
       )}
@@ -194,7 +195,7 @@ function TagList({ tags, onAddClick, onTagClick, max = 10 }) {
 }
 
 /* Palette pour les charts */
-const CHART_COLORS = ["#2563eb", "#16a34a", "#9333ea", "#f59e0b", "#ef4444", "#06b6d4", "#64748b"];
+const CHART_COLORS = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ef4444", "#06b6d4", "#64748b"];
 
 /* ---------------- Auth / Permissions ---------------- */
 function useMeFromLaravel() {
@@ -270,6 +271,11 @@ export default function Visualiseur() {
   const [similar, setSimilar] = useState([]);
   const [similarLoading, setSimilarLoading] = useState(false);
   const [tagModalOpen, setTagModalOpen] = useState(false);
+  const [ratingOpen, setRatingOpen] = useState(false);
+  const [ratingMode, setRatingMode] = useState("create"); // "create" | "edit"
+  const [myRating, setMyRating] = useState(null);
+  const [myReview, setMyReview] = useState("");
+  const [ratingLoaded, setRatingLoaded] = useState(false);
   const previewRef = useRef(null);
 
   /* ------- Load article ------- */
@@ -291,7 +297,7 @@ export default function Visualiseur() {
       "published_at","updated_at","created_at","view_count","reading_time","word_count",
       "share_count","comment_count","rating_average","rating_count",
       "is_featured","is_sticky","author_id","author_name","meta","seo_data",
-      "allow_comments"
+      "allow_comments","allow_rating"
     ];
 
     if (DEBUG_HTTP) {
@@ -313,6 +319,31 @@ export default function Visualiseur() {
 
     return () => { mounted = false; };
   }, [idOrSlug, params]);
+
+  /* ------- Charger récap des notes (dont ma note) ------- */
+  useEffect(() => {
+    if (!article?.id) return;
+    let cancelled = false;
+    setRatingLoaded(false);
+    (async () => {
+      try {
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const { data } = await axios.get(`/api/articles/${article.id}/ratings`, { headers, withCredentials: false });
+        const d = data?.data ?? data ?? {};
+        if (cancelled) return;
+        if (Number.isFinite(Number(d?.rating_average)) && Number.isFinite(Number(d?.rating_count))) {
+          setArticle(a => ({ ...(a || {}), rating_average: Number(d.rating_average), rating_count: Number(d.rating_count) }));
+        }
+        setMyRating(typeof d?.my_rating === "number" ? d.my_rating : null);
+        setMyReview(typeof d?.my_review === "string" ? d.my_review : "");
+      } catch (_) {
+        // silencieux
+      } finally {
+        if (!cancelled) setRatingLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [article?.id, token]);
 
   /* ------- Media list ------- */
   const mediaList = useMemo(() => {
@@ -381,7 +412,7 @@ export default function Visualiseur() {
     return () => { mounted = false; };
   }, [article?.id]);
 
-  // ✅ Données de partage transmises au ShareButton du Toolbar
+  // ✅ Données de partage (toolbar)
   const shareData = useMemo(() => ({
     title: article?.title || "",
     excerpt: article?.excerpt || article?.title || "",
@@ -392,55 +423,60 @@ export default function Visualiseur() {
   /* ------- Loading / errors ------- */
   if (loading) {
     return (
-      <div className="p-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-9 w-64 bg-gradient-to-r from-gray-200 to-gray-300 rounded" />
-          <div className="h-72 bg-gradient-to-br from-gray-100 to-gray-200 rounded" />
+      <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 px-3 sm:px-4 lg:px-6 2xl:px-10 py-4">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 w-64 bg-gradient-to-r from-slate-200 to-slate-300 rounded-lg" />
+          <div className="h-96 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl" />
         </div>
       </div>
     );
   }
 
-  if (err)   return <div className="p-6 text-center text-red-600">{err}</div>;
-  if (!article) return <div className="p-6 text-center text-red-600">Article introuvable.</div>;
+  if (err)   return <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center px-4"><div className="text-red-500 text-center">{err}</div></div>;
+  if (!article) return <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center px-4"><div className="text-red-500 text-center">Article introuvable.</div></div>;
 
   const hasHistory = Array.isArray(article.history) && article.history.length > 0;
   const tabs = ["Aperçu", "Médias", "Métadonnées", ...(hasHistory ? ["Versions"] : []), "Statistiques", "SEO"];
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 font-sans">
-      {/* Sidebar */}
-      <Sidebar
-        open={sidebarOpen}
-        toggle={() => setSidebarOpen((s) => !s)}
-        mediaCount={mediaList.length}
-        tags={article?.tags || []}
-        mediaList={mediaList}
-        selectedFile={selectedFile}
-        onSelectFile={setSelectedFile}
-        similar={similar}
-        similarLoading={similarLoading}
-        onOpenSimilar={(slugOrId) => navigate(`/articles/${slugOrId}`)}
-        onOpenTagManager={() => setTagModalOpen(true)}
-      />
+    <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 font-sans px-3 sm:px-4 lg:px-6 2xl:px-10 py-4">
+      {/* Layout horizontal */}
+      <div className="flex gap-4 lg:gap-6 xl:gap-8">
+        {/* Sidebar */}
+        <Sidebar
+          open={sidebarOpen}
+          toggle={() => setSidebarOpen((s) => !s)}
+          mediaCount={mediaList.length}
+          tags={article?.tags || []}
+          mediaList={mediaList}
+          selectedFile={selectedFile}
+          onSelectFile={setSelectedFile}
+          similar={similar}
+          similarLoading={similarLoading}
+          onOpenSimilar={(slugOrId) => navigate(`/articles/${slugOrId}`)}
+          onOpenTagManager={() => setTagModalOpen(true)}
+        />
 
-      {/* Main */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Body */}
-        <div className="flex-1 overflow-auto p-6">
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 overflow-hidden">
-            <Toolbar
-              onBack={() => navigate(-1)}
-              onRefresh={() => setActiveTab("Aperçu")}
-              onFullscreen={() => setFullscreen(true)}
-              onDownload={downloadCurrent}
-              shareData={shareData} // ✅ nouveau
-            />
+        {/* Main */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          {/* Card centrale */}
+          <div className="bg-white/60 backdrop-blur-xl rounded-2xl shadow-xl border border-white/40 overflow-hidden">
+            {/* Toolbar sticky */}
+            <div className="sticky top-5 z-10 bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40">
+              <Toolbar
+                onBack={() => navigate(-1)}
+                onRefresh={() => setActiveTab("Aperçu")}
+                onFullscreen={() => setFullscreen(true)}
+                onDownload={downloadCurrent}
+                shareData={shareData}
+              />
+            </div>
 
-            <div className="flex">
+            {/* Split centre / droite */}
+            <div className="flex gap-4 lg:gap-6 xl:gap-8">
               {/* Main panel */}
-              <div className="w-2/3 border-r border-gray-200/50">
-                <div className="p-6">
+              <div className="flex-1 min-w-0 border-r border-slate-200/30">
+                <div className="p-5 sm:p-6 lg:p-8">
                   <Tabs list={tabs} active={activeTab} onChange={setActiveTab} />
                   <div ref={previewRef} className="file-preview-container min-h-[50vh]">
                     {activeTab === "Aperçu" && (
@@ -453,21 +489,13 @@ export default function Visualiseur() {
                         onDownload={downloadCurrent}
                       />
                     )}
-                    {activeTab === "Médias" && (
-                      <Medias mediaList={mediaList} />
-                    )}
+                    {activeTab === "Médias" && <Medias mediaList={mediaList} />}
                     {activeTab === "Métadonnées" && (
                       <Metadonnees article={article} currentType={currentType} currentTitle={currentTitle} />
                     )}
-                    {activeTab === "Versions" && hasHistory && (
-                      <Versions history={article.history} />
-                    )}
-                    {activeTab === "Statistiques" && (
-                      <StatsCharts article={article} />
-                    )}
-                    {activeTab === "SEO" && (
-                      <SeoPanel article={article} />
-                    )}
+                    {activeTab === "Versions" && hasHistory && <Versions history={article.history} />}
+                    {activeTab === "Statistiques" && <StatsCharts article={article} />}
+                    {activeTab === "SEO" && <SeoPanel article={article} />}
                   </div>
                 </div>
               </div>
@@ -484,6 +512,12 @@ export default function Visualiseur() {
                 me={me}
                 token={token}
                 rights={rights}
+                onOpenRating={() => { setRatingMode("create"); setRatingOpen(true); }}
+                onOpenRatingEdit={() => { setRatingMode("edit"); setRatingOpen(true); }}
+                ratingAverage={article?.rating_average}
+                ratingCount={article?.rating_count}
+                myRating={myRating}
+                ratingLoaded={ratingLoaded}
               />
             </div>
           </div>
@@ -492,10 +526,10 @@ export default function Visualiseur() {
 
       {/* Fullscreen Modal */}
       {fullscreen && (
-        <div className="fullscreen fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center">
           <div className="relative w-full h-full flex items-center justify-center">
-            <div className="max-w-6xl w-full p-8">
-              <div className="bg-white/90 backdrop-blur rounded-2xl shadow-2xl">
+            <div className="max-w-7xl w-full p-6 sm:p-10 lg:p-12">
+              <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl">
                 <Tabs list={tabs} active={activeTab} onChange={setActiveTab} />
                 {activeTab === "Aperçu" && (
                   <Apercu
@@ -516,7 +550,7 @@ export default function Visualiseur() {
             </div>
             <button
               onClick={() => setFullscreen(false)}
-              className="absolute top-6 right-6 text-white text-3xl hover:text-gray-300 transition-colors"
+              className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/80 text-2xl sm:text-3xl hover:text-white transition-colors duration-300"
               aria-label="Fermer"
             >
               <FaTimes />
@@ -538,17 +572,44 @@ export default function Visualiseur() {
         />
       )}
 
+      {/* Rating Modal */}
+      {article?.id && (
+        <RatingModal
+          open={ratingOpen}
+          onClose={() => setRatingOpen(false)}
+          articleId={article.id}
+          articleTitle={article.title}
+          initialAverage={article.rating_average}
+          initialCount={article.rating_count}
+          tokenOverride={token}
+          mode={ratingMode}
+          initialMyRating={myRating || 0}
+          initialMyReview={myReview || ""}
+          onSubmitSuccess={({ rating_average, rating_count, my_rating, my_review }) => {
+            const avg = rating_average;
+            const cnt = rating_count;
+            setArticle(a => ({
+              ...(a || {}),
+              rating_average: Number.isFinite(avg) ? avg : (a?.rating_average ?? 0),
+              rating_count:   Number.isFinite(cnt) ? cnt : (a?.rating_count ?? 0),
+            }));
+            if (typeof my_rating === "number") setMyRating(my_rating);
+            if (typeof my_review === "string") setMyReview(my_review);
+          }}
+        />
+      )}
+
       {/* Debug */}
       {DEBUG_HTTP && (
-        <details className="fixed bottom-6 left-6 bg-white/90 backdrop-blur p-4 rounded-xl border border-gray-200/50 max-w-[40rem] shadow-lg">
-          <summary className="text-gray-700 cursor-pointer font-medium flex items-center">
+        <details className="fixed bottom-8 left-8 bg-white/95 backdrop-blur-xl p-6 rounded-2xl border border-white/60 max-w-[40rem] shadow-xl">
+          <summary className="text-slate-700 cursor-pointer font-medium flex items-center">
             <FaInfoCircle className="mr-2" /> Debug
           </summary>
           <div className="text-xs my-3">
-            <div className="mb-2 font-medium text-gray-800">Show URL</div>
-            <code className="break-all text-gray-600">{buildArticleShowUrl(idOrSlug, { include: ["categories","tags","media"], fields: ["id","title","slug"] })}</code>
+            <div className="mb-2 font-medium text-slate-800">Show URL</div>
+            <code className="break-all text-slate-600">{buildArticleShowUrl(idOrSlug, { include: ["categories","tags","media"], fields: ["id","title","slug"] })}</code>
           </div>
-          <pre className="text-xs max-h-64 overflow-auto bg-gray-50/50 p-3 rounded-lg border border-gray-200/50">
+          <pre className="text-xs max-h-64 overflow-auto bg-slate-50/80 p-4 rounded-xl border border-slate-200/50">
             {JSON.stringify(article, null, 2)}
           </pre>
         </details>
@@ -569,25 +630,25 @@ export default function Visualiseur() {
 /* ---------------- Sub-UI ---------------- */
 function Sidebar({ open, toggle, mediaCount, tags, mediaList, selectedFile, onSelectFile, similar, similarLoading, onOpenSimilar, onOpenTagManager }) {
   return (
-    <div className={`sidebar w-72 mt-32 bg-white/90 backdrop-blur-md shadow-2xl border-r border-gray-200/30 flex-shrink-0 transition-all duration-300 ${open ? "" : "hidden"} lg:block`}>
-      <div className="p-5 border-b border-gray-200/30">
-        <h2 className="text-xl font-bold text-gray-800 flex items-center">
-          <FaFolderOpen className="mr-2 text-blue-600" />
+    <div className={`sidebar pt-4  overflow-auto w-72 lg:w-80 bg-white/70 backdrop-blur-xl shadow-2xl border-r border-white/40 flex-shrink-0 transition-all duration-500 ${open ? "" : "hidden"} lg:block`}>
+      <div className="p-6 border-b border-slate-200/30">
+        <h2 className="text-2xl font-light text-slate-800 flex items-center">
+          <FaFolderOpen className="mr-3 text-blue-500" />
           Bibliothèque
         </h2>
-        <div className="mt-4 relative">
+        <div className="mt-6 relative">
           <input
             type="text"
             placeholder="Rechercher..."
-            className="w-full px-4 py-3 pl-10 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/80"
+            className="w-full px-4 py-3 pl-12 border border-slate-200/60 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 bg-white/80 backdrop-blur-sm transition-all duration-300 text-sm"
           />
-          <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          <FaSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" />
         </div>
       </div>
       <div className="overflow-y-auto h-full pb-24">
         {/* Fichiers liés */}
-        <div className="p-5">
-          <h3 className="font-semibold text-gray-700 mb-4 flex items-center">
+        <div className="p-6">
+          <h3 className="font-medium text-slate-700 mb-5 flex items-center text-lg">
             <FaClock className="mr-2 text-blue-500" />
             Fichiers liés
           </h3>
@@ -595,47 +656,47 @@ function Sidebar({ open, toggle, mediaCount, tags, mediaList, selectedFile, onSe
             {mediaList.length ? mediaList.map((f, idx) => (
               <div
                 key={f.id ?? `media-${idx}`}
-                className={`file-item p-3 rounded-xl cursor-pointer flex items-center transition-all duration-200 border-2 ${
+                className={`file-item p-4 rounded-2xl cursor-pointer flex items-center transition-all duration-300 border ${
                   selectedFile?.id === f.id
-                    ? "bg-blue-50 border-blue-300 shadow-md"
-                    : "bg-white/70 border-transparent hover:border-blue-200 hover:shadow-sm"
+                    ? "bg-blue-50/80 border-blue-200 shadow-lg scale-[1.02]"
+                    : "bg-white/60 border-slate-200/40 hover:border-blue-200/60 hover:shadow-md hover:scale-[1.01]"
                 }`}
                 onClick={() => onSelectFile(f)}
               >
-                <div className={`w-12 h-12 ${iconBgForType(f.type)} rounded-xl flex items-center justify-center mr-3 transition-transform duration-200 hover:scale-110`}>
+                <div className={`w-12 h-12 ${iconBgForType(f.type)} rounded-xl flex items-center justify-center mr-4 transition-transform duration-300 hover:scale-110`}>
                   {iconForType(f.type, "text-2xl")}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-800 truncate">{f.title}</p>
-                  <p className="text-xs text-gray-500">{f.size} • {f.date}</p>
+                  <p className="text-sm font-medium text-slate-800 truncate">{f.title}</p>
+                  <p className="text-xs text-slate-500">{f.size} • {f.date}</p>
                 </div>
-                {f.favorite && <FaStar className="ml-2 text-yellow-400 flex-shrink-0" />}
+                {f.favorite && <FaStar className="ml-2 text-amber-400 flex-shrink-0" />}
               </div>
             )) : (
-              <div className="text-sm text-gray-500 py-8 text-center">Aucun média lié à cet article.</div>
+              <div className="text-sm text-slate-500 py-12 text-center bg-slate-50/50 rounded-2xl">Aucun média lié à cet article.</div>
             )}
           </div>
         </div>
 
         {/* Tags */}
-        <div className="p-5 border-t border-gray-200/30">
-          <h3 className="font-semibold text-gray-700 mb-4 flex items-center">
-            <FaTag className="mr-2 text-green-500" />
+        <div className="p-6 border-t border-slate-200/30">
+          <h3 className="font-medium text-slate-700 mb-5 flex items-center text-lg">
+            <FaTag className="mr-2 text-emerald-500" />
             Tags
           </h3>
 
           {Array.isArray(tags) && tags.length > 0 ? (
             <TagList tags={tags} onAddClick={onOpenTagManager} onTagClick={undefined} max={10} />
           ) : (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500 px-3 py-1.5 rounded-full bg-gray-100">Aucun tag</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-500 px-4 py-2 rounded-full bg-slate-100/80">Aucun tag</span>
               <button
                 onClick={onOpenTagManager}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border border-gray-300 text-gray-700 bg-white/80 hover:bg-gray-50 transition-all"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-slate-300/60 text-slate-600 bg-white/70 hover:bg-slate-50 transition-all duration-300"
                 title="Gérer les tags"
                 type="button"
               >
-                <FaPlus className="text-gray-500" />
+                <FaPlus className="text-slate-500" />
                 Ajouter
               </button>
             </div>
@@ -643,13 +704,13 @@ function Sidebar({ open, toggle, mediaCount, tags, mediaList, selectedFile, onSe
         </div>
 
         {/* Similaires */}
-        <div className="p-5 border-t border-gray-200/30">
-          <h3 className="font-semibold text-gray-700 mb-4 flex items-center">
-            <FaChartBar className="mr-2 text-purple-500" />
+        <div className="p-6 border-t border-slate-200/30">
+          <h3 className="font-medium text-slate-700 mb-5 flex items-center text-lg">
+            <FaChartBar className="mr-2 text-blue-700" />
             Similaires
           </h3>
-          <div className="space-y-3">
-            {similarLoading && <div className="text-sm text-gray-500 py-8 text-center">Chargement…</div>}
+          <div className="space-y-3 overflow-auto min-h-96" style={{ maxHeight: "18rem" }}>
+            {similarLoading && <div className="text-sm text-slate-500 py-12 text-center bg-slate-50/50 rounded-2xl">Chargement…</div>}
             {!similarLoading && (similar.length ? similar.map((it) => {
               const cover =
                 (typeof it.featured_image === "string" && it.featured_image) ||
@@ -660,32 +721,32 @@ function Sidebar({ open, toggle, mediaCount, tags, mediaList, selectedFile, onSe
                 <button
                   key={it.id}
                   onClick={() => onOpenSimilar(it.slug || it.id)}
-                  className="w-full text-left p-3 rounded-xl cursor-pointer flex items-center border border-transparent bg-white/70 hover:border-purple-200 hover:shadow transition-all duration-200"
+                  className="w-full text-left p-4 rounded-2xl cursor-pointer flex items-center border border-slate-200/40 bg-white/60 hover:border-purple-200/60 hover:shadow-md hover:scale-[1.01] transition-all duration-300"
                 >
-                  <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center mr-3 overflow-hidden">
+                  <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mr-4 overflow-hidden">
                     {cover ? (
                       <img src={cover} alt={it.title} className="w-full h-full object-cover" />
                     ) : (
-                      <FaFile className="text-gray-600 text-2xl" />
+                      <FaFile className="text-slate-600 text-2xl" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-800 truncate">{it.title}</p>
-                    <p className="text-xs text-gray-500 truncate">
+                    <p className="text-sm font-medium text-slate-800 truncate">{it.title}</p>
+                    <p className="text-xs text-slate-500 truncate">
                       {(it.categories || []).map((c) => c.name).join(", ") || "—"}
                     </p>
                   </div>
                 </button>
               );
             }) : (
-              <div className="text-sm text-gray-500 py-8 text-center">Aucun article similaire.</div>
+              <div className="text-sm text-slate-500 py-12 text-center bg-slate-50/50 rounded-2xl">Aucun article similaire.</div>
             ))}
           </div>
         </div>
       </div>
       <button
         onClick={toggle}
-        className="absolute top-4 right-4 text-gray-600 hover:text-gray-900 lg:hidden transition-colors"
+        className="absolute top-6 right-6 text-slate-600 hover:text-slate-900 lg:hidden transition-colors duration-300"
         title="Replier"
       >
         <FaTimes className="text-2xl" />
@@ -696,53 +757,50 @@ function Sidebar({ open, toggle, mediaCount, tags, mediaList, selectedFile, onSe
 
 function Toolbar({ onBack, onRefresh, onFullscreen, onDownload, shareData }) {
   return (
-    <div className="border-b border-gray-200/30 p-4 flex justify-between items-center bg-gradient-to-r from-white/50 to-transparent">
-      <div className="flex items-center space-x-2">
+    <div className="border-b border-slate-200/30 p-4 sm:p-5 lg:p-6 flex justify-between items-center bg-gradient-to-r from-white/30 to-transparent">
+      <div className="flex items-center space-x-2 sm:space-x-3">
         <button
           onClick={onBack}
-          className="p-2 rounded-lg text-gray-600 hover:text-blue-600 hover:bg-blue-50 transition-all duration-200 flex items-center justify-center"
+          className="p-3 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50/80 transition-all duration-300 flex items-center justify-center"
           title="Retour"
         >
           <FaArrowLeft />
         </button>
         <button
-          className="p-2 rounded-lg text-gray-600 hover:text-blue-600 hover:bg-blue-50 transition-all duration-200 flex items-center justify-center"
+          className="p-3 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50/80 transition-all duration-300 flex items-center justify-center"
           title="Avancer"
         >
           <FaArrowRight />
         </button>
         <button
           onClick={onRefresh}
-          className="p-2 rounded-lg text-gray-600 hover:text-blue-600 hover:bg-blue-50 transition-all duration-200 flex items-center justify-center"
+          className="p-3 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50/80 transition-all duration-300 flex items-center justify-center"
           title="Rafraîchir"
         >
           <FaRedo />
         </button>
       </div>
-      <div className="flex items-center space-x-3">
+      <div className="flex items-center space-x-3 sm:space-x-4">
         <button
           onClick={onFullscreen}
-          className="px-4 py-2 rounded-xl text-gray-600 hover:text-blue-600 hover:bg-blue-50 border border-gray-300 transition-all duration-200 flex items-center"
+          className="px-4 sm:px-5 lg:px-6 py-3 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50/80 border border-slate-300/60 transition-all duration-300 flex items-center backdrop-blur-sm"
         >
           <FaExpand className="mr-2" />
           <span>Plein écran</span>
         </button>
         <button
           onClick={onDownload}
-          className="px-4 py-2 rounded-xl text-gray-600 hover:text-green-600 hover:bg-green-50 border border-gray-300 transition-all duration-200 flex items-center"
+          className="px-4 sm:px-5 lg:px-6 py-3 rounded-xl text-slate-600 hover:text-emerald-600 hover:bg-emerald-50/80 border border-slate-300/60 transition-all duration-300 flex items-center backdrop-blur-sm"
         >
           <FaDownload className="mr-2" />
           <span>Télécharger</span>
         </button>
 
-        {/* ✅ Bouton de partage réutilisable */}
         <ShareButton
           title={shareData?.title}
           excerpt={shareData?.excerpt}
           url={shareData?.url}
           articleId={shareData?.articleId}
-          // canaux par défaut: email, emailAuto, facebook, whatsapp, whatsappNumber
-          // tu peux réduire avec channels={["email","facebook"]} si besoin
         />
       </div>
     </div>
@@ -751,15 +809,15 @@ function Toolbar({ onBack, onRefresh, onFullscreen, onDownload, shareData }) {
 
 function Tabs({ list, active, onChange }) {
   return (
-    <div className="flex border-b border-gray-200/30 mb-6 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+    <div className="flex border-b border-slate-200/30 mb-6 sm:mb-8 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
       {list.map((tab) => (
         <button
           key={tab}
           onClick={() => onChange(tab)}
-          className={`px-5 py-3 font-medium whitespace-nowrap transition-all duration-200 border-b-4 ${
+          className={`px-4 sm:px-6 py-3 sm:py-4 font-medium whitespace-nowrap transition-all duration-300 border-b-2 ${
             active === tab
-              ? "text-blue-700 border-blue-600"
-              : "text-gray-600 border-transparent hover:text-blue-600"
+              ? "text-blue-600 border-blue-500"
+              : "text-slate-600 border-transparent hover:text-blue-600 hover:border-blue-300"
           }`}
         >
           {tab}
@@ -775,27 +833,29 @@ function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDown
   const looksHtml = /<\/?[a-z][\s\S]*>/i.test(contentStr);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 lg:space-y-10 overflow-auto max-h-screen">
       {!currentUrl ? (
-        <div className="text-center py-16">
-          <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <FaFile className="text-blue-600 text-4xl" />
+        <div className="text-center py-16 lg:py-20">
+          <div className="w-24 h-24 lg:w-28 lg:h-28 bg-gradient-to-br from-blue-100 to-blue-200 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl">
+            <FaFile className="text-blue-600 text-4xl lg:text-5xl" />
           </div>
-          <h3 className="text-2xl font-bold text-gray-800">Aucun média</h3>
-          <p className="text-gray-600 mt-2">Ajoutez un média à l’article ou ouvrez l’onglet « Médias ».</p>
+          <h3 className="text-2xl lg:text-3xl font-light text-slate-800 mb-3">Aucun média</h3>
+          <p className="text-slate-600 mt-2 max-w-md mx-auto">Ajoutez un média à l'article ou ouvrez l'onglet « Médias » pour explorer les fichiers disponibles.</p>
         </div>
       ) : (
         <PreviewByType type={currentType} url={currentUrl} title={currentTitle} onOpen={onOpen} onDownload={onDownload} />
       )}
 
       {contentStr && (
-        <div className="pt-2">
-          <h3 className="text-xl font-bold text-gray-800 mb-4">Contenu</h3>
-          {looksHtml ? (
-            <div className="prose max-w-none prose-lg" dangerouslySetInnerHTML={{ __html: contentStr }} />
-          ) : (
-            <p className="whitespace-pre-line text-gray-800 leading-relaxed">{contentStr}</p>
-          )}
+        <div className="pt-2 sm:pt-4">
+          <h3 className="text-xl lg:text-2xl font-light text-slate-800 mb-4 lg:mb-6">Contenu de l'article</h3>
+          <div className="bg-slate-50/50 rounded-2xl p-5 sm:p-6 lg:p-8 border border-slate-200/40">
+            {looksHtml ? (
+              <div className="prose prose-slate max-w-none prose-lg" dangerouslySetInnerHTML={{ __html: contentStr }} />
+            ) : (
+              <p className="whitespace-pre-line text-slate-700 leading-relaxed">{contentStr}</p>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -803,26 +863,34 @@ function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDown
 }
 
 function Medias({ mediaList }) {
-  if (!mediaList.length) return <div className="text-gray-600 py-8 text-center">Aucun média lié à cet article.</div>;
+  if (!mediaList.length) return (
+    <div className="text-slate-600 py-16 lg:py-20 text-center">
+      <div className="w-20 h-20 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <FaImage className="text-slate-400 text-3xl" />
+      </div>
+      <p>Aucun média lié à cet article.</p>
+    </div>
+  );
+  
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
       {mediaList.map((m, i) => (
-        <div key={m.id ?? i} className="border border-gray-200/50 rounded-xl overflow-hidden bg-white hover:shadow-lg transition-shadow duration-300 group">
-          <div className="p-4 flex items-center gap-4 bg-gray-50/50">
-            <div className={`w-12 h-12 ${iconBgForType(m.type)} rounded-xl flex items-center justify-center transition-transform duration-200 group-hover:scale-110`}>
+        <div key={m.id ?? i} className="border border-slate-200/40 rounded-2xl overflow-hidden bg-white/60 backdrop-blur-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-1 group">
+          <div className="p-5 flex items-center gap-4 bg-slate-50/60">
+            <div className={`w-14 h-14 ${iconBgForType(m.type)} rounded-2xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110`}>
               {iconForType(m.type, "text-2xl")}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-gray-800 truncate">{m.title}</p>
-              <p className="text-xs text-gray-500">{m.size !== "—" ? `${m.size} • ` : ""}{m.date}</p>
+              <p className="text-sm font-medium text-slate-800 truncate">{m.title}</p>
+              <p className="text-xs text-slate-500">{m.size !== "—" ? `${m.size} • ` : ""}{m.date}</p>
             </div>
-            <a href={m.fileUrl} target="_blank" rel="noreferrer" className="ml-auto text-gray-600 hover:text-blue-600 p-2 rounded-lg transition-all duration-200" title="Ouvrir">
+            <a href={m.fileUrl} target="_blank" rel="noreferrer" className="ml-auto text-slate-600 hover:text-blue-600 p-2 rounded-xl transition-all duration-300" title="Ouvrir">
               <FaExternalLinkAlt />
             </a>
           </div>
           {m.type === "image" && (
-            <div className="p-4">
-              <img src={m.thumbnail} alt={m.title} className="w-full h-48 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-shadow duration-300" />
+            <div className="p-5">
+              <img src={m.thumbnail} alt={m.title} className="w-full h-48 object-cover rounded-xl shadow-md group-hover:shadow-xl transition-all duration-500" />
             </div>
           )}
         </div>
@@ -835,16 +903,16 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
   if (type === "image") {
     return (
       <div className="w-full flex flex-col">
-        <div className="flex-1 flex items-center justify-center bg-gray-50/50 rounded-xl border border-gray-200/50 p-6">
-          <img src={url} alt={title} className="max-w-full max-h-[60vh] rounded-xl object-contain shadow-lg" />
+        <div className="flex-1 flex items-center justify-center bg-slate-50/60 rounded-2xl border border-slate-200/40 p-6 sm:p-8 backdrop-blur-sm">
+          <img src={url} alt={title} className="max-w-full max-h-[62vh] lg:max-h-[65vh] rounded-2xl object-contain shadow-2xl" />
         </div>
-        <div className="mt-6 flex flex-wrap justify-center gap-4">
-          <button onClick={onOpen} className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl flex items-center shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
-            <FaExternalLinkAlt className="mr-2" />
+        <div className="mt-6 sm:mt-8 flex flex-wrap justify-center gap-3 sm:gap-4">
+          <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl flex items-center shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+            <FaExternalLinkAlt className="mr-3" />
             Voir en haute résolution
           </button>
-          <button onClick={onDownload} className="bg-white text-gray-700 px-6 py-3 rounded-xl border border-gray-300 flex items-center shadow hover:shadow-md transition-all duration-200 hover:bg-gray-50">
-            <FaDownload className="mr-2" />
+          <button onClick={onDownload} className="bg-white/80 backdrop-blur-sm text-slate-700 px-6 sm:px-8 py-3 sm:py-4 rounded-2xl border border-slate-300/60 flex items-center shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-white">
+            <FaDownload className="mr-3" />
             Télécharger
           </button>
         </div>
@@ -855,31 +923,31 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
   if (type === "pdf") {
     return (
       <div className="w-full flex flex-col">
-        <div className="w-full bg-gray-50/50 border border-gray-200/50 rounded-xl overflow-hidden">
-          <div className="bg-gray-100 p-3 flex items-center border-b border-gray-200/50">
-            <FaFilePdf className="text-red-500 mr-3 text-2xl" />
-            <span className="font-medium text-gray-800 text-lg">{title}</span>
+        <div className="w-full bg-white/60 border border-slate-200/40 rounded-2xl overflow-hidden backdrop-blur-sm shadow-lg">
+          <div className="bg-red-50/80 p-4 flex items-center border-b border-red-100/60">
+            <FaFilePdf className="text-red-500 mr-4 text-3xl" />
+            <span className="font-medium text-slate-800 text-xl">{title}</span>
           </div>
-          <div className="p-6 text-gray-700">
-            <p className="text-sm">Prévisualisation PDF. Ouvrez le fichier pour lecture complète.</p>
+          <div className="p-6 sm:p-8 text-slate-700">
+            <p className="text-sm leading-relaxed">Prévisualisation PDF disponible. Ouvrez le fichier pour une lecture complète avec toutes les fonctionnalités.</p>
           </div>
-          <div className="bg-gray-100/60 p-3 flex justify-between items-center text-sm text-gray-600">
-            <span>Prévisualisation</span>
+          <div className="bg-slate-50/60 p-4 flex justify-between items-center text-sm text-slate-600 border-t border-slate-200/40">
+            <span>Mode prévisualisation</span>
             <div className="flex gap-2">
-              <button className="p-2 hover:bg-gray-200 rounded-lg transition-colors"><FaChevronLeft /></button>
-              <button className="p-2 hover:bg-gray-200 rounded-lg transition-colors"><FaChevronRight /></button>
-              <button className="p-2 hover:bg-gray-200 rounded-lg transition-colors"><FaSearchPlus /></button>
-              <button className="p-2 hover:bg-gray-200 rounded-lg transition-colors"><FaSearchMinus /></button>
+              <button className="p-2 hover:bg-slate-200/60 rounded-xl transition-colors duration-300"><FaChevronLeft /></button>
+              <button className="p-2 hover:bg-slate-200/60 rounded-xl transition-colors duration-300"><FaChevronRight /></button>
+              <button className="p-2 hover:bg-slate-200/60 rounded-xl transition-colors duration-300"><FaSearchPlus /></button>
+              <button className="p-2 hover:bg-slate-200/60 rounded-xl transition-colors duration-300"><FaSearchMinus /></button>
             </div>
           </div>
         </div>
-        <div className="mt-6 flex flex-wrap justify-center gap-4">
-          <button onClick={onOpen} className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl flex items-center shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
-            <FaExternalLinkAlt className="mr-2" />
+        <div className="mt-6 sm:mt-8 flex flex-wrap justify-center gap-3 sm:gap-4">
+          <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl flex items-center shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+            <FaExternalLinkAlt className="mr-3" />
             Ouvrir dans un onglet
           </button>
-          <button onClick={onDownload} className="bg-white text-gray-700 px-6 py-3 rounded-xl border border-gray-300 flex items-center shadow hover:shadow-md transition-all duration-200 hover:bg-gray-50">
-            <FaDownload className="mr-2" />
+          <button onClick={onDownload} className="bg-white/80 backdrop-blur-sm text-slate-700 px-6 sm:px-8 py-3 sm:py-4 rounded-2xl border border-slate-300/60 flex items-center shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-white">
+            <FaDownload className="mr-3" />
             Télécharger
           </button>
         </div>
@@ -888,20 +956,24 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
   }
 
   if (type === "excel" || type === "word") {
+    const bgColor = type === "excel" ? "bg-emerald-50/80 border-emerald-100/60" : "bg-blue-50/80 border-blue-100/60";
+    const iconColor = type === "excel" ? "text-emerald-600" : "text-blue-600";
+    const appName = type === "excel" ? "Excel" : "Word";
+    
     return (
       <div className="w-full flex flex-col">
-        <div className="w-full bg-white border border-gray-200/50 rounded-xl overflow-hidden">
-          <div className="bg-gray-100 p-3 flex items-center border-b border-gray-200/50">
-            {type === "excel" ? <FaFileExcel className="text-green-600 mr-3 text-2xl" /> : <FaFileWord className="text-blue-600 mr-3 text-2xl" />}
-            <span className="font-medium text-gray-800 text-lg">{title}</span>
+        <div className="w-full bg-white/60 border border-slate-200/40 rounded-2xl overflow-hidden backdrop-blur-sm shadow-lg">
+          <div className={`${bgColor} p-4 flex items-center border-b`}>
+            {type === "excel" ? <FaFileExcel className={`${iconColor} mr-4 text-3xl`} /> : <FaFileWord className={`${iconColor} mr-4 text-3xl`} />}
+            <span className="font-medium text-slate-800 text-xl">{title}</span>
           </div>
-          <div className="p-6 text-gray-700">
-            <p className="text-sm">Aperçu non disponible — ouvrez le fichier ci-dessous.</p>
+          <div className="p-6 sm:p-8 text-slate-700">
+            <p className="text-sm leading-relaxed">Aperçu non disponible pour ce type de fichier — ouvrez le document ci-dessous pour le consulter.</p>
           </div>
         </div>
-        <div className="mt-6 flex justify-center">
-          <a href={url} target="_blank" rel="noreferrer" className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl flex items-center shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
-            <FaExternalLinkAlt className="mr-2" /> Ouvrir dans {type === "excel" ? "Excel" : "Word"}
+        <div className="mt-6 sm:mt-8 flex justify-center">
+          <a href={url} target="_blank" rel="noreferrer" className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl flex items-center shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+            <FaExternalLinkAlt className="mr-3" /> Ouvrir dans {appName}
           </a>
         </div>
       </div>
@@ -911,19 +983,19 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
   if (type === "video") {
     return (
       <div className="w-full flex flex-col">
-        <div className="w-full bg-black rounded-xl overflow-hidden border border-gray-200/50">
+        <div className="w-full bg-black rounded-2xl overflow-hidden border border-slate-200/40 shadow-2xl">
           <div className="relative pt-[56.25%]">
-            <img src={url} alt={title} className="absolute inset-0 w-full h-full object-cover opacity-70" />
-            <a href={url} target="_blank" rel="noreferrer" className="absolute inset-0 flex items-center justify-center">
-              <div className="w-20 h-20 bg-black bg-opacity-50 rounded-full flex items-center justify-center text-white text-4xl opacity-90 hover:bg-opacity-70 transition-all duration-200">
-                <FaPlay />
+            <img src={url} alt={title} className="absolute inset-0 w-full h-full object-cover opacity-60" />
+            <a href={url} target="_blank" rel="noreferrer" className="absolute inset-0 flex items-center justify-center group">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white text-4xl sm:text-5xl opacity-90 hover:bg-white/30 hover:scale-110 transition-all duration-300 group-hover:shadow-2xl">
+                <FaPlay className="ml-1" />
               </div>
             </a>
           </div>
         </div>
-        <div className="mt-6 flex justify-center">
-          <a href={url} target="_blank" rel="noreferrer" className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl flex items-center shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
-            <FaExternalLinkAlt className="mr-2" /> Lire la vidéo
+        <div className="mt-6 sm:mt-8 flex justify-center">
+          <a href={url} target="_blank" rel="noreferrer" className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-8 py-4 rounded-2xl flex items-center shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+            <FaPlay className="mr-3" /> Lire la vidéo
           </a>
         </div>
       </div>
@@ -931,15 +1003,15 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
   }
 
   return (
-    <div className="w-full flex flex-col items-center justify-center">
+    <div className="w-full flex flex-col items-center justify-center py-14 lg:py-16">
       <div className="text-center">
-        <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-          <FaFile className="text-blue-600 text-4xl" />
+        <div className="w-24 h-24 lg:w-28 lg:h-28 bg-gradient-to-br from-slate-100 to-slate-200 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl">
+          <FaFile className="text-slate-600 text-4xl lg:text-5xl" />
         </div>
-        <h3 className="text-2xl font-bold text-gray-800">{title}</h3>
-        <p className="text-gray-600 mt-2">Aperçu non disponible pour ce type de fichier</p>
-        <a href={url} target="_blank" rel="noreferrer" className="mt-6 inline-flex items-center bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
-          <FaDownload className="mr-2" /> Ouvrir
+        <h3 className="text-2xl lg:text-3xl font-light text-slate-800 mb-3">{title}</h3>
+        <p className="text-slate-600 mt-2 mb-6 lg:mb-8 max-w-md mx-auto">Aperçu non disponible pour ce type de fichier</p>
+        <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+          <FaDownload className="mr-3" /> Ouvrir le fichier
         </a>
       </div>
     </div>
@@ -969,16 +1041,16 @@ function Metadonnees({ article, currentType, currentTitle }) {
   ];
 
   return (
-    <div className="w-full h-full p-6 overflow-auto">
-      <div className="bg-white rounded-xl border border-gray-200/50 overflow-hidden shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200/50">
-          <tbody className="divide-y divide-gray-200/50">
+    <div className="w-full h-full overflow-auto">
+      <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-200/40 overflow-hidden shadow-lg">
+        <table className="min-w-full divide-y divide-slate-200/50">
+          <tbody className="divide-y divide-slate-200/50">
             {rows.map(([k, v]) => {
               if (v === "__TAGS__") {
                 return (
-                  <tr key={k} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-800 bg-gray-50/50 border-r border-gray-200/50">{k}</td>
-                    <td className="px-6 py-4 text-sm text-gray-700">
+                  <tr key={k} className="hover:bg-slate-50/60 transition-colors duration-300">
+                    <td className="px-6 lg:px-8 py-5 text-sm font-medium text-slate-800 bg-slate-50/60 border-r border-slate-200/50 w-1/3">{k}</td>
+                    <td className="px-6 lg:px-8 py-5 text-sm text-slate-700">
                       {sortedTagList.length ? (
                         <div className="flex flex-wrap gap-2">
                           {sortedTagList.map((t, i) => <TagPill key={t.id ?? `${t.name}-${i}`} tag={t} />)}
@@ -989,9 +1061,9 @@ function Metadonnees({ article, currentType, currentTitle }) {
                 );
               }
               return (
-                <tr key={k} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-6 py-4 text-sm font-medium text-gray-800 bg-gray-50/50 border-r border-gray-200/50">{k}</td>
-                  <td className="px-6 py-4 text-sm text-gray-700">
+                <tr key={k} className="hover:bg-slate-50/60 transition-colors duration-300">
+                  <td className="px-6 lg:px-8 py-5 text-sm font-medium text-slate-800 bg-slate-50/60 border-r border-slate-200/50 w-1/3">{k}</td>
+                  <td className="px-6 lg:px-8 py-5 text-sm text-slate-700">
                     {Array.isArray(v) ? (v.length ? (
                       <div className="flex flex-wrap gap-2">
                         {v.map((t, i) => <TagPill key={t.id ?? `${t.name}-${i}`} tag={t} />)}
@@ -1010,21 +1082,21 @@ function Metadonnees({ article, currentType, currentTitle }) {
 
 function Versions({ history }) {
   return (
-    <div className="w-full h-full p-6 overflow-auto">
-      <div className="space-y-5">
+    <div className="w-full h-full overflow-auto">
+      <div className="space-y-4 max-h-[100vh] overflow-y-auto pr-2">
         {history.map((h) => (
-          <div key={h.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-200/50 hover:shadow-md transition-shadow duration-300">
+          <div key={h.id} className="bg-white/60 backdrop-blur-sm p-6 rounded-2xl  border border-slate-200/40  transition-all duration-500">
             <div className="flex items-start justify-between">
               <div>
-                <h4 className="font-semibold text-gray-800 capitalize flex items-center">
-                  <FaHistory className="mr-2 text-gray-500" />
+                <h4 className="font-medium text-slate-800 capitalize flex items-center text-lg">
+                  <FaHistory className="mr-3 text-slate-500" />
                   {h.action || "changement"}
                 </h4>
-                <p className="text-sm text-gray-500 mt-1">{formatDate(h.created_at)} {h.ip_address ? `• ${h.ip_address}` : ""}</p>
+                <p className="text-sm text-slate-500 mt-2">{formatDate(h.created_at)} {h.ip_address ? `• ${h.ip_address}` : ""}</p>
               </div>
-              {h.user_agent && <span className="text-xs text-gray-400 mt-1">{h.user_agent}</span>}
+              {h.user_agent && <span className="text-xs text-slate-400 mt-1 max-w-xs truncate">{h.user_agent}</span>}
             </div>
-            {h.notes && <p className="text-sm mt-3 text-gray-700">{h.notes}</p>}
+            {h.notes && <p className="text-sm mt-4 text-slate-700 bg-slate-50/50 p-3 rounded-xl">{h.notes}</p>}
           </div>
         ))}
       </div>
@@ -1038,8 +1110,8 @@ function StatsCharts({ article }) {
   const comments  = Number(article.comment_count || 0);
   const ratings   = Number(article.rating_count || 0);
   const avgRating = Math.max(0, Math.min(5, Number(article.rating_average || 0)));
-  const reading   = Number(article.reading_time || 0);
-  const words     = Number(article.word_count || 0);
+  // const reading   = Number(article.reading_time || 0);
+  // const words     = Number(article.word_count || 0);
 
   const engagementData = [
     { name: "Vues", value: views, icon: <FaEye /> },
@@ -1062,57 +1134,162 @@ function StatsCharts({ article }) {
   const historyBarData = Object.entries(actionsCount).map(([k, v]) => ({ name: k, count: v }));
 
   return (
-    <div className="w-full h-full p-6 space-y-8 ">
+    <div className="w-full bg-gradient-to-br from-slate-50/30 via-white/30 to-blue-50/30 backdrop-blur-sm rounded-2xl p-6 sm:p-8 lg:p-10">
       <Toaster/>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-5">
-        <KpiCard label="Vues" value={views} icon={<FaEye />} />
-        <KpiCard label="Partages" value={shares} icon={<FaShareAlt />} />
-        <KpiCard label="Commentaires" value={comments} icon={<FaComment />} />
-        <KpiCard label="Notes reçues" value={ratings} icon={<FaStar />} />
-        <KpiCard label="Note moyenne" value={avgRating.toFixed(2)} suffix="/5" icon={<FaStar />} />
-        <KpiCard label="Mots / Lecture" value={`${words} / ${reading}min`} icon={<FaClock />} />
+      {/* Header */}
+      <div className="mb-10 lg:mb-16">
+        <h1 className="text-3xl lg:text-4xl font-light text-slate-800 mb-3">Statistiques de l'article</h1>
+        <div className="h-1 w-20 lg:w-24 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full"></div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        <ChartCard title="Répartition de l'engagement" icon={<FaChartBar />}>
-          {engagementData.length ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie dataKey="value" data={engagementData} innerRadius={70} outerRadius={110} paddingAngle={2} label>
-                  {engagementData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <EmptyChart />
-          )}
-        </ChartCard>
+      {/* KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6 mb-12 lg:mb-20 text-lg">
+        <KpiCard label="Vues" value={views} icon={<FaEye />} color="blue" />
+        <KpiCard label="Partages" value={shares} icon={<FaShareAlt />} color="green" />
+        <KpiCard label="Commentaires" value={comments} icon={<FaComment />} color="purple" />
+        {/* <KpiCard label="Notes reçues" value={ratings} icon={<FaStar />} color="yellow" /> */}
+        <KpiCard label="Note moyenne" value={avgRating.toFixed(2)} suffix="/5" icon={<FaStar />} color="orange" />
+      </div>
 
-        <ChartCard title={tagsBarData.length ? "Popularité des tags (usage global)" : "Historique des actions"} icon={<FaTag />}>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={tagsBarData.length ? tagsBarData : historyBarData} margin={{ left: 12, right: 12 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="name" interval={0} angle={-25} textAnchor="end" height={60} tick={{ fill: '#475569' }} />
-              <YAxis allowDecimals={false} tick={{ fill: '#475569' }} />
-              <Tooltip />
-              <Bar dataKey={tagsBarData.length ? "usage" : "count"} fill="#3b82f6" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
+      {/* Charts Grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 lg:gap-6">
+        {/* Engagement Chart */}
+        <div className="col-span-1">
+          <ChartCard title="Engagement" subtitle="Répartition des interactions" icon={<FaChartBar />}>
+            {engagementData.length ? (
+              <div className="h-64 md:h-72 xl:h-80 2xl:h-[28rem] flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie 
+                      dataKey="value" 
+                      data={engagementData} 
+                      innerRadius={50} 
+                      outerRadius={90} 
+                      paddingAngle={3}
+                      stroke="none"
+                    >
+                      {engagementData.map((_, i) => (
+                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{
+                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                        border: 'none',
+                        borderRadius: '12px',
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
+                        fontSize: '14px'
+                      }}
+                    />
+                    <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '13px' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <EmptyChart message="Aucune donnée d'engagement disponible" />
+            )}
+          </ChartCard>
+        </div>
 
-        <ChartCard title="Qualité (note moyenne)" icon={<FaStar />}>
-          <ResponsiveContainer width="100%" height={300}>
-            <RadialBarChart innerRadius="50%" outerRadius="100%" data={[{ name: "Note", value: avgRating }]} startAngle={90} endAngle={-270}>
-              <RadialBar dataKey="value" minAngle={15} clockWise background fill="#e2e8f0" />
-              <Tooltip />
-              <Legend />
-            </RadialBarChart>
-          </ResponsiveContainer>
-          <div className="text-center text-sm text-gray-600 -mt-2">Note sur 5</div>
-        </ChartCard>
+        {/* Tags/History Chart */}
+        <div className="col-span-1">
+          <ChartCard 
+            title={tagsBarData.length ? "Tags populaires" : "Historique"} 
+            subtitle={tagsBarData.length ? "Usage global des tags" : "Actions effectuées"}
+            icon={tagsBarData.length ? <FaTag /> : <FaHistory />}
+          >
+            <div className="h-64 md:h-72 xl:h-80 2xl:h-[28rem]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart 
+                  data={tagsBarData.length ? tagsBarData : historyBarData} 
+                  margin={{ top: 20, right: 20, left: 20, bottom: 60 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" opacity={0.6} />
+                  <XAxis 
+                    dataKey="name" 
+                    interval={0} 
+                    angle={-35} 
+                    textAnchor="end" 
+                    height={80} 
+                    tick={{ fill: '#64748b', fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    allowDecimals={false} 
+                    tick={{ fill: '#64748b', fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip 
+                    contentStyle={{
+                      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                      border: 'none',
+                      borderRadius: '12px',
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
+                      fontSize: '14px'
+                    }}
+                  />
+                  <Bar 
+                    dataKey={tagsBarData.length ? "usage" : "count"} 
+                    fill="#3b82f6" 
+                    radius={[6, 6, 0, 0]}
+                    stroke="none"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartCard>
+        </div>
+
+        {/* Rating Chart */}
+        <div className="col-span-1">
+          <ChartCard title="Qualité" subtitle="Note moyenne attribuée" icon={<FaStar />}>
+            <div className="h-64 md:h-72 xl:h-80 2xl:h-[28rem] flex flex-col items-center justify-center">
+              {avgRating > 0 ? (
+                <>
+                  <div className="relative w-40 h-40 md:w-44 md:h-44 xl:w-48 xl:h-48 mb-6">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadialBarChart 
+                        innerRadius="60%" 
+                        outerRadius="90%" 
+                        data={[{ name: "Note", value: (avgRating / 5) * 100 }]} 
+                        startAngle={90} 
+                        endAngle={-270}
+                      >
+                        <RadialBar 
+                          dataKey="value" 
+                          minAngle={15} 
+                          clockWise 
+                          background={{ fill: '#e2e8f0' }} 
+                          fill="#fbbf24"
+                          cornerRadius={6}
+                        />
+                      </RadialBarChart>
+                    </ResponsiveContainer>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <div className="text-3xl md:text-4xl font-light text-slate-800">{avgRating.toFixed(1)}</div>
+                      <div className="text-sm text-slate-500">sur 5</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {[...Array(5)].map((_, i) => (
+                      <FaStar 
+                        key={i} 
+                        className={i < Math.round(avgRating) ? "text-yellow-400" : "text-gray-200"}
+                        size={16}
+                      />
+                    ))}
+                    <span className="ml-2 text-sm text-slate-600">({ratings} {ratings <= 1 ? 'note' : 'notes'})</span>
+                  </div>
+                </>
+              ) : (
+                <EmptyChart message="Aucune note disponible" />
+              )}
+            </div>
+          </ChartCard>
+        </div>
       </div>
     </div>
   );
@@ -1134,14 +1311,14 @@ function SeoPanel({ article }) {
   ];
 
   return (
-    <div className="w-full h-full p-6 space-y-6">
-      <div className="bg-white rounded-xl border border-gray-200/50 overflow-hidden shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200/50">
-          <tbody className="divide-y divide-gray-200/50">
+    <div className="w-full h-full overflow-auto space-y-6 lg:space-y-8">
+      <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-200/40 overflow-hidden shadow-lg">
+        <table className="min-w-full divide-y divide-slate-200/50">
+          <tbody className="divide-y divide-slate-200/50">
             {items.map(([k, v]) => (
-              <tr key={k} className="hover:bg-gray-50/50 transition-colors">
-                <td className="px-6 py-4 text-sm font-medium text-gray-800 bg-gray-50/50 border-r border-gray-200/50">{k}</td>
-                <td className="px-6 py-4 text-sm text-gray-700 break-words">{v || "—"}</td>
+              <tr key={k} className="hover:bg-slate-50/60 transition-colors duration-300">
+                <td className="px-6 lg:px-8 py-5 text-sm font-medium text-slate-800 bg-slate-50/60 border-r border-slate-200/50 w-1/3">{k}</td>
+                <td className="px-6 lg:px-8 py-5 text-sm text-slate-700 break-words">{v || "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -1149,12 +1326,12 @@ function SeoPanel({ article }) {
       </div>
 
       {seo?.schema_org && (
-        <div className="bg-white rounded-xl border border-gray-200/50 p-5 shadow-sm">
-          <h4 className="font-semibold text-gray-800 mb-3 flex items-center">
-            <FaInfoCircle className="mr-2 text-blue-600" />
+        <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-200/40 p-6 shadow-lg">
+          <h4 className="font-medium text-slate-800 mb-4 flex items-center text-lg">
+            <FaInfoCircle className="mr-3 text-blue-600" />
             Schema.org
           </h4>
-          <pre className="text-xs bg-gray-50/50 p-4 rounded-lg border border-gray-200/50 overflow-auto text-gray-700">
+          <pre className="text-xs bg-slate-50/80 p-6 rounded-xl border border-slate-200/50 overflow-auto text-slate-700">
             {JSON.stringify(seo.schema_org, null, 2)}
           </pre>
         </div>
@@ -1163,7 +1340,11 @@ function SeoPanel({ article }) {
   );
 }
 
-function DetailsPanel({ article, currentType, currentTitle, similar, similarLoading, onOpenSimilar, selectedFile, me, token, rights }) {
+function DetailsPanel({
+  article, currentType, currentTitle, similar, similarLoading, onOpenSimilar,
+  selectedFile, me, token, rights, onOpenRating, onOpenRatingEdit,
+  ratingAverage, ratingCount, myRating, ratingLoaded
+}) {
   const tags = article?.tags || [];
 
   const initialTopLevelApproved = useMemo(() => {
@@ -1177,42 +1358,129 @@ function DetailsPanel({ article, currentType, currentTitle, similar, similarLoad
   }, [article]);
 
   return (
-    <aside className="w-1/3 p-6">
-      <h2 className="text-xl font-bold text-gray-800 mb-5 flex items-center">
-        <FaInfoCircle className="mr-2 text-blue-600" />
+    <aside className="shrink-0 w-full sm:w-[20rem] lg:w-[22rem] xl:w-[24rem] 2xl:w-[26rem] p-6 lg:p-8">
+      <h2 className="text-2xl font-light text-slate-800 mb-6 lg:mb-8 flex items-center">
+        <FaInfoCircle className="mr-3 text-blue-600" />
         Détails du fichier
       </h2>
-      <div className="bg-white p-5 rounded-xl mb-6 border border-gray-200/50 shadow-sm">
-        <div className="flex items-center mb-5">
-          <div className={`w-14 h-14 ${iconBgForType(currentType)} rounded-xl flex items-center justify-center shadow-md`}>
-            {iconForType(currentType, "text-2xl")}
+        {(() => {
+        const statusLabel = (article?.status || "—").toString();
+        const statusKey = statusLabel.toLowerCase();
+        const statusCls =
+          /publi|actif|online|en ligne/.test(statusKey)
+            ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+            : /brouillon|draft/.test(statusKey)
+            ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+            : /archiv|inactif|désactiv/.test(statusKey)
+            ? "bg-slate-100 text-slate-700 ring-1 ring-slate-200"
+            : "bg-blue-50 text-blue-700 ring-1 ring-blue-200";
+
+        return (
+          <div className="relative overflow-hidden rounded-3xl border border-slate-200/60 bg-white/70 backdrop-blur-sm  mb-6">
+            {/* Ligne lumineuse */}
+            <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-sky-300 to-transparent" />
+
+            {/* Header compact */}
+            <div className="relative flex items-center gap-3 p-4 border-b border-slate-200/50">
+              <div
+                className={`w-12 h-12 ${iconBgForType(currentType)} rounded-xl flex items-center justify-center shadow-md ring-1 ring-inset ring-white/40`}
+              >
+                {iconForType(currentType, "text-lg")}
+              </div>
+
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold text-slate-900 truncate leading-tight">
+                  {currentTitle || "Sans titre"}
+                </h3>
+                <p className="text-[11px] font-medium text-slate-500/80 mt-0.5 leading-snug">
+                  {formatDate(article?.created_at)} • {firstCategory(article)}
+                </p>
+              </div>
+
+              <div className="ml-auto flex items-center gap-1.5">
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusCls}`}>
+                  {statusLabel}
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-sky-50 text-sky-700 ring-1 ring-sky-200">
+                  {currentType ? currentType.toUpperCase() : "—"}
+                </span>
+              </div>
+            </div>
+
+            {/* Contenu compact */}
+            <div className="p-4">
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[13px] leading-tight">
+                <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
+                  <dt className="text-slate-500">Date de création</dt>
+                  <dd className="mt-0.5 font-medium text-slate-900">
+                    {formatDate(article?.created_at)}
+                  </dd>
+                </div>
+
+                <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
+                  <dt className="text-slate-500">Dernière modification</dt>
+                  <dd className="mt-0.5 font-medium text-slate-900">
+                    {formatDate(article?.updated_at)}
+                  </dd>
+                </div>
+
+                <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
+                  <dt className="text-slate-500">Statut</dt>
+                  <dd className="mt-0.5">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusCls}`}>
+                      {statusLabel}
+                    </span>
+                  </dd>
+                </div>
+
+                <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
+                  <dt className="text-slate-500">Format</dt>
+                  <dd className="mt-0.5 font-medium text-slate-900">
+                    {currentType ? currentType.toUpperCase() : "—"}
+                  </dd>
+                </div>
+              </dl>
+
+              {/* Catégorie */}
+              <div className="mt-4">
+                <p className="text-slate-500 text-[13px] mb-1.5">Catégorie</p>
+                <span className="inline-flex items-center rounded-full bg-indigo-50 text-blue-700 ring-1 ring-indigo-200 px-2.5 py-1 text-[11px] font-semibold">
+                  {firstCategory(article)}
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="ml-4">
-            <h3 className="font-bold text-gray-800">{currentTitle}</h3>
-            <p className="text-sm text-gray-500">{currentType ? currentType.toUpperCase() : "—"} • —</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-5 text-sm mb-5">
+        );
+      })()}
+
+
+      {/* Qualité / Notation */}
+      <div className="bg-white/60 backdrop-blur-sm p-6 rounded-2xl mb-8 border-2 border-slate-200/40">
+        <div className="flex items-center justify-between">
           <div>
-            <p className="text-gray-500 mb-1">Date de création</p>
-            <p className="font-medium text-gray-800">{formatDate(article?.created_at)}</p>
+            <p className="text-slate-500 text-sm mb-1">Note moyenne</p>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center">
+                {[...Array(5)].map((_, i) => (
+                  <FaStar
+                    key={i}
+                    className={i < Math.round(Math.max(0, Math.min(5, Number(ratingAverage || 0)))) ? "text-yellow-400" : "text-gray-200"}
+                    size={16}
+                  />
+                ))}
+              </div>
+              <span className="text-sm text-slate-600">
+                {(Number(ratingAverage || 0)).toFixed(1)} / 5 · {Number(ratingCount || 0)} {Number(ratingCount || 0) <= 1 ? "note" : "notes"}
+              </span>
+            </div>
           </div>
-          <div>
-            <p className="text-gray-500 mb-1">Dernière modification</p>
-            <p className="font-medium text-gray-800">{formatDate(article?.updated_at)}</p>
-          </div>
-          <div>
-            <p className="text-gray-500 mb-1">Statut</p>
-            <p className="font-medium text-gray-800">{article?.status || "—"}</p>
-          </div>
-          <div>
-            <p className="text-gray-500 mb-1">Format</p>
-            <p className="font-medium text-gray-800">{currentType ? currentType.toUpperCase() : "—"}</p>
-          </div>
-        </div>
-        <div className="mb-5">
-          <p className="text-gray-500 mb-2">Catégorie</p>
-          <p className="text-sm font-medium text-gray-800">{firstCategory(article)}</p>
+
+          {/* Si la notation est désactivée -> rien */}
+          {article?.allow_rating === false ? null : (
+            ratingLoaded && typeof myRating === "number"
+              ? <RateButton onClick={onOpenRatingEdit} label="Modifier" />
+              : <RateButton onClick={onOpenRating} label="Noter" />
+          )}
         </div>
       </div>
 
@@ -1230,31 +1498,82 @@ function DetailsPanel({ article, currentType, currentTitle, similar, similarLoad
   );
 }
 
-/* Small blocks & cards */
-function KpiCard({ label, value, suffix, icon }) {
+/* KPI Card */
+function KpiCard({ label, value, suffix, icon, color = 'blue' }) {
+    const colorClasses = {
+    blue: 'from-blue-50/80 to-blue-100/60 text-blue-600 border-blue-100/60',
+    green: 'from-emerald-50/80 to-emerald-100/60 text-emerald-600 border-emerald-100/60',
+    purple: 'from-purple-50/80 to-purple-100/60 text-purple-600 border-purple-100/60',
+    yellow: 'from-yellow-50/80 to-yellow-100/60 text-yellow-600 border-yellow-100/60',
+    orange: 'from-orange-50/80 to-orange-100/60 text-orange-600 border-orange-100/60',
+    indigo: 'from-indigo-50/80 to-indigo-100/60 text-indigo-600 border-indigo-100/60',
+  };
+
+  const gradientClasses = {
+    blue: 'from-blue-500 to-blue-600',
+    green: 'from-emerald-500 to-emerald-600',
+    purple: 'from-purple-500 to-purple-600',
+    yellow: 'from-yellow-500 to-yellow-600',
+    orange: 'from-orange-500 to-orange-600',
+    indigo: 'from-indigo-500 to-indigo-600',
+  };
+
   return (
-    <div className="rounded-xl border border-gray-200/50 bg-white p-5 shadow-sm hover:shadow-md transition-shadow duration-300">
-      <div className="flex items-center mb-2">
-        {icon && <span className="text-blue-600 mr-2">{icon}</span>}
-        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</div>
+    <div className={`relative group rounded-2xl border bg-gradient-to-br ${colorClasses[color]} backdrop-blur-sm p-6 sm:p-7 lg:p-8 transition-all duration-500 hover:shadow-xl hover:-translate-y-2 hover:scale-[1.02]`}>
+      <div className={`absolute top-0 left-6 lg:left-8 h-1 w-16 bg-gradient-to-r ${gradientClasses[color]} rounded-b-full`} />
+      <div className="flex items-start justify-between mb-4 lg:mb-6">
+        <div className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+          {label}
+        </div>
+        {icon && (
+          <div className="opacity-40 group-hover:opacity-60 transition-opacity duration-500">
+            {icon}
+          </div>
+        )}
       </div>
-      <div className="text-2xl font-bold text-gray-800">{value ?? "—"}{suffix || ""}</div>
+      <div className="text-2xl lg:text-3xl font-light text-slate-800 tracking-tight">
+        {value ?? "—"}
+        {suffix && <span className="text-base lg:text-xl text-slate-500 ml-1">{suffix}</span>}
+      </div>
     </div>
   );
 }
 
-function ChartCard({ title, children, icon }) {
+/* Chart Card */
+function ChartCard({ title, subtitle, children, icon }) {
   return (
-    <div className="rounded-xl border border-gray-200/50 bg-white p-6 shadow-sm hover:shadow-md transition-shadow duration-300">
-      <h4 className="font-bold text-gray-800 mb-4 flex items-center text-lg">
-        {icon && <span className="mr-2 text-blue-600">{icon}</span>}
-        {title}
-      </h4>
-      {children}
+    <div className="group rounded-3xl border border-white/60 bg-white/50 backdrop-blur-xl p-6 sm:p-8 lg:p-10 shadow-xl hover:shadow-2xl transition-all duration-700 hover:-translate-y-2">
+      <div className="flex items-center justify-between mb-6 lg:mb-8">
+        <div>
+          <h3 className="text-xl lg:text-2xl font-light text-slate-800 mb-2 flex items-center gap-4">
+            {icon && (
+              <span className="text-slate-400 group-hover:text-slate-600 transition-colors duration-500">
+                {icon}
+              </span>
+            )}
+            {title}
+          </h3>
+          {subtitle && (
+            <p className="text-sm text-slate-500">{subtitle}</p>
+          )}
+        </div>
+      </div>
+      <div className="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent mb-6 lg:mb-8" />
+      <div className="relative">
+        {children}
+      </div>
     </div>
   );
 }
 
-function EmptyChart() {
-  return <div className="h-[300px] flex items-center justify-center text-gray-400 text-sm">Pas assez de données pour tracer ce graphique.</div>;
+/* Empty Chart */
+function EmptyChart({ message = "Pas assez de données pour ce graphique" }) {
+  return (
+    <div className="h-64 md:h-72 xl:h-80 2xl:h-[28rem] flex flex-col items-center justify-center text-slate-400">
+      <div className="w-16 h-16 rounded-full bg-slate-100/80 flex items-center justify-center mb-4">
+        <FaChartBar className="text-2xl" />
+      </div>
+      <p className="text-sm text-center max-w-xs leading-relaxed">{message}</p>
+    </div>
+  );
 }

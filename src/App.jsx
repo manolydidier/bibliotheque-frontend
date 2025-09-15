@@ -85,6 +85,7 @@ export default function App() {
                   <Route element={<DefaultLayout />}>
                     <Route path="/settings" element={<UserManagementDashboard />} />
                      <Route path="/articles" element={<ArticlesPage/>} />
+                     
                       <Route path="/articles/:show" element={<Visualiseur />} />
                      
                   </Route>

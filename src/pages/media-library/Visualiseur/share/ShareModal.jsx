@@ -1,6 +1,5 @@
 // src/components/share/ShareModal.jsx
 import React, { useEffect, useRef, useState, useMemo } from "react";
-import { createPortal } from "react-dom";
 import {
   FaTimes,
   FaFacebook,
@@ -13,40 +12,27 @@ import {
   FaCheck,
 } from "react-icons/fa";
 
-/* ---------- Overlays globaux via Portal (toujours rendus) ---------- */
-function GlobalToast({ open, message }) {
-  if (!open || !message) return null;
-  return createPortal(
-    <div className="fixed top-4 right-4 z-[2147483647] transition-all">
-      <div className="flex items-center gap-2 bg-green-600 text-white shadow-lg rounded-xl px-4 py-2">
-        <FaCheck className="shrink-0" />
-        <span className="text-sm font-medium">{message}</span>
-      </div>
-    </div>,
-    document.body
-  );
+/* ---------- helpers locaux ---------- */
+function openNewWindow(href) {
+  try {
+    const w = window.open(href || "about:blank", "_blank", "noopener,noreferrer");
+    return w || null;
+  } catch {
+    return null;
+  }
 }
 
-function SuccessOverlay({ open, title, text, onOk }) {
-  if (!open) return null;
-  return createPortal(
-    <div className="fixed inset-0 z-[2147483647] bg-black/40 flex items-center justify-center p-6">
-      <div className="bg-white rounded-2xl shadow-2xl border border-green-100 w-full max-w-xs mx-4 p-6 text-center">
-        <div className="mx-auto w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mb-3">
-          <FaCheck className="text-green-600" size={22} />
-        </div>
-        <h4 className="text-lg font-semibold text-gray-900">{title}</h4>
-        {text ? <p className="text-sm text-gray-600 mt-1">{text}</p> : null}
-        <button
-          onClick={onOk}
-          className="mt-4 inline-flex items-center justify-center px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white font-medium"
-        >
-          OK
-        </button>
-      </div>
-    </div>,
-    document.body
-  );
+function buildFacebookUrl(url, quote = "") {
+  const u = url || (typeof window !== "undefined" ? window.location.href : "");
+  const q = quote ? `&quote=${encodeURIComponent(quote)}` : "";
+  return `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(u)}${q}`;
+}
+
+function buildWhatsAppText({ title, excerpt, url }) {
+  const parts = [title || excerpt || "", url || (typeof window !== "undefined" ? window.location.href : "")]
+    .map((s) => (s || "").trim())
+    .filter(Boolean);
+  return parts.join("\n\n");
 }
 
 /* ---------- Composant principal ---------- */
@@ -57,11 +43,11 @@ export default function ShareModal({
   excerpt,
   url,
   channels = ["email", "emailAuto", "facebook", "whatsapp", "whatsappNumber"],
-  onEmailMailto,
-  onEmailAuto,
-  onFacebook,
-  onWhatsAppGeneral,
-  onWhatsAppToNumber,
+  onEmailMailto,        // (opts) => void              (peut déclencher mailto + tracking côté parent)
+  onEmailAuto,          // async (opts) => void        (appel API d'envoi)
+  onFacebook,           // (opts) => void              (idéalement tracking ONLY)
+  onWhatsAppGeneral,    // (opts) => void              (idéalement tracking ONLY)
+  onWhatsAppToNumber,   // (opts) => void              (idéalement tracking ONLY)
   defaultWhatsNumber = "",
 }) {
   const inputRef = useRef(null);
@@ -74,20 +60,8 @@ export default function ShareModal({
   const [copyOk, setCopyOk] = useState(false);
   const [activeTab, setActiveTab] = useState("link");
   const [isVisible, setIsVisible] = useState(false);
-
-  // email auto
   const [emailSending, setEmailSending] = useState(false);
   const [emailError, setEmailError] = useState("");
-
-  // overlays (toast + succès)
-  const [toastMsg, setToastMsg] = useState("");
-  const [toastOpen, setToastOpen] = useState(false);
-  const [successOpen, setSuccessOpen] = useState(false);
-  const [successTitle, setSuccessTitle] = useState("");
-  const [successText, setSuccessText] = useState("");
-
-  const toastTimer = useRef(null);
-  const autoCloseTimer = useRef(null);
   const [isMounted, setIsMounted] = useState(false);
 
   const safeUrl =
@@ -111,7 +85,7 @@ export default function ShareModal({
   const activeIndex = Math.max(0, tabs.findIndex((t) => t.key === activeTab));
   const tabWidthPct = 100 / Math.max(1, tabs.length);
 
-  // marquer monté (pour Portal côté client)
+  // monté (pour focus)
   useEffect(() => setIsMounted(true), []);
 
   // animation d’apparition quand open change
@@ -125,51 +99,8 @@ export default function ShareModal({
     }
   }, [open]);
 
-  // nettoyage timers
-  useEffect(() => {
-    return () => {
-      clearTimeout(toastTimer.current);
-      clearTimeout(autoCloseTimer.current);
-    };
-  }, []);
-
-  /* IMPORTANT : ne PAS return null quand open === false
-     → on veut pouvoir afficher les PORTALS même si le modal est caché */
   const handleCloseAll = () => {
-    clearTimeout(toastTimer.current);
-    clearTimeout(autoCloseTimer.current);
-    setToastOpen(false);
-    setSuccessOpen(false);
     onClose?.();
-  };
-
-  const showToastThenDialogAndAutoClose = (
-    toastMessage,
-    dialogTitle,
-    dialogText = "",
-    toastDuration = 1400
-  ) => {
-    // Toast global
-    setToastMsg(toastMessage);
-    setToastOpen(true);
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => {
-      setToastOpen(false);
-      setToastMsg("");
-    }, toastDuration);
-
-    // Dialogue (léger décalage pour que l’utilisateur voie bien le toast)
-    setTimeout(() => {
-      setSuccessTitle(dialogTitle);
-      setSuccessText(dialogText);
-      setSuccessOpen(true);
-    }, 200);
-
-    // Fermeture auto globale
-    clearTimeout(autoCloseTimer.current);
-    autoCloseTimer.current = setTimeout(() => {
-      handleCloseAll();
-    }, toastDuration + 600);
   };
 
   /* ---------- Actions ---------- */
@@ -178,11 +109,6 @@ export default function ShareModal({
       await navigator.clipboard.writeText(safeUrl);
       setCopyOk(true);
       setTimeout(() => setCopyOk(false), 1200);
-      showToastThenDialogAndAutoClose(
-        "Lien copié !",
-        "Lien copié",
-        "Le lien a été copié dans le presse-papiers."
-      );
     } catch {
       /* noop */
     }
@@ -193,12 +119,9 @@ export default function ShareModal({
     setEmailError("");
     setEmailSending(true);
     try {
-      await onEmailAuto({ to: emailTo }); // appelle ton service
-      showToastThenDialogAndAutoClose(
-        "E-mail envoyé !",
-        "E-mail envoyé",
-        "Votre message a été envoyé avec succès."
-      );
+      await onEmailAuto({ to: emailTo, title, excerpt, url: safeUrl });
+      // pas d’overlay → on ferme simplement
+      handleCloseAll();
     } catch {
       setEmailError("Échec de l’envoi automatique. Veuillez réessayer.");
     } finally {
@@ -208,56 +131,60 @@ export default function ShareModal({
 
   const handleEmailMailto = () => {
     if (!onEmailMailto) return;
-    onEmailMailto({ to: emailTo });
-    showToastThenDialogAndAutoClose(
-      "Client e-mail ouvert.",
-      "Client e-mail ouvert",
-      "Vous pouvez finaliser l’envoi dans votre application."
-    );
+    onEmailMailto({ to: emailTo, title, excerpt, url: safeUrl });
+    handleCloseAll();
   };
 
   const handleFacebook = () => {
-    if (!onFacebook) return;
-    onFacebook();
-    showToastThenDialogAndAutoClose(
-      "Facebook ouvert.",
-      "Facebook prêt",
-      "Partagez votre article dans la fenêtre ouverte."
-    );
+    // 1) ouvrir immédiatement une nouvelle fenêtre (non bloqué)
+    const href = buildFacebookUrl(safeUrl);
+    openNewWindow(href);
+
+    // 2) laisser le parent faire du tracking (mais SANS navigation)
+    try {
+      onFacebook?.({ href, trackOnly: true, title, excerpt, url: safeUrl });
+    } catch {}
+    handleCloseAll();
   };
 
   const handleWhatsGeneral = () => {
-    if (!onWhatsAppGeneral) return;
-    onWhatsAppGeneral();
-    showToastThenDialogAndAutoClose(
-      "WhatsApp ouvert.",
-      "WhatsApp prêt",
-      "Validez l’envoi dans l’application."
-    );
+    const text = buildWhatsAppText({ title, excerpt, url: safeUrl });
+    const href = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    openNewWindow(href);
+
+    try {
+      onWhatsAppGeneral?.({ href, trackOnly: true, text });
+    } catch {}
+    handleCloseAll();
   };
 
   const handleWhatsToNumber = () => {
-    if (!onWhatsToNumber) return;
-    onWhatsAppToNumber?.({ phone: whatsNumber });
-    showToastThenDialogAndAutoClose(
-      "Conversation WhatsApp lancée.",
-      "WhatsApp prêt",
-      "Le message est prêt à être envoyé."
-    );
+    const clean = String(whatsNumber || "").replace(/[^\d]/g, "");
+    if (!clean) return;
+    const text = buildWhatsAppText({ title, excerpt, url: safeUrl });
+    const href = `https://wa.me/${encodeURIComponent(clean)}?text=${encodeURIComponent(text)}`;
+    openNewWindow(href);
+
+    try {
+      onWhatsAppToNumber?.({ href, trackOnly: true, phone: clean, text });
+    } catch {}
+    handleCloseAll();
   };
 
   /* ---------- Renders ---------- */
 
-  const ModalShell = (
-    <div className="fixed inset-0 flex items-center justify-center z-[9999] p-4 pointer-events-auto">
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-[99] p-4 pointer-events-auto">
       <div
-        className={`absolute inset-0 bg-gradient-to-br from-blue-900/40 via-blue-800/30 to-blue-900/50 backdrop-blur-lg transition-all duration-500 ${
+        className={`absolute inset-0 bg-black/40 backdrop-blur-sm transition-all duration-300 ${
           isVisible ? "opacity-100" : "opacity-0"
         }`}
         onClick={handleCloseAll}
       />
       <div
-        className={`relative bg-white/90 backdrop-blur-2xl rounded-3xl shadow-2xl border border-blue-100/50 w-full max-w-sm overflow-hidden transition-all duration-500 ${
+        className={`relative bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden transition-all duration-300 ${
           isVisible
             ? "opacity-100 scale-100 translate-y-0"
             : "opacity-0 scale-95 translate-y-4"
@@ -272,9 +199,7 @@ export default function ShareModal({
               </div>
               <div>
                 <h3 className="text-xl font-bold text-white">Partager</h3>
-                <p className="text-blue-100 text-sm mt-0.5">
-                  Diffusez votre contenu
-                </p>
+                <p className="text-blue-100 text-sm mt-0.5">Diffusez votre contenu</p>
               </div>
             </div>
             <button
@@ -297,9 +222,7 @@ export default function ShareModal({
                 {title}
               </div>
               {excerpt && (
-                <div className="text-xs text-blue-600 mt-1 truncate">
-                  {excerpt}
-                </div>
+                <div className="text-xs text-blue-600 mt-1 truncate">{excerpt}</div>
               )}
             </div>
           )}
@@ -330,12 +253,8 @@ export default function ShareModal({
                 setEmailTo={setEmailTo}
                 emailSending={emailSending}
                 emailError={emailError}
-                onEmailAuto={
-                  channels.includes("emailAuto") ? handleEmailAuto : null
-                }
-                onEmailMailto={
-                  channels.includes("email") ? handleEmailMailto : null
-                }
+                onEmailAuto={channels.includes("emailAuto") ? handleEmailAuto : null}
+                onEmailMailto={channels.includes("email") ? handleEmailMailto : null}
               />
             )}
 
@@ -343,14 +262,8 @@ export default function ShareModal({
               <WhatsAppTab
                 whatsNumber={whatsNumber}
                 setWhatsNumber={setWhatsNumber}
-                onWhatsToNumber={
-                  channels.includes("whatsappNumber")
-                    ? handleWhatsToNumber
-                    : null
-                }
-                onWhatsGeneral={
-                  channels.includes("whatsapp") ? handleWhatsGeneral : null
-                }
+                onWhatsToNumber={channels.includes("whatsappNumber") ? handleWhatsToNumber : null}
+                onWhatsGeneral={channels.includes("whatsapp") ? handleWhatsGeneral : null}
               />
             )}
           </div>
@@ -365,26 +278,6 @@ export default function ShareModal({
         </div>
       </div>
     </div>
-  );
-
-  return (
-    <>
-      {/* Le modal n’est visible que si open === true */}
-      {open ? ModalShell : null}
-
-      {/* Overlays globaux : TOUJOURS montés (même si open === false) */}
-      {isMounted && (
-        <>
-          <GlobalToast open={toastOpen} message={toastMsg} />
-          <SuccessOverlay
-            open={successOpen}
-            title={successTitle}
-            text={successText}
-            onOk={handleCloseAll}
-          />
-        </>
-      )}
-    </>
   );
 }
 
@@ -490,7 +383,7 @@ function EmailTab({
           value={emailTo}
           onChange={(e) => setEmailTo(e.target.value)}
           placeholder="Destinataire(s) e-mail : ex. ami@ex.com ; collegue@ex.com"
-        className="w-full px-4 py-3.5 rounded-2xl border-2 border-blue-200/50 text-sm focus:outline-none focus:border-blue-400 bg-gradient-to-r from-blue-50/30 to-white transition-all duration-300 pr-12 group-hover:shadow-lg"
+          className="w-full px-4 py-3.5 rounded-2xl border-2 border-blue-200/50 text-sm focus:outline-none focus:border-blue-400 bg-gradient-to-r from-blue-50/30 to-white transition-all duration-300 pr-12 group-hover:shadow-lg"
         />
         <FaEnvelope className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-400" size={16} />
       </div>

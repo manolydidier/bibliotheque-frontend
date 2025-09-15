@@ -1,3 +1,4 @@
+// src/pages/media-library/Visualiseur/share/ShareButton.jsx
 import React from "react";
 import { FaShareAlt } from "react-icons/fa";
 import ShareModal from "./ShareModal";
@@ -8,7 +9,7 @@ import {
   shareOnWhatsApp,
   shareOnWhatsAppToNumber,
   shareByEmailAuto,
-  showToast, // << on utilise le toast
+  showToast,
 } from "./shareUtils";
 
 /**
@@ -28,14 +29,18 @@ export default function ShareButton({
   defaultWhatsNumber = "",
 }) {
   const [open, setOpen] = React.useState(false);
-  const defs = React.useMemo(() => buildShareDefaults({ title, excerpt, url }), [title, excerpt, url]);
+  const defs = React.useMemo(
+    () => buildShareDefaults({ title, excerpt, url }),
+    [title, excerpt, url]
+  );
 
+  // --- EMAIL: client mail (mailto)
   const onEmailMailto = ({ to }) => {
-    // mailto — trace en base (fire & forget) si articleId
     shareByEmailMailto({ to, subject: defs.subject, body: defs.body, articleId });
     setOpen(false);
   };
 
+  // --- EMAIL: envoi auto via API
   const onEmailAuto = async ({ to, senderEmail, senderName }) => {
     try {
       await shareByEmailAuto({
@@ -48,26 +53,29 @@ export default function ShareButton({
         senderName,
         endpoint: emailEndpoint,
       });
-      // le toast de succès est déjà appelé dans shareByEmailAuto()
+      // le toast succès est déclenché dans shareByEmailAuto()
       setOpen(false);
     } catch (e) {
       console.error("Echec envoi auto", e);
-      showToast("Échec de l’envoi automatique. Réessayez.", "error");
-      // ❌ PAS de fallback mailto (on reste cohérent)
+      showToast(e?.response?.data?.message || "Échec de l'envoi e-mail.", "error");
     }
   };
 
+  // --- FACEBOOK: FENÊTRE immédiate (pas d'attente)
   const onFacebook = () => {
-    shareOnFacebook({ articleId, quote: title || "", title, excerpt });
+    // Passer l’URL explicite maximise la fiabilité
+    shareOnFacebook({ url: defs.url, articleId, quote: title || "", title, excerpt });
     setOpen(false);
   };
 
+  // --- WHATSAPP (général)
   const onWhatsAppGeneral = () => {
     const text = defs.body || defs.url || document.title;
     shareOnWhatsApp({ text, articleId });
     setOpen(false);
   };
 
+  // --- WHATSAPP (vers un numéro)
   const onWhatsAppToNumber = ({ phone }) => {
     const text = defs.body || defs.url || document.title;
     shareOnWhatsAppToNumber({ phone, text, articleId });
