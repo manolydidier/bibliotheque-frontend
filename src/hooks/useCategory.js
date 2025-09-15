@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import categoryService from '../services/categoryService';
+import { fetchIndex2 } from '../services/categoryService';
 
 export const useCategories = () => {
   const [categories, setCategories] = useState([]);
@@ -69,6 +70,7 @@ export const useCategories = () => {
       if (selectedCategory && selectedCategory.id === parseInt(id)) {
         setSelectedCategory(response.data);
       }
+      // La mise à jour de l'état local est gérée par un re-fetch dans le composant parent.
       setError(null);
       return response.data;
     } catch (err) {
@@ -89,6 +91,7 @@ export const useCategories = () => {
       if (selectedCategory && selectedCategory.id === parseInt(id)) {
         setSelectedCategory(null);
       }
+      // La mise à jour de l'état local est gérée par un re-fetch.
       setError(null);
     } catch (err) {
       const errorMsg = err.response?.data?.message || 'Erreur lors de la suppression';
@@ -109,19 +112,41 @@ export const useCategories = () => {
     );
   };
 
+  const [totalCategori, setTotalCategori]= useState(0)
+  const [pageNbr, setPageNbr] = useState(1)
+
+  //Recherche et liste coté serveur
+  const loadCategories = async (search,page)=>{
+    try {
+      setLoading(true)
+      const data = await fetchIndex2({q:search,perPage:5,page});
+      setCategories(data.data)
+      setTotalCategori(data.total)
+      setPageNbr(data.last_page)
+
+    }catch(err){
+      console.error(err)
+    }
+    setLoading(false)
+  }
+
   // Réinitialiser les erreurs
   const clearError = () => setError(null);
 
   // Charger les catégories au montage
-  useEffect(() => {
-    fetchCategories();
-  }, [fetchCategories]);
+  // useEffect(() => {
+  //   fetchCategories();
+  // }, [fetchCategories]);
+
+  
 
   return {
     categories,
     selectedCategory,
     loading,
     error,
+    pageNbr,
+    totalCategori,
     fetchCategories,
     fetchCategory,
     createCategory,
@@ -130,5 +155,6 @@ export const useCategories = () => {
     searchCategoriesLocal, // Recherche côté client
     clearError,
     setSelectedCategory,
+    loadCategories,
   };
 };

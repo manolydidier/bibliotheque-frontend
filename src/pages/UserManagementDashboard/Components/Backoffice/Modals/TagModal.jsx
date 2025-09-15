@@ -1,47 +1,59 @@
-import React,{useState} from 'react'
+import React,{useEffect, useState} from 'react'
 import { useTags } from '../../../../../hooks/UseTags';
 import ErrorModal from './ErrorModal';
 import { FaTimes } from 'react-icons/fa';
 
-const TagModal = ({ isOpen, onClose,tag=null}) => {
+const TagModal = ({ isOpen, onClose, tag = null, onSuccess }) => {
     if (!isOpen) return null;
 
-    const { tags, loading, error, createTag, deleteTag, getOneTag, updateTag } = useTags();
-    const [formData, setformData] = useState({ 
-        name: tag && tag.id ? tag.name : '', 
-        description: tag && tag.id ? tag.description : '', 
-        color: tag && tag.id ? tag.color : '#ccccccc' 
+    // On ne récupère que ce qui est nécessaire pour la modale
+    const { createTag, updateTag, error: submissionError } = useTags();
+    const [formData, setFormData] = useState({
+        name: '',
+        description: '',
+        color: '#CCCCCC'
     });
 
-    
+    // Ce `useEffect` garantit que le formulaire est correctement
+    // rempli ou réinitialisé chaque fois que la modale s'ouvre ou que le tag change.
+    useEffect(() => {
+        if (isOpen) {
+            if (tag && tag.id) {
+                setFormData({
+                    name: tag.name || '',
+                    description: tag.description || '',
+                    color: tag.color || '#CCCCCC'
+                });
+            } else {
+                // Réinitialise pour la création
+                setFormData({ name: '', description: '', color: '#CCCCCC' });
+            }
+        }
+    }, [isOpen, tag]);
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            if(tag && tag.id){
-                await updateTag(tag.id,formData);
-                               
-            }else {
+            if (tag && tag.id) {
+                await updateTag(tag.id, formData);
+            } else {
                 await createTag(formData);
-               
-            }            
-            setformData({ name: '', description: '', color: '#fbfbfb' });            
-            onClose();
+            }           
+            onSuccess();
         } catch (error) {
-            console.error('Erreur:', error);
+            console.error('Erreur:', error);           
         }
     };
-    if (error) {
-        // Affichez directement la modale d'erreur si une erreur existe.
-        // La prop `isOpen` doit être `true`.
-        // La fonction `onClose` de la modale d'erreur devrait probablement fermer la modale principale.
-        return <ErrorModal isOpen={true} onClose={onClose} message={JSON.stringify(error)} />;
+
+    if (submissionError) {
+        return <ErrorModal isOpen={true} onClose={onClose} message={JSON.stringify(submissionError)} />;
     }
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-30  flex items-center justify-center overflow-y-auto pt-6  p-4">
             <div className=" w-full max-w-screen-lg bg-white rounded-xl shadow-sm p-6 mt-6 ">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold text-gray-800">Ajouter un nouveau tag</h2>
+                    <h2 className="text-xl font-bold text-gray-800">{tag && tag.id ? 'Modifier le tag' : 'Ajouter un nouveau tag'}</h2>
                     <button className="text-gray-500 hover:text-gray-700" onClick={onClose}>
                         <FaTimes />
                     </button>
@@ -58,7 +70,7 @@ const TagModal = ({ isOpen, onClose,tag=null}) => {
                             placeholder="Nom du tag"
                             className="block w-full px-3 py-2  border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                             value={formData.name}
-                            onChange={(e) => setformData({ ...formData, name: e.target.value })}
+                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                             required
                         />
                     </div>
@@ -72,7 +84,7 @@ const TagModal = ({ isOpen, onClose,tag=null}) => {
                             placeholder="Description"
                             className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                             value={formData.description}
-                            onChange={(e) => setformData({ ...formData, description: e.target.value })}
+                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                         />
                     </div>
 
@@ -85,7 +97,7 @@ const TagModal = ({ isOpen, onClose,tag=null}) => {
                             type="color"
                             className="p-1 h-10 w-14 block bg-white border border-gray-300 rounded-md cursor-pointer"
                             value={formData.color}
-                            onChange={(e) => setformData({ ...formData, color: e.target.value })}
+                            onChange={(e) => setFormData({ ...formData, color: e.target.value })}
                         />
                     </div>
 

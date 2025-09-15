@@ -2,18 +2,42 @@ import React, { useState, useEffect } from "react";
 import { useCategories } from "../../../../../../hooks/useCategory";
 import CategoryModal from "../../Modals/CategoryModal";
 import { FaPenAlt, FaTrashAlt } from "react-icons/fa";
-
+import Pagination from "../../../../../../component/pagination/Pagination";
+import LoadingComponent from "../../../../../../component/loading/LoadingComponent";
 export default function CategoryTab() {
     const [add, setAdd]= useState(false);
 
-    const { categories, loading, error, deleteCategory, searchCategoriesLocal } = useCategories();   
+    const { 
+        categories, 
+        loading, 
+        error, 
+        pageNbr,
+        totalCategori,
+        deleteCategory, 
+        loadCategories ,
+        
+    } = useCategories();   
     const [searchTerm, setSearchTerm] = useState('');
     // Filtrage local des catégories
-    const filteredCategories = searchCategoriesLocal(searchTerm);
+    
     const [category, setCategory] = useState(null);
+    const [page, setPage] = useState(1);
 
-    if (loading) return <div className="loading">Chargement...</div>;
 
+    //if (loading) return <div className="loading">Chargement...</div>;
+
+    const handleModalSuccess = () => {
+        setAdd(false);
+        setCategory(null);
+        loadCategories(searchTerm,page);
+    };
+
+    
+    useEffect(() => {
+        loadCategories(searchTerm,page);
+    }, [searchTerm,page]);
+
+    console.log(pageNbr)
     
 
     return (
@@ -32,7 +56,7 @@ export default function CategoryTab() {
                     Créer
                 </button>
             </div>                
-            <CategoryModal isOpen={add} onClose={() => {setCategory(null); setAdd(false)}} category={category} /> 
+            <CategoryModal isOpen={add} onClose={() => {setCategory(null); setAdd(false)}} category={category} onSuccess={handleModalSuccess} /> 
 
             {error && (
                 <div className="error-message">
@@ -42,9 +66,10 @@ export default function CategoryTab() {
                     
             {/* Liste des catégories */}
             <div className="categories-list">
-                <h3>Catégories ({filteredCategories.length})</h3>
+                <h3>Catégories ({totalCategori})</h3>
 
-                {filteredCategories.map(category => (
+                {loading ? <LoadingComponent /> : 
+                categories.map(category => (
                     <div key={category.id} className="mt-4 p-3 bg-gray-50 rounded-lg w-1/2" style={{ borderLeft: `4px solid ${category.color || '#ccc'}` }}>
                         <div className="flex justify-between items-center">
                             <p className="font-semibold" style={{ color: category.color }}>{category.name}</p>                           
@@ -63,7 +88,11 @@ export default function CategoryTab() {
                         </div>
                     </div>
                 ))}
+               
             </div>
+             <div className="mt-8">
+                    <Pagination currentPage={page} totalPages={pageNbr} onPageChange={(opt) => {loadCategories(searchTerm, opt); setPage(opt)}}/> 
+                </div>
         </div>
     );
 }

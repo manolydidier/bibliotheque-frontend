@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { tagService } from '../services/tagService';
+import { tagService, fetchIndex2} from '../services/tagService';
 
 export const useTags = () => {
   const [tags, setTags] = useState([]);
@@ -25,7 +25,6 @@ export const useTags = () => {
     try {
       setLoading(true);
       const response = await tagService.createTag(tagData);
-      setTags(prev => [...prev, response.data]);
       setError(null);
       return response.data;
     } catch (err) {
@@ -42,9 +41,7 @@ export const useTags = () => {
     try {
       setLoading(true);
       const response = await tagService.updateTag(id, tagData);
-      setTags(prev => prev.map(tag => 
-        tag.id === parseInt(id) ? response.data : tag
-      ));            
+      // La mise à jour locale est supprimée car elle est gérée par un re-fetch dans le composant.
       setError(null);      
       return response.data;
     } catch (err) {
@@ -54,14 +51,14 @@ export const useTags = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  },[]);
 
   // Supprimer un tag
   const deleteTag = useCallback(async (id) => {
     try {
       setLoading(true);
       await tagService.deleteTag(id);
-      setTags(prev => prev.filter(tag => tag.id !== parseInt(id)));
+      // La mise à jour locale est supprimée.
       setError(null);
     } catch (err) {
       const errorMsg = err.response?.data?.message || 'Erreur lors de la suppression';
@@ -97,20 +94,49 @@ export const useTags = () => {
       (tag.description && tag.description.toLowerCase().includes(lowerCaseSearchTerm))
     );
   }, [tags]);
+ 
 
-  useEffect(() => {
-    fetchTags();
-  }, [fetchTags]);
+ const [totalTags, setTotalTags]= useState(0)
+  const [pageNbr, setPageNbr]= useState(1)
+
+
+  const loadTags = useCallback(async (search,page) => {
+    try {
+      setLoading(true);
+      const data = await fetchIndex2({ q: search, perPage: 5, page });
+      setTags(data.data);       
+      setTotalTags(data.total)
+      setPageNbr(data.last_page)
+    } catch (err) {
+      console.error(err);      
+    }
+    setLoading(false);
+  },[]);
+
+  
+
+
+  // useEffect(() => {
+  //   fetchTags();
+  // }, [fetchTags]);
+
+  useEffect(()=>{
+    loadTags();
+  },[loadTags])
+  
 
   return {
     tags,
     loading,
     error,
+    totalTags,
+    pageNbr,
     fetchTags,
     getOneTag,
     createTag,
     updateTag,
     deleteTag,
-    researchTag
+    researchTag,
+    loadTags
   };
 };

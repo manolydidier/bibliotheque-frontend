@@ -2,7 +2,7 @@ import React,{useState,useEffect} from 'react'
 import { useCategories } from '../../../../../hooks/useCategory';
 import { FaTimes } from 'react-icons/fa';
 
-const CategoryModal = ({isOpen, onClose, category=null}) => {
+const CategoryModal = ({isOpen, onClose, category=null, onSuccess}) => {
 
     const {createCategory, updateCategory } = useCategories();
     const [formData, setformData] = useState({
@@ -34,10 +34,9 @@ const CategoryModal = ({isOpen, onClose, category=null}) => {
             }else {
                 await createCategory(formData);
             }
-            onClose(); // Close modal on success
+            onSuccess();            
         } catch (error) {
-            console.error('Erreur:', error);
-            // Optionnellement, vous pourriez afficher une erreur à l'utilisateur ici
+            console.error('Erreur:', error);          
         }
     };
 
