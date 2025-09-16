@@ -5,7 +5,8 @@ import {
   FaFolderOpen,
   FaArrowLeft, FaArrowRight, FaRedo, FaExpand, FaDownload,
   FaExternalLinkAlt, FaChevronLeft, FaChevronRight, FaSearchPlus, FaSearchMinus,
-  FaFilePdf, FaFileExcel, FaFileWord, FaImage, FaFileVideo, FaFile, FaTag, FaStar, FaClock, FaEye, FaComment, FaChartBar, FaHistory, FaInfoCircle, FaSearch, FaPlus, FaPlay, FaTimes, FaShareAlt
+  FaFilePdf, FaFileExcel, FaFileWord, FaImage, FaFileVideo, FaFile, FaTag, FaStar, FaClock, FaEye, FaComment, FaChartBar, FaHistory, FaInfoCircle, FaSearch, FaPlus, FaPlay, FaTimes, FaShareAlt,
+  FaLock, FaUnlock, FaEyeSlash, FaShieldAlt, FaExclamationTriangle
 } from "react-icons/fa";
 import {
   ResponsiveContainer,
@@ -264,6 +265,13 @@ export default function Visualiseur() {
   const [article, setArticle] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+
+  // 🔐 Accès / verrouillage (simple colonne "password" côté API)
+  const [lockedKind, setLockedKind] = useState(null); // 'password' | 'private' | 'unknown' | null
+  const [unlockOpen, setUnlockOpen] = useState(false);
+  const [unlockBusy, setUnlockBusy] = useState(false);
+  const [unlockError, setUnlockError] = useState("");
+
   const [activeTab, setActiveTab] = useState("Aperçu");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
@@ -283,6 +291,10 @@ export default function Visualiseur() {
     let mounted = true;
     setLoading(true);
     setErr("");
+    setLockedKind(null);
+    setUnlockOpen(false);
+    setUnlockError("");
+
     if (!idOrSlug) {
       setLoading(false);
       setErr("Identifiant/slug manquant dans l'URL.");
@@ -304,18 +316,38 @@ export default function Visualiseur() {
       console.log("[UI] Appel =>", buildArticleShowUrl(idOrSlug, { include, fields }));
     }
 
-    fetchArticle(idOrSlug, { include, fields })
-      .then((j) => {
+    (async () => {
+      try {
+        const j = await fetchArticle(idOrSlug, { include, fields });
         if (!mounted) return;
         const data = j?.data ?? j ?? null;
         setArticle(data);
         document.title = data?.title || "Visualiseur";
-      })
-      .catch((e) => {
+      } catch (e) {
         if (!mounted) return;
-        setErr(e?.message || "Erreur lors du chargement");
-      })
-      .finally(() => mounted && setLoading(false));
+        const status = e?.response?.status;
+        const v = (e?.response?.data?.visibility || e?.response?.data?.code || "").toString().toLowerCase();
+        if (status === 403) {
+          if (/private/.test(v)) {
+            setLockedKind("private");
+            setUnlockOpen(false);
+            setErr("");
+          } else if (/password/.test(v)) {
+            setLockedKind("password");
+            setUnlockOpen(true);
+            setErr("");
+          } else {
+            setLockedKind("unknown");
+            setUnlockOpen(true);
+            setErr("");
+          }
+        } else {
+          setErr(e?.message || "Erreur lors du chargement");
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
 
     return () => { mounted = false; };
   }, [idOrSlug, params]);
@@ -420,7 +452,7 @@ export default function Visualiseur() {
     articleId: article?.id ?? null
   }), [article]);
 
-  /* ------- Loading / errors ------- */
+  /* ------- Loading / errors / locks ------- */
   if (loading) {
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 px-3 sm:px-4 lg:px-6 2xl:px-10 py-4">
@@ -432,8 +464,69 @@ export default function Visualiseur() {
     );
   }
 
-  if (err)   return <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center px-4"><div className="text-red-500 text-center">{err}</div></div>;
-  if (!article) return <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center px-4"><div className="text-red-500 text-center">Article introuvable.</div></div>;
+  if (err) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center px-4">
+        <div className="text-red-500 text-center">{err}</div>
+      </div>
+    );
+  }
+
+  // 🔒 Accès privé : écran dédié (aucun autre ajout requis côté API)
+  if (lockedKind === "private") {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 font-sans px-3 sm:px-4 lg:px-6 2xl:px-10 py-10">
+        <div className="max-w-3xl mx-auto">
+          <div className="bg-white/70 backdrop-blur-xl border border-white/60 rounded-3xl shadow-2xl p-8 text-center">
+            <div className="mx-auto w-20 h-20 rounded-2xl bg-slate-100 flex items-center justify-center mb-5">
+              <FaShieldAlt className="text-slate-600 text-3xl" />
+            </div>
+            <h2 className="text-2xl font-light text-slate-800 mb-3">Accès restreint</h2>
+            <p className="text-slate-600">Cet article est <strong>privé</strong>. Vous devez être autorisé(e) ou connecté(e) avec un compte ayant les droits nécessaires.</p>
+            <div className="mt-6 flex justify-center gap-3">
+              <button onClick={() => navigate(-1)} className="px-5 py-3 rounded-xl border border-slate-300/60 text-slate-700 bg-white/80 hover:bg-white transition">
+                Retour
+              </button>
+              <a href="/login" className="px-5 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 transition">
+                Se connecter
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 🔑 Protégé par mot de passe et article non chargé : page neutre + modale ouverte
+  if (!article && (lockedKind === "password" || lockedKind === "unknown")) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 font-sans px-3 sm:px-4 lg:px-6 2xl:px-10 py-10">
+        <div className="max-w-2xl mx-auto text-center text-slate-600">
+          <div className="inline-flex items-center gap-3 px-5 py-3 rounded-2xl bg-white/70 border border-white/60 shadow">
+            <FaLock className="text-blue-600" />
+            <span>Contenu protégé — entrez le mot de passe</span>
+          </div>
+        </div>
+
+        <UnlockModal
+          open={true}
+          onClose={() => setUnlockOpen(false)}
+          onSubmit={handleUnlock}
+          busy={unlockBusy}
+          error={unlockError}
+          articleTitle=""
+        />
+      </div>
+    );
+  }
+
+  if (!article) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center px-4">
+        <div className="text-red-500 text-center">Article introuvable.</div>
+      </div>
+    );
+  }
 
   const hasHistory = Array.isArray(article.history) && article.history.length > 0;
   const tabs = ["Aperçu", "Médias", "Métadonnées", ...(hasHistory ? ["Versions"] : []), "Statistiques", "SEO"];
@@ -614,6 +707,16 @@ export default function Visualiseur() {
           </pre>
         </details>
       )}
+
+      {/* 🔑 Modale mot de passe (si besoin pendant que l'article est affiché) */}
+      <UnlockModal
+        open={unlockOpen}
+        onClose={() => setUnlockOpen(false)}
+        onSubmit={handleUnlock}
+        busy={unlockBusy}
+        error={unlockError}
+        articleTitle={article?.title}
+      />
     </div>
   );
 
@@ -624,6 +727,42 @@ export default function Visualiseur() {
     const a = document.createElement("a");
     a.href = currentUrl; a.download = "";
     document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  // 🔑 Soumission du mot de passe : on refait un GET sur l’URL d’article avec ?password=...
+  async function handleUnlock(password) {
+    if (!password) {
+      setUnlockError("Merci de saisir un mot de passe.");
+      return;
+    }
+    setUnlockBusy(true);
+    setUnlockError("");
+
+    const include = ["categories", "tags", "media", "comments", "approvedComments", "author", "history"];
+    const fields = [
+      "id","title","slug","excerpt","content",
+      "featured_image","featured_image_alt","status","visibility",
+      "published_at","updated_at","created_at","view_count","reading_time","word_count",
+      "share_count","comment_count","rating_average","rating_count",
+      "is_featured","is_sticky","author_id","author_name","meta","seo_data",
+      "allow_comments","allow_rating"
+    ];
+
+    try {
+      let url = buildArticleShowUrl(idOrSlug, { include, fields });
+      url += (url.includes("?") ? "&" : "?") + "password=" + encodeURIComponent(password);
+
+      const { data } = await axios.get(url, { withCredentials: false });
+      setArticle(data || null);
+      setLockedKind(null);
+      setUnlockOpen(false);
+      document.title = (data?.title || "Visualiseur");
+    } catch (e) {
+      const msg = e?.response?.data?.message || "Mot de passe invalide.";
+      setUnlockError(msg);
+    } finally {
+      setUnlockBusy(false);
+    }
   }
 }
 
@@ -848,7 +987,7 @@ function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDown
 
       {contentStr && (
         <div className="pt-2 sm:pt-4">
-          <h3 className="text-xl lg:text-2xl font-light text-slate-800 mb-4 lg:mb-6">Contenu de l'article</h3>
+          <h3 className="text-xl lg:2xl font-light text-slate-800 mb-4 lg:mb-6">Contenu de l'article</h3>
           <div className="bg-slate-50/50 rounded-2xl p-5 sm:p-6 lg:p-8 border border-slate-200/40">
             {looksHtml ? (
               <div className="prose prose-slate max-w-none prose-lg" dangerouslySetInnerHTML={{ __html: contentStr }} />
@@ -1110,8 +1249,6 @@ function StatsCharts({ article }) {
   const comments  = Number(article.comment_count || 0);
   const ratings   = Number(article.rating_count || 0);
   const avgRating = Math.max(0, Math.min(5, Number(article.rating_average || 0)));
-  // const reading   = Number(article.reading_time || 0);
-  // const words     = Number(article.word_count || 0);
 
   const engagementData = [
     { name: "Vues", value: views, icon: <FaEye /> },
@@ -1148,7 +1285,6 @@ function StatsCharts({ article }) {
         <KpiCard label="Vues" value={views} icon={<FaEye />} color="blue" />
         <KpiCard label="Partages" value={shares} icon={<FaShareAlt />} color="green" />
         <KpiCard label="Commentaires" value={comments} icon={<FaComment />} color="purple" />
-        {/* <KpiCard label="Notes reçues" value={ratings} icon={<FaStar />} color="yellow" /> */}
         <KpiCard label="Note moyenne" value={avgRating.toFixed(2)} suffix="/5" icon={<FaStar />} color="orange" />
       </div>
 
@@ -1574,6 +1710,159 @@ function EmptyChart({ message = "Pas assez de données pour ce graphique" }) {
         <FaChartBar className="text-2xl" />
       </div>
       <p className="text-sm text-center max-w-xs leading-relaxed">{message}</p>
+    </div>
+  );
+}
+
+/* ---------------- Modale avancée Mot de passe ---------------- */
+function UnlockModal({ open, onClose, onSubmit, busy, error, articleTitle }) {
+  const [pwd, setPwd] = useState("");
+  const [show, setShow] = useState(false);
+  const [caps, setCaps] = useState(false);
+  const dlgRef = useRef(null);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose?.();
+      if (e.getModifierState && e.getModifierState("CapsLock") !== undefined) {
+        setCaps(e.getModifierState("CapsLock"));
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (open) setTimeout(() => inputRef.current?.focus(), 100);
+    if (!open) { setPwd(""); setShow(false); setCaps(false); }
+  }, [open]);
+
+  const submit = (e) => {
+    e?.preventDefault?.();
+    if (!busy) onSubmit?.(pwd);
+  };
+
+  if (!open) return null;
+
+  return (
+    <div
+      aria-modal="true"
+      role="dialog"
+      aria-labelledby="unlock-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose?.();
+      }}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+
+      {/* Dialog */}
+      <div
+        ref={dlgRef}
+        className="relative w-full max-w-md bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-6 sm:p-7 lg:p-8"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center">
+              <FaLock className="text-blue-600 text-xl" />
+            </div>
+            <div>
+              <h3 id="unlock-title" className="text-lg sm:text-xl font-semibold text-slate-900">
+                Contenu protégé
+              </h3>
+              <p className="text-xs text-slate-500">Saisissez le mot de passe pour {articleTitle ? `« ${articleTitle} »` : "cet article"}.</p>
+            </div>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition"
+            aria-label="Fermer"
+          >
+            <FaTimes />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={submit} className="mt-4">
+          <label className="block text-sm font-medium text-slate-700 mb-2">
+            Mot de passe
+          </label>
+
+          <div className="relative">
+            <input
+              ref={inputRef}
+              type={show ? "text" : "password"}
+              className="w-full rounded-2xl border border-slate-300/70 bg-white/80 backdrop-blur-sm px-4 py-3 pr-12 text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition"
+              placeholder="••••••••"
+              value={pwd}
+              onChange={(e) => setPwd(e.target.value)}
+              onKeyUp={(e) => setCaps(e.getModifierState && e.getModifierState("CapsLock"))}
+              autoComplete="current-password"
+              required
+              minLength={1}
+            />
+            <button
+              type="button"
+              onClick={() => setShow((s) => !s)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition"
+              aria-label={show ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+              tabIndex={0}
+            >
+              {show ? <FaEyeSlash /> : <FaEye />}
+            </button>
+          </div>
+
+          {caps && (
+            <div className="mt-2 flex items-center gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs">
+              <FaExclamationTriangle />
+              <span>Verr. Maj active</span>
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-3 flex items-center gap-2 text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-sm">
+              <FaExclamationTriangle className="flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div className="mt-5 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-3 rounded-xl border border-slate-300/60 text-slate-700 bg-white/80 hover:bg-white transition"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-white bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg"
+            >
+              {busy ? (
+                <>
+                  <span className="inline-block w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  <span>Vérification…</span>
+                </>
+              ) : (
+                <>
+                  <FaUnlock />
+                  <span>Déverrouiller</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          <p className="mt-4 text-[11px] text-slate-500">
+            Astuce : le mot de passe est transmis uniquement pour cette vérification, puis l’article est rechargé.
+          </p>
+        </form>
+      </div>
     </div>
   );
 }

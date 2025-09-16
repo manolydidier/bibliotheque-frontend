@@ -1,16 +1,12 @@
 // ------------------------------
 // File: media-library/parts/GridCard.jsx
-// Version "pastel light":
-// - AUCUN dark:*
-// - Overlay clair (bg-white/55 + blur) au lieu de bg-black/40
-// - Partage via ShareButton (icône), overlay centré + bouton absolu en haut-droite
-// - Prefetch route & image, a11y, impression tracker
+// Version "pastel light" + badges visibilité + popup password (avancé)
 // ------------------------------
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   FaRegStar, FaStar, FaEye, FaUser,
-  FaHeart, FaRegHeart, FaTag,
+  FaHeart, FaRegHeart, FaTag, FaLock, FaLockOpen, FaKey, FaTimes
 } from "react-icons/fa";
 import SmartImage from "./SmartImage";
 import ShareButton from "../Visualiseur/share/ShareButton";
@@ -89,6 +85,22 @@ function useImpression(onSeen, once = true, threshold = 0.5) {
 }
 
 /* =========================
+   Visibilité
+========================= */
+const isPrivate = (v) => String(v || "").toLowerCase() === "private";
+const isPwdProtected = (v) => {
+  const k = String(v || "").toLowerCase();
+  return k === "password_protected" || k === "password-protected" || k === "password";
+};
+const humanizeVisibility = (v) => {
+  const k = String(v || "").toLowerCase();
+  if (k === "public") return "Public";
+  if (isPrivate(k)) return "Privé";
+  if (isPwdProtected(k)) return "Protégé par mot de passe";
+  return v || "—";
+};
+
+/* =========================
    Constantes UI
 ========================= */
 
@@ -115,10 +127,109 @@ const CATEGORY_BORDER_COLORS = {
 };
 
 /* =========================
+   Modal Password (avancé)
+========================= */
+function PasswordDialog({ open, title = "Mot de passe requis", onClose, onSubmit, defaultValue = "" }) {
+  const [pwd, setPwd] = useState(defaultValue || "");
+  const [remember, setRemember] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (open) { setError(""); setPwd(defaultValue || ""); }
+  }, [open, defaultValue]);
+
+  if (!open) return null;
+
+  const submit = (e) => {
+    e?.preventDefault?.();
+    if (!pwd.trim()) {
+      setError("Veuillez saisir un mot de passe.");
+      return;
+    }
+    onSubmit?.(pwd.trim(), remember);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="relative w-[92vw] max-w-md bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-6 animate-[fadeIn_.2s_ease-out]"
+      >
+        <button
+          className="absolute top-3 right-3 p-2 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100/80 transition"
+          onClick={onClose}
+          aria-label="Fermer"
+        >
+          <FaTimes />
+        </button>
+
+        <div className="mb-5">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-blue-50 text-blue-600 border border-blue-100">
+              <FaKey />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+              <p className="text-sm text-slate-500">Cet article est protégé. Entrez le mot de passe pour continuer.</p>
+            </div>
+          </div>
+        </div>
+
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label htmlFor="pwd-input" className="text-sm font-medium text-slate-700">Mot de passe</label>
+            <input
+              id="pwd-input"
+              type="password"
+              className="mt-1 w-full px-4 py-3 rounded-xl border border-slate-300/70 bg-white/90 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400"
+              placeholder="••••••••"
+              value={pwd}
+              onChange={(e) => setPwd(e.target.value)}
+              autoFocus
+            />
+            {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+          </div>
+
+          <label className="inline-flex items-center gap-2 text-sm text-slate-600 select-none cursor-pointer">
+            <input
+              type="checkbox"
+              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+            />
+            Mémoriser pendant la session
+          </label>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl border border-slate-300/70 text-slate-700 bg-white hover:bg-slate-50 transition"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 shadow-lg transition"
+            >
+              Continuer
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* =========================
    Composant
 ========================= */
 
 export default function GridCard({ item, routeBase, onOpen }) {
+  const navigate = useNavigate();
+
   /* --------- Navigation --------- */
   const to = useMemo(
     () => buildVisualiserPath(routeBase, item),
@@ -130,6 +241,8 @@ export default function GridCard({ item, routeBase, onOpen }) {
   const [read, setRead] = useState(() => isRead(item.id));
   const [isHovered, setIsHovered] = useState(false);
   const [liked, setLiked] = useState(false);
+  const [pwdOpen, setPwdOpen] = useState(false);
+  const [pwdDefault, setPwdDefault] = useState("");
 
   /* --------- Dérivés visuels --------- */
   const primaryCategory = getCategoryFromTitle(item.title);
@@ -142,7 +255,6 @@ export default function GridCard({ item, routeBase, onOpen }) {
 
   /* --------- Dérivés métier --------- */
 
-  // Auteur : author.name > author.first/last > createdBy.name > created_by first/last > Auteur #ID
   const authorName = useMemo(() => {
     const full = (...xs) => xs.filter(Boolean).join(" ").trim();
     let name =
@@ -155,7 +267,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
     return name || "Auteur";
   }, [item.author_name, item.author, item.createdBy, item.created_by, item.author_id]);
 
-  // Formats localisés
+  // Formats
   const nf = useMemo(
     () => new Intl.NumberFormat("fr-FR", { notation: "compact", maximumFractionDigits: 1 }),
     []
@@ -172,7 +284,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
     return Math.max(1, Math.round(wc / 200));
   }, [item.reading_time, item.word_count, item.content]);
 
-  // Image priorités : featured_image_url > featured_image (string|obj.url) > media[0].url
+  // Image
   const imgUrl = useMemo(() => {
     if (item.featured_image_url) return toAbsolute(item.featured_image_url);
     if (typeof item.featured_image === "string") return toAbsolute(item.featured_image);
@@ -185,10 +297,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
   const formattedRating    = useMemo(() => (item.rating_average ? Number(item.rating_average).toFixed(1) : "0,0"), [item.rating_average]);
   const formattedDate      = useMemo(() => (item.published_at ? df.format(new Date(item.published_at)) : "—"), [df, item.published_at]);
 
-  const visibilityLabel = useMemo(() => {
-    const v = (item.visibility || "").toString().toLowerCase().replace(/_/g, " ");
-    return v || "—";
-  }, [item.visibility]);
+  const visLabel = useMemo(() => humanizeVisibility(item.visibility), [item.visibility]);
 
   /* --------- Classes réutilisées --------- */
   const motionless = prefersReducedMotion();
@@ -241,9 +350,35 @@ export default function GridCard({ item, routeBase, onOpen }) {
     } catch {}
   }, [imgUrl, to]);
 
+  // Lecture : si protégé, ouvrir la modale ; sinon naviguer directement
+  const handleRead = useCallback((e) => {
+    if (isPwdProtected(item.visibility)) {
+      e?.preventDefault?.();
+      // Pré-remplir avec un éventuel mot déjà saisi en session
+      const key = `article_pwd_${item.slug || item.id}`;
+      let current = "";
+      try { current = sessionStorage.getItem(key) || ""; } catch {}
+      setPwdDefault(current);
+      setPwdOpen(true);
+      return;
+    }
+    onOpenCard();
+  }, [item.visibility, item.slug, item.id, onOpenCard]);
+
+  // Soumission du mot de passe depuis la modale
+  const submitPwd = useCallback((pwd, remember) => {
+    const key = `article_pwd_${item.slug || item.id}`;
+    try {
+      // on mémorise le mot de passe pendant la session (toujours en sessionStorage ici)
+      sessionStorage.setItem(key, pwd);
+    } catch {}
+    setPwdOpen(false);
+    onOpenCard();
+    navigate(to);
+  }, [item.slug, item.id, to, navigate, onOpenCard]);
+
   /* --------- Impression tracker --------- */
   const impressionRef = useImpression(() => {
-    // Event global si tu veux hooker analytics
     window.dispatchEvent(new CustomEvent("gridcard:seen", { detail: { id: item.id } }));
   });
 
@@ -252,290 +387,301 @@ export default function GridCard({ item, routeBase, onOpen }) {
 
   /* --------- Render --------- */
   return (
-    <article
-      ref={impressionRef}
-      role="article"
-      aria-labelledby={`t-${item.id}`}
-      className={cardClass}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      title={item.title}
-      data-testid={`gridcard-${item.id}`}
-      style={{ minHeight: "550px" }}
-    >
-      {/* Fond gradient doux */}
-      <div className={cls("absolute inset-0 opacity-0 group-hover:opacity-20 transition-all duration-700 bg-gradient-to-br", categoryColor)} />
-      <div className={cls("absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r transition-all duration-500", topBarGradient)} />
+    <>
+      <article
+        ref={impressionRef}
+        role="article"
+        aria-labelledby={`t-${item.id}`}
+        className={cardClass}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        title={item.title}
+        data-testid={`gridcard-${item.id}`}
+        style={{ minHeight: "550px" }}
+      >
+        {/* Fond gradient doux */}
+        <div className={cls("absolute inset-0 opacity-0 group-hover:opacity-20 transition-all duration-700 bg-gradient-to-br", categoryColor)} />
+        <div className={cls("absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r transition-all duration-500", topBarGradient)} />
 
-      {/* --- Media --- */}
-      <div className="relative h-64 bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center overflow-hidden">
-        {imgUrl ? (
-          <>
-            <SmartImage
-              src={imgUrl}
-              alt={item.title}
-              ratio="100%"
-              className="transition-all duration-700 group-hover:scale-110 group-hover:brightness-110 group-hover:saturate-110"
-            />
-            {/* Overlay CLAIR (plus de noir) */}
-            <div
-              className={cls(
-                "absolute inset-0 bg-white/55 backdrop-blur-sm flex items-center justify-center gap-6 transition-all duration-500",
-                canHover() ? (isHovered ? "opacity-100" : "opacity-0 pointer-events-none") : "opacity-100"
+        {/* --- Media --- */}
+        <div className="relative h-64 bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center overflow-hidden">
+          {imgUrl ? (
+            <>
+              <SmartImage
+                src={imgUrl}
+                alt={item.title}
+                ratio="100%"
+                className="transition-all duration-700 group-hover:scale-110 group-hover:brightness-110 group-hover:saturate-110"
+              />
+
+              {/* Badges de confidentialité sur l'image */}
+              {(isPrivate(item.visibility) || isPwdProtected(item.visibility)) && (
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
+                  <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-white/95 border border-slate-200/70 text-slate-800 shadow-lg">
+                    {isPrivate(item.visibility) ? <FaLock /> : <FaKey />}
+                    {visLabel}
+                  </span>
+                </div>
               )}
-              aria-hidden={canHover() ? !isHovered : false}
-            >
-              <Link
-                to={to}
-                onMouseEnter={prefetchDetail}
-                className={cls(overlayBtnClass, "hover:text-blue-600 hover:shadow-blue-200/50", isHovered ? "translate-y-0 opacity-100 rotate-0" : "translate-y-8 opacity-100 rotate-0")}
-                style={{ transitionDelay: "0ms" }}
-                title="Lire l'article"
-                onClick={onOpenCard}
-              >
-                <FaEye size={24} />
-              </Link>
 
-              {/* Partage (icône) — bouton rendu par ShareButton */}
+              {/* Overlay CLAIR */}
               <div
-                className={cls(overlayBtnClass, "hover:text-purple-600 hover:shadow-purple-200/50", isHovered ? "translate-y-0 opacity-100 rotate-0" : "translate-y-8 opacity-100 rotate-0")}
-                style={{ transitionDelay: "200ms" }}
-                onClick={(e) => e.stopPropagation()}
+                className={cls(
+                  "absolute inset-0 bg-white/55 backdrop-blur-sm flex items-center justify-center gap-6 transition-all duration-500",
+                  canHover() ? (isHovered ? "opacity-100" : "opacity-0 pointer-events-none") : "opacity-100"
+                )}
+                aria-hidden={canHover() ? !isHovered : false}
               >
-                <ShareButton
-                  variant="icon"
-                  title={item.title}
-                  excerpt={item.excerpt}
-                  url={shareUrl}
-                  articleId={item.id}
-                  channels={["email", "emailAuto", "facebook", "whatsapp", "whatsappNumber"]}
-                  emailEndpoint="/share/email"
-                  defaultWhatsNumber="33612345678"
-                />
+                {/* Lire */}
+                <Link
+                  to={to}
+                  onMouseEnter={prefetchDetail}
+                  onClick={handleRead}
+                  className={cls(overlayBtnClass, "hover:text-blue-600 hover:shadow-blue-200/50", isHovered ? "translate-y-0 opacity-100 rotate-0" : "translate-y-8 opacity-100 rotate-0")}
+                  style={{ transitionDelay: "0ms" }}
+                  title="Lire l'article"
+                >
+                  <FaEye size={24} />
+                </Link>
+
+                {/* Partage (icône) */}
+                <div
+                  className={cls(overlayBtnClass, "hover:text-purple-600 hover:shadow-purple-200/50", isHovered ? "translate-y-0 opacity-100 rotate-0" : "translate-y-8 opacity-100 rotate-0")}
+                  style={{ transitionDelay: "200ms" }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ShareButton
+                    variant="icon"
+                    title={item.title}
+                    excerpt={item.excerpt}
+                    url={shareUrl}
+                    articleId={item.id}
+                    channels={["email", "emailAuto", "facebook", "whatsapp", "whatsappNumber"]}
+                    emailEndpoint="/share/email"
+                    defaultWhatsNumber="33612345678"
+                  />
+                </div>
               </div>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className={cls("absolute inset-0 bg-gradient-to-br opacity-15 transition-all duration-700", categoryColor, "group-hover:opacity-30")} />
-            <div className="text-slate-400 group-hover:text-slate-600 transition-all duration-700 transform group-hover:scale-125 group-hover:-rotate-6 relative text-6xl">
-              📝
-              <div className={cls("absolute inset-0 blur-xl opacity-0 group-hover:opacity-30 transition-all duration-700", categoryColor)} />
-            </div>
-          </>
-        )}
+            </>
+          ) : (
+            <>
+              <div className={cls("absolute inset-0 bg-gradient-to-br opacity-15 transition-all duration-700", categoryColor, "group-hover:opacity-30")} />
+              <div className="text-slate-400 group-hover:text-slate-600 transition-all duration-700 transform group-hover:scale-125 group-hover:-rotate-6 relative text-6xl">
+                📝
+                <div className={cls("absolute inset-0 blur-xl opacity-0 group-hover:opacity-30 transition-all duration-700", categoryColor)} />
+              </div>
+            </>
+          )}
 
-        {/* Bouton de partage ABSOLU (clair) */}
-        <div className="absolute top-4 right-4 z-20" onClick={(e) => e.stopPropagation()}>
-          <ShareButton
-            variant="icon"
-            className="p-2 rounded-2xl bg-white/95 text-slate-700 shadow-xl hover:scale-110 transition-transform"
-            title={item.title}
-            excerpt={item.excerpt}
-            url={shareUrl}
-            articleId={item.id}
-            channels={["email", "emailAuto", "facebook", "whatsapp", "whatsappNumber"]}
-            emailEndpoint="/share/email"
-            defaultWhatsNumber="33612345678"
-          />
-        </div>
+          {/* Bouton de partage ABSOLU */}
+          <div className="absolute top-4 right-4 z-20" onClick={(e) => e.stopPropagation()}>
+            <ShareButton
+              variant="icon"
+              className="p-2 rounded-2xl bg-white/95 text-slate-700 shadow-xl hover:scale-110 transition-transform"
+              title={item.title}
+              excerpt={item.excerpt}
+              url={shareUrl}
+              articleId={item.id}
+              channels={["email", "emailAuto", "facebook", "whatsapp", "whatsappNumber"]}
+              emailEndpoint="/share/email"
+              defaultWhatsNumber="33612345678"
+            />
+          </div>
 
-        {/* Coins : favoris / like */}
-        <div className="absolute top-4 left-4 flex gap-2 z-20">
-          <button
-            aria-label={fav ? "Retirer des favoris" : "Ajouter aux favoris"}
-            aria-pressed={fav}
-            onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onToggleFav(e)}
-            onClick={onToggleFav}
-            className={cls(
-              "p-3 rounded-2xl transition-all duration-500 shadow-xl backdrop-blur-md transform hover:scale-125 hover:-rotate-12",
-              fav
-                ? "text-amber-500 bg-amber-50/90 hover:bg-amber-100/90 shadow-amber-200/50 scale-110"
-                : "text-slate-500 bg-white/90 hover:bg-white hover:text-amber-500 shadow-slate-200/50"
+          {/* Coins : favoris / like */}
+          <div className="absolute top-4 left-4 flex gap-2 z-20">
+            <button
+              aria-label={fav ? "Retirer des favoris" : "Ajouter aux favoris"}
+              aria-pressed={fav}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onToggleFav(e)}
+              onClick={onToggleFav}
+              className={cls(
+                "p-3 rounded-2xl transition-all duration-500 shadow-xl backdrop-blur-md transform hover:scale-125 hover:-rotate-12",
+                fav
+                  ? "text-amber-500 bg-amber-50/90 hover:bg-amber-100/90 shadow-amber-200/50 scale-110"
+                  : "text-slate-500 bg-white/90 hover:bg-white hover:text-amber-500 shadow-slate-200/50"
+              )}
+              title={fav ? "Retirer des favoris" : "Ajouter aux favoris"}
+              data-testid="btn-fav"
+            >
+              {fav ? <FaStar size={20} /> : <FaRegStar size={20} />}
+            </button>
+
+            <button
+              aria-label={liked ? "Retirer des likes" : "Ajouter aux likes"}
+              aria-pressed={liked}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onToggleLike(e)}
+              onClick={onToggleLike}
+              className={cls(
+                "p-3 rounded-2xl transition-all duration-500 shadow-xl backdrop-blur-md transform hover:scale-125 hover:rotate-12",
+                liked
+                  ? "text-pink-500 bg-pink-50/90 hover:bg-pink-100/90 shadow-pink-200/50 scale-110"
+                  : "text-slate-500 bg-white/90 hover:bg-white hover:text-pink-500 shadow-slate-200/50"
+              )}
+              title={liked ? "Retirer des likes" : "Ajouter aux likes"}
+              data-testid="btn-like"
+            >
+              {liked ? <FaHeart size={20} /> : <FaRegHeart size={20} />}
+            </button>
+          </div>
+
+          {/* Badges "À la une" / "Épinglé" */}
+          <div className="absolute bottom-4 right-4 flex gap-2 z-10">
+            {item.is_featured && (
+              <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">⭐ À la une</div>
             )}
-            title={fav ? "Retirer des favoris" : "Ajouter aux favoris"}
-            data-testid="btn-fav"
-          >
-            {fav ? <FaStar size={20} /> : <FaRegStar size={20} />}
-          </button>
-
-          <button
-            aria-label={liked ? "Retirer des likes" : "Ajouter aux likes"}
-            aria-pressed={liked}
-            onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onToggleLike(e)}
-            onClick={onToggleLike}
-            className={cls(
-              "p-3 rounded-2xl transition-all duration-500 shadow-xl backdrop-blur-md transform hover:scale-125 hover:rotate-12",
-              liked
-                ? "text-pink-500 bg-pink-50/90 hover:bg-pink-100/90 shadow-pink-200/50 scale-110"
-                : "text-slate-500 bg-white/90 hover:bg-white hover:text-pink-500 shadow-slate-200/50"
+            {item.is_sticky && (
+              <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">📌 Épinglé</div>
             )}
-            title={liked ? "Retirer des likes" : "Ajouter aux likes"}
-            data-testid="btn-like"
-          >
-            {liked ? <FaHeart size={20} /> : <FaRegHeart size={20} />}
-          </button>
-        </div>
-
-        {/* Badges de catégorie / flags */}
-        <div className="absolute bottom-4 left-4 z-10">
-          <div
-            className={cls(
-              "relative bg-white/95 backdrop-blur-md text-slate-800 px-4 py-2 rounded-2xl font-bold shadow-2xl border-2 border-white/50 transition-all duration-500 transform group-hover:scale-110",
-              `hover:${categoryColor.replace("from-", "bg-").replace("/20", "/10").split(" ")[0]}`
-            )}
-          >
-            <FaTag className="inline mr-2 text-xs" />
-            {primaryCategory}
           </div>
         </div>
 
-        <div className="absolute bottom-4 right-4 flex gap-2 z-10">
-          {item.is_featured && (
-            <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">⭐ À la une</div>
-          )}
-          {item.is_sticky && (
-            <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">📌 Épinglé</div>
-          )}
-        </div>
-      </div>
+        {/* --- Contenu --- */}
+        <div className="relative p-6 bg-gradient-to-b from-white/95 to-slate-50/95 backdrop-blur-md">
+          <div className="flex gap-8">
+            {/* Texte principal */}
+            <div className="flex-1">
+              <div className="mb-4">
+                <h4 id={`t-${item.id}`} className="font-bold text-slate-900 text-xl leading-tight line-clamp-2 group-hover:text-slate-700 transition-colors mb-2" title={item.title}>
+                  {item.title}
+                </h4>
 
-      {/* --- Contenu --- */}
-      <div className="relative p-6 bg-gradient-to-b from-white/95 to-slate-50/95 backdrop-blur-md">
-        <div className="flex gap-8">
-          {/* Texte principal */}
-          <div className="flex-1">
-            <div className="mb-4">
-              <h4 id={`t-${item.id}`} className="font-bold text-slate-900 text-xl leading-tight line-clamp-2 group-hover:text-slate-700 transition-colors mb-2" title={item.title}>
-                {item.title}
-              </h4>
+                {item.excerpt && <p className="text-slate-600 text-sm line-clamp-2 mb-3">{item.excerpt}</p>}
 
-              {item.excerpt && <p className="text-slate-600 text-sm line-clamp-2 mb-3">{item.excerpt}</p>}
-
-              <div className="flex items-center gap-3 mt-2">
-                
-                {fav && (
-                  <div className="flex items-center gap-2 bg-amber-100/80 rounded-full px-3 py-1">
-                    <FaStar className="text-amber-500" size={12} />
-                    <span className="text-amber-700 text-xs font-semibold">Favori</span>
-                  </div>
-                )}
-                {liked && (
-                  <div className="flex items-center gap-2 bg-pink-100/80 rounded-full px-3 py-1">
-                    <FaHeart className="text-pink-500" size={12} />
-                    <span className="text-pink-700 text-xs font-semibold">Aimé</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-3 mt-2">
+                  {fav && (
+                    <div className="flex items-center gap-2 bg-amber-100/80 rounded-full px-3 py-1">
+                      <FaStar className="text-amber-500" size={12} />
+                      <span className="text-amber-700 text-xs font-semibold">Favori</span>
+                    </div>
+                  )}
+                  {liked && (
+                    <div className="flex items-center gap-2 bg-pink-100/80 rounded-full px-3 py-1">
+                      <FaHeart className="text-pink-500" size={12} />
+                      <span className="text-pink-700 text-xs font-semibold">Aimé</span>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Actions */}
-            <div className="flex items-center gap-3 mt-4">
-              <Link
-                to={to}
-                onClick={onOpenCard}
-                onMouseEnter={prefetchDetail}
-                className="flex items-center  gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl font-semibold text-sm transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
-              >
-                <FaEye size={14} />
-                <span>Lire</span>
-              </Link>
+              {/* Actions */}
+              <div className="flex items-center gap-3 mt-4">
+                <Link
+                  to={to}
+                  onClick={handleRead}
+                  onMouseEnter={prefetchDetail}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl font-semibold text-sm transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                >
+                  <FaEye size={14} />
+                  <span>Lire</span>
+                </Link>
                 {read && (
                   <div className="flex items-center gap-2 bg-emerald-100/80 rounded-full px-4 py-2">
                     <div className="w-4 h-4 bg-emerald-500 rounded-full animate-pulse" />
                     <span className="text-emerald-700 text-xs font-semibold">Lu</span>
                   </div>
                 )}
-             
+              </div>
             </div>
-          </div>
 
-          {/* Méta */}
-          <div className="w-64 space-y-3">
-            <div className="space-y-2">
-              {/* Auteur */}
-              <div className="flex items-center gap-2 bg-slate-100/80 rounded-lg px-3 py-2">
-                <div className="p-1.5 bg-slate-200/80 rounded"><FaUser className="text-slate-600" size={12} /></div>
-                <div className="flex-1 min-w-0">
-                  <span className="font-semibold text-slate-800 text-xs block truncate">{authorName}</span>
-                  <p className="text-slate-600 text-xs">{item.author?.email || "Auteur"}</p>
-                </div>
-              </div>
-
-              {/* Date */}
-              <div className="flex items-center gap-2 bg-slate-100/80 rounded-lg px-3 py-2">
-                <div className="p-1.5 bg-slate-200/80 rounded"><FaTag className="text-slate-600" size={12} /></div>
-                <div className="flex-1 min-w-0">
-                  <span className="font-semibold text-slate-800 text-xs block truncate">{formattedDate}</span>
-                  <p className="text-slate-600 text-xs">
-                    {item.updated_at !== item.created_at ? "Mis à jour" : "Publié le"}
-                  </p>
-                </div>
-              </div>
-
-              {/* Visibilité */}
-              {item.visibility && item.visibility !== "public" && (
-                <div className="flex items-center gap-2 bg-blue-50 rounded-lg px-3 py-2 border border-blue-100">
-                  <div className="p-1.5 bg-blue-100 rounded"><FaTag className="text-blue-700" size={12} /></div>
+            {/* Méta compacte */}
+            <div className="w-44 space-y-3">
+              <div className="space-y-2">
+                {/* Auteur */}
+                <div className="flex items-center gap-2 bg-slate-100/80 rounded-lg px-3 py-2">
+                  <div className="p-1.5 bg-slate-200/80 rounded"><FaUser className="text-slate-600" size={12} /></div>
                   <div className="flex-1 min-w-0">
-                    <span className="font-semibold text-blue-800 text-xs block truncate">
-                      {visibilityLabel}
-                    </span>
-                    <p className="text-blue-700 text-xs">Visibilité</p>
+                    <span className="font-semibold text-slate-800 text-xs block truncate overflow-auto">{authorName}</span>
+                    <p className="text-slate-600 text-xs overflow-auto">{item.author?.email || "Auteur"}</p>
                   </div>
                 </div>
-              )}
-            </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-2 gap-2">
-              <div className={cls("bg-gradient-to-br from-blue-50/80 to-indigo-50/80", smallStatBox)}>
-                <div className="text-blue-700 font-bold text-sm">{formattedViewCount}</div>
-                <div className="text-blue-600 text-xs">Vues</div>
-              </div>
-
-              {item.comment_count !== undefined && (
-                <div className={cls("bg-gradient-to-br from-green-50/80 to-emerald-50/80", smallStatBox)}>
-                  <div className="text-green-700 font-bold text-sm">{item.comment_count}</div>
-                  <div className="text-green-600 text-xs">Commentaires</div>
+                {/* Date */}
+                <div className="flex items-center gap-2 bg-slate-100/80 rounded-lg px-3 py-2">
+                  <div className="p-1.5 bg-slate-200/80 rounded"><FaTag className="text-slate-600" size={12} /></div>
+                  <div className="flex-1 min-w-0">
+                    <span className="font-semibold text-slate-800 text-xs block truncate">{formattedDate}</span>
+                    <p className="text-slate-600 text-xs">
+                      {item.updated_at !== item.created_at ? "Mis à jour" : "Publié le"}
+                    </p>
+                  </div>
                 </div>
-              )}
 
-              {item.share_count !== undefined && (
-                <div className={cls("bg-gradient-to-br from-purple-50/80 to-pink-50/80", smallStatBox)}>
-                  <div className="text-purple-700 font-bold text-sm">{item.share_count}</div>
-                  <div className="text-purple-600 text-xs">Partages</div>
-                </div>
-              )}
-
-              <div className={cls("bg-gradient-to-br from-amber-50/80 to-orange-50/80", smallStatBox)}>
-                <div className="text-amber-700 font-bold text-sm">{formattedRating}/5</div>
-                <div className="text-amber-600 text-xs">{item.rating_count || 0} avis</div>
+                {/* Visibilité */}
+                {item.visibility && item.visibility !== "public" && (
+                  <div className="flex items-center gap-2 bg-blue-50 rounded-lg px-3 py-2 border border-blue-100">
+                    <div className="p-1.5 bg-blue-100 rounded">
+                      {isPwdProtected(item.visibility) ? <FaKey className="text-blue-700" size={12} /> : <FaLockOpen className="text-blue-700" size={12} />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="font-semibold text-blue-800 text-xs block truncate">
+                        {visLabel}
+                      </span>
+                      <p className="text-blue-700 text-xs">Visibilité</p>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-
-            {/* Divers */}
-            <div className="flex items-center gap-1 text-slate-500 pt-2 border-t border-slate-200/50 text-xs">
-              {item.word_count && <span>{item.word_count} mots</span>}
-              {item.word_count && item.categories?.length > 0 && <span>•</span>}
-              {item.categories?.length > 0 && (
-                <span>
-                  {item.categories.length} catégorie{item.categories.length > 1 ? "s" : ""}
-                </span>
-              )}
-              {readingTime ? <><span>•</span><span>{readingTime} min</span></> : null}
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Décor lumineux subtil */}
-      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none">
-        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-transparent via-white/60 to-transparent" />
-        <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/40 to-transparent" />
-        <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-transparent via-white/30 to-transparent" />
-        <div className="absolute top-0 right-0 w-1 h-full bg-gradient-to-b from-transparent via-white/30 to-transparent" />
-      </div>
-    </article>
+        {/* Stats */}
+        <div className="grid grid-cols-4 gap-2 px-6 pt-3 mb-4">
+          <div className={cls("bg-gradient-to-br from-blue-50/80 to-indigo-50/80", smallStatBox)}>
+            <div className="text-blue-700 font-bold text-sm">{formattedViewCount}</div>
+            <div className="text-blue-600 text-xs">Vues</div>
+          </div>
+
+          {item.comment_count !== undefined && (
+            <div className={cls("bg-gradient-to-br from-green-50/80 to-emerald-50/80", smallStatBox)}>
+              <div className="text-green-700 font-bold text-sm">{item.comment_count}</div>
+              <div className="text-green-600 text-xs">Commentaires</div>
+            </div>
+          )}
+
+          {item.share_count !== undefined && (
+            <div className={cls("bg-gradient-to-br from-purple-50/80 to-pink-50/80", smallStatBox)}>
+              <div className="text-purple-700 font-bold text-sm">{item.share_count}</div>
+              <div className="text-purple-600 text-xs">Partages</div>
+            </div>
+          )}
+
+          <div className={cls("bg-gradient-to-br from-amber-50/80 to-orange-50/80", smallStatBox)}>
+            <div className="text-amber-700 font-bold text-sm">{formattedRating}/5</div>
+            <div className="text-amber-600 text-xs">{item.rating_count || 0} avis</div>
+          </div>
+        </div>
+
+        {/* Divers */}
+        <div className="flex p-6 w-full items-center gap-1 text-slate-500 pt-2 border-t border-slate-200/50 text-xs">
+          {item.word_count && <span>{item.word_count} mots</span>}
+          {item.word_count && item.categories?.length > 0 && <span>•</span>}
+          {item.categories?.length > 0 && (
+            <span>
+              {item.categories.length} catégorie{item.categories.length > 1 ? "s" : ""}
+            </span>
+          )}
+          {readingTime ? <><span>•</span><span>{readingTime} min</span></> : null}
+        </div>
+
+        {/* Décor lumineux subtil */}
+        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none">
+          <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+          <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+          <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-transparent via-white/30 to-transparent" />
+          <div className="absolute top-0 right-0 w-1 h-full bg-gradient-to-b from-transparent via-white/30 to-transparent" />
+        </div>
+      </article>
+
+      {/* Popup mot de passe */}
+      <PasswordDialog
+        open={pwdOpen}
+        title={`Accès à « ${item.title} »`}
+        onClose={() => setPwdOpen(false)}
+        onSubmit={submitPwd}
+        defaultValue={pwdDefault}
+      />
+    </>
   );
 }
