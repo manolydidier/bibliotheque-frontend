@@ -65,7 +65,10 @@ export async function fetchArticle(idOrSlug, opts = {}) {
     console.log("[API] GET /articles/:id", key, logParams);
   }
 
-  const resp = await api.get(`/articles/${encodeURIComponent(key)}`, { params });
+  const resp = await api.get(`/articles/${encodeURIComponent(key)}`, {
+   params,
+   headers: { "Cache-Control": "no-store" },
+ });
   return unwrapArticle(resp);
 }
 

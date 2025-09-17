@@ -34,6 +34,7 @@ import PasswordModal from "../components/PasswordModal";
 import { getStoredPassword, setStoredPassword } from "../utils/passwordGate";
 
 /* ---------------- Helpers ---------------- */
+
 const sanitizeParam = (x) => {
   const raw = (x ?? "").toString().trim();
   if (!raw || raw === "undefined" || raw === "null") return null;
@@ -321,7 +322,12 @@ export default function Visualiseur() {
     (async () => {
       try {
         // 1er essai sans mot de passe
-        const art = await doFetch();
+        // const art = await doFetch();
+        // 1er essai : utilise le mdp en session si dispo
+     const savedPwd = getStoredPassword(idOrSlug);
+     const art = await fetchArticle(idOrSlug, {
+       include, fields, password: savedPwd || undefined
+     });
         if (!mounted) return;
         setArticle(art);
         document.title = art?.title || "Visualiseur";
@@ -530,13 +536,15 @@ export default function Visualiseur() {
           </div>
         </div>
 
-        <PasswordModal
-          open={true}
-          onClose={() => setUnlockOpen(false)}
-          onSubmit={handleUnlock}
-          defaultValue={getStoredPassword(idOrSlug)}
-          title="Déverrouiller l’article"
-        />
+       <PasswordModal
+        open={unlockOpen}
+        onClose={() => setUnlockOpen(false)}
+        onSubmit={handleUnlock}      // ta fonction async qui throw en cas d'erreur
+        defaultValue={getStoredPassword(idOrSlug)}
+        title="Déverrouiller l’article"
+        error={unlockError}          // <- string depuis le parent
+        busy={unlockBusy}            // <- bool depuis le parent
+      />
       </div>
     );
   }
@@ -754,44 +762,55 @@ export default function Visualiseur() {
   }
 
   // 🔑 Soumission du mot de passe
-  async function handleUnlock(password) {
-    if (!password) {
-      setUnlockError("Merci de saisir un mot de passe.");
-      return;
-    }
-    setUnlockBusy(true);
-    setUnlockError("");
-
-    const include = ["categories", "tags", "media", "comments", "approvedComments", "author", "history"];
-    const fields = [
-      "id","title","slug","excerpt","content",
-      "featured_image","featured_image_alt","status","visibility",
-      "published_at","updated_at","created_at","view_count","reading_time","word_count",
-      "share_count","comment_count","rating_average","rating_count",
-      "is_featured","is_sticky","author_id","author_name","meta","seo_data",
-      "allow_comments","allow_rating"
-    ];
-
-    try {
-      // Variante 1 (GET show + ?password=...) :
-      const art = await fetchArticle(idOrSlug, { include, fields, password });
-
-      // Variante 2 (POST /unlock) possible si tu exposes la route côté API :
-      // const art = await unlockArticle(idOrSlug, password, { include, fields });
-
-      setArticle(art || null);
-      setLockedKind(null);
-      setUnlockOpen(false);
-      setStoredPassword(idOrSlug, password); // ✅ mémorise
-      document.title = (art?.title || "Visualiseur");
-    } catch (e) {
-      const msg = e?.response?.data?.message || "Mot de passe invalide.";
-      setUnlockError(msg);
-      setUnlockOpen(true);
-    } finally {
-      setUnlockBusy(false);
-    }
+ // remplace ta fonction handleUnlock par ceci :
+async function handleUnlock(password) {
+  if (!password) {
+    setUnlockError("Merci de saisir un mot de passe.");
+    return;
   }
+  setUnlockBusy(true);
+  setUnlockError("");
+
+  const include = ["categories", "tags", "media", "comments", "approvedComments", "author", "history"];
+  const fields = [
+    "id","title","slug","excerpt","content",
+    "featured_image","featured_image_alt","status","visibility",
+    "published_at","updated_at","created_at","view_count","reading_time","word_count",
+    "share_count","comment_count","rating_average","rating_count",
+    "is_featured","is_sticky","author_id","author_name","meta","seo_data",
+    "allow_comments","allow_rating"
+  ];
+
+  try {
+    let art = null;
+
+    // 1) Tente l’endpoint d’unlock (session)
+    try {
+      art = await unlockArticle(idOrSlug, password, { include, fields });
+    } catch {
+      // 2) Si pas d’endpoint unlock, fallback: GET avec ?password
+      art = await fetchArticle(idOrSlug, { include, fields, password });
+    }
+
+    // 3) Si l’unlock ne renvoie pas l’article complet, refetch GET “normal”
+    if (!art || !art.id) {
+      art = await fetchArticle(idOrSlug, { include, fields });
+    }
+
+    setStoredPassword(idOrSlug, password);     // mémorise pour la session
+    setArticle(art || null);
+    setLockedKind(null);
+    setUnlockOpen(false);
+    document.title = art?.title || "Visualiseur";
+  } catch (e) {
+    const msg = e?.response?.data?.message || "Mot de passe invalide.";
+    setUnlockError(msg);
+    setUnlockOpen(true);
+  } finally {
+    setUnlockBusy(false);
+  }
+}
+
 }
 
 /* ---------------- Sub-UI ---------------- */
