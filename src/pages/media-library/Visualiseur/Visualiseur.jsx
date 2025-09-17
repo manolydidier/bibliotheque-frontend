@@ -6,7 +6,7 @@ import {
   FaArrowLeft, FaArrowRight, FaRedo, FaExpand, FaDownload,
   FaExternalLinkAlt, FaChevronLeft, FaChevronRight, FaSearchPlus, FaSearchMinus,
   FaFilePdf, FaFileExcel, FaFileWord, FaImage, FaFileVideo, FaFile, FaTag, FaStar, FaClock, FaEye, FaComment, FaChartBar, FaHistory, FaInfoCircle, FaSearch, FaPlus, FaPlay, FaTimes, FaShareAlt,
-  FaLock, FaUnlock, FaEyeSlash, FaShieldAlt, FaExclamationTriangle
+  FaLock, FaShieldAlt
 } from "react-icons/fa";
 import {
   ResponsiveContainer,
@@ -15,16 +15,23 @@ import {
   RadialBarChart, RadialBar
 } from "recharts";
 import axios from "axios";
-import { fetchArticle, fetchSimilarArticles, buildArticleShowUrl, DEBUG_HTTP } from "../api/articles";
+import {
+  fetchSimilarArticles,
+  buildArticleShowUrl,
+  DEBUG_HTTP,
+  fetchArticle,
+  unlockArticle
+} from "../api/articles";
 import { formatDate } from "../shared/utils/format";
 import Comments from "./Comments";
 import TagManagerModal from "./TagManagerModal";
 import Toaster from "../../../component/toast/Toaster";
-
-// ✅ Bouton de partage
 import ShareButton from "../Visualiseur/share/ShareButton";
-// ✅ Notation d’article
 import RatingModal, { RateButton } from "../RatingModal";
+
+// ✅ Modale factorisée + util pwd (mémoire session)
+import PasswordModal from "../components/PasswordModal";
+import { getStoredPassword, setStoredPassword } from "../utils/passwordGate";
 
 /* ---------------- Helpers ---------------- */
 const sanitizeParam = (x) => {
@@ -148,11 +155,7 @@ function TagPill({ tag, className = "", onClick }) {
                   bg-white/70 backdrop-blur-sm shadow-sm border-slate-200/60 hover:shadow-md hover:bg-white/90 
                   transition-all duration-300 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-1 ${className}`}
     >
-      <span
-        aria-hidden
-        className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-        style={{ background: pal.dot }}
-      />
+      <span aria-hidden className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: pal.dot }} />
       <span className="truncate" style={{ color: pal.text }}>{tag?.name}</span>
     </button>
   );
@@ -195,7 +198,7 @@ function TagList({ tags, onAddClick, onTagClick, max = 10 }) {
   );
 }
 
-/* Palette pour les charts */
+/* Palette charts */
 const CHART_COLORS = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ef4444", "#06b6d4", "#64748b"];
 
 /* ---------------- Auth / Permissions ---------------- */
@@ -266,7 +269,7 @@ export default function Visualiseur() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  // 🔐 Accès / verrouillage (simple colonne "password" côté API)
+  // 🔐 États verrouillage
   const [lockedKind, setLockedKind] = useState(null); // 'password' | 'private' | 'unknown' | null
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [unlockBusy, setUnlockBusy] = useState(false);
@@ -312,30 +315,49 @@ export default function Visualiseur() {
       "allow_comments","allow_rating"
     ];
 
-    if (DEBUG_HTTP) {
-      console.log("[UI] Appel =>", buildArticleShowUrl(idOrSlug, { include, fields }));
-    }
+    const doFetch = (passwordMaybe) =>
+      fetchArticle(idOrSlug, { include, fields, password: passwordMaybe });
 
     (async () => {
       try {
-        const j = await fetchArticle(idOrSlug, { include, fields });
+        // 1er essai sans mot de passe
+        const art = await doFetch();
         if (!mounted) return;
-        const data = j?.data ?? j ?? null;
-        setArticle(data);
-        document.title = data?.title || "Visualiseur";
+        setArticle(art);
+        document.title = art?.title || "Visualiseur";
       } catch (e) {
         if (!mounted) return;
         const status = e?.response?.status;
-        const v = (e?.response?.data?.visibility || e?.response?.data?.code || "").toString().toLowerCase();
+        const code = (e?.response?.data?.visibility || e?.response?.data?.code || "").toString().toLowerCase();
+
         if (status === 403) {
-          if (/private/.test(v)) {
+          if (/private/.test(code)) {
             setLockedKind("private");
             setUnlockOpen(false);
             setErr("");
-          } else if (/password/.test(v)) {
-            setLockedKind("password");
-            setUnlockOpen(true);
-            setErr("");
+          } else if (/password/.test(code) || !code) {
+            // 🔁 Essai auto avec un éventuel mdp mémorisé
+            const savedPwd = getStoredPassword(idOrSlug);
+            if (savedPwd) {
+              try {
+                const art2 = await doFetch(savedPwd);
+                if (!mounted) return;
+                setArticle(art2);
+                setLockedKind(null);
+                setUnlockOpen(false);
+                setErr("");
+                document.title = art2?.title || "Visualiseur";
+                return;
+              } catch {
+                setLockedKind("password");
+                setUnlockOpen(true);
+                setErr("");
+              }
+            } else {
+              setLockedKind("password");
+              setUnlockOpen(true);
+              setErr("");
+            }
           } else {
             setLockedKind("unknown");
             setUnlockOpen(true);
@@ -360,7 +382,7 @@ export default function Visualiseur() {
     (async () => {
       try {
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const { data } = await axios.get(`/api/articles/${article.id}/ratings`, { headers, withCredentials: false });
+        const { data } = await axios.get(`/articles/${article.id}/ratings`, { headers, withCredentials: false });
         const d = data?.data ?? data ?? {};
         if (cancelled) return;
         if (Number.isFinite(Number(d?.rating_average)) && Number.isFinite(Number(d?.rating_count))) {
@@ -368,7 +390,7 @@ export default function Visualiseur() {
         }
         setMyRating(typeof d?.my_rating === "number" ? d.my_rating : null);
         setMyReview(typeof d?.my_review === "string" ? d.my_review : "");
-      } catch (_) {
+      } catch {
         // silencieux
       } finally {
         if (!cancelled) setRatingLoaded(true);
@@ -472,7 +494,7 @@ export default function Visualiseur() {
     );
   }
 
-  // 🔒 Accès privé : écran dédié (aucun autre ajout requis côté API)
+  // 🔒 Accès privé : écran dédié
   if (lockedKind === "private") {
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 font-sans px-3 sm:px-4 lg:px-6 2xl:px-10 py-10">
@@ -508,13 +530,12 @@ export default function Visualiseur() {
           </div>
         </div>
 
-        <UnlockModal
+        <PasswordModal
           open={true}
           onClose={() => setUnlockOpen(false)}
           onSubmit={handleUnlock}
-          busy={unlockBusy}
-          error={unlockError}
-          articleTitle=""
+          defaultValue={getStoredPassword(idOrSlug)}
+          title="Déverrouiller l’article"
         />
       </div>
     );
@@ -700,7 +721,9 @@ export default function Visualiseur() {
           </summary>
           <div className="text-xs my-3">
             <div className="mb-2 font-medium text-slate-800">Show URL</div>
-            <code className="break-all text-slate-600">{buildArticleShowUrl(idOrSlug, { include: ["categories","tags","media"], fields: ["id","title","slug"] })}</code>
+            <code className="break-all text-slate-600">
+              {buildArticleShowUrl(idOrSlug, { include: ["categories","tags","media"], fields: ["id","title","slug"] })}
+            </code>
           </div>
           <pre className="text-xs max-h-64 overflow-auto bg-slate-50/80 p-4 rounded-xl border border-slate-200/50">
             {JSON.stringify(article, null, 2)}
@@ -709,13 +732,14 @@ export default function Visualiseur() {
       )}
 
       {/* 🔑 Modale mot de passe (si besoin pendant que l'article est affiché) */}
-      <UnlockModal
+      <PasswordModal
         open={unlockOpen}
         onClose={() => setUnlockOpen(false)}
         onSubmit={handleUnlock}
-        busy={unlockBusy}
+        defaultValue={getStoredPassword(idOrSlug)}
+        title="Déverrouiller l’article"
         error={unlockError}
-        articleTitle={article?.title}
+        busy={unlockBusy}
       />
     </div>
   );
@@ -729,7 +753,7 @@ export default function Visualiseur() {
     document.body.appendChild(a); a.click(); a.remove();
   }
 
-  // 🔑 Soumission du mot de passe : on refait un GET sur l’URL d’article avec ?password=...
+  // 🔑 Soumission du mot de passe
   async function handleUnlock(password) {
     if (!password) {
       setUnlockError("Merci de saisir un mot de passe.");
@@ -749,17 +773,21 @@ export default function Visualiseur() {
     ];
 
     try {
-      let url = buildArticleShowUrl(idOrSlug, { include, fields });
-      url += (url.includes("?") ? "&" : "?") + "password=" + encodeURIComponent(password);
+      // Variante 1 (GET show + ?password=...) :
+      const art = await fetchArticle(idOrSlug, { include, fields, password });
 
-      const { data } = await axios.get(url, { withCredentials: false });
-      setArticle(data || null);
+      // Variante 2 (POST /unlock) possible si tu exposes la route côté API :
+      // const art = await unlockArticle(idOrSlug, password, { include, fields });
+
+      setArticle(art || null);
       setLockedKind(null);
       setUnlockOpen(false);
-      document.title = (data?.title || "Visualiseur");
+      setStoredPassword(idOrSlug, password); // ✅ mémorise
+      document.title = (art?.title || "Visualiseur");
     } catch (e) {
       const msg = e?.response?.data?.message || "Mot de passe invalide.";
       setUnlockError(msg);
+      setUnlockOpen(true);
     } finally {
       setUnlockBusy(false);
     }
@@ -769,7 +797,7 @@ export default function Visualiseur() {
 /* ---------------- Sub-UI ---------------- */
 function Sidebar({ open, toggle, mediaCount, tags, mediaList, selectedFile, onSelectFile, similar, similarLoading, onOpenSimilar, onOpenTagManager }) {
   return (
-    <div className={`sidebar pt-4  overflow-auto w-72 lg:w-80 bg-white/70 backdrop-blur-xl shadow-2xl border-r border-white/40 flex-shrink-0 transition-all duration-500 ${open ? "" : "hidden"} lg:block`}>
+    <div className={`sidebar pt-4 overflow-auto w-72 lg:w-80 bg-white/70 backdrop-blur-xl shadow-2xl border-r border-white/40 flex-shrink-0 transition-all duration-500 ${open ? "" : "hidden"} lg:block`}>
       <div className="p-6 border-b border-slate-200/30">
         <h2 className="text-2xl font-light text-slate-800 flex items-center">
           <FaFolderOpen className="mr-3 text-blue-500" />
@@ -898,39 +926,22 @@ function Toolbar({ onBack, onRefresh, onFullscreen, onDownload, shareData }) {
   return (
     <div className="border-b border-slate-200/30 p-4 sm:p-5 lg:p-6 flex justify-between items-center bg-gradient-to-r from-white/30 to-transparent">
       <div className="flex items-center space-x-2 sm:space-x-3">
-        <button
-          onClick={onBack}
-          className="p-3 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50/80 transition-all duration-300 flex items-center justify-center"
-          title="Retour"
-        >
+        <button onClick={onBack} className="p-3 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50/80 transition-all duration-300 flex items-center justify-center" title="Retour">
           <FaArrowLeft />
         </button>
-        <button
-          className="p-3 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50/80 transition-all duration-300 flex items-center justify-center"
-          title="Avancer"
-        >
+        <button className="p-3 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50/80 transition-all duration-300 flex items-center justify-center" title="Avancer">
           <FaArrowRight />
         </button>
-        <button
-          onClick={onRefresh}
-          className="p-3 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50/80 transition-all duration-300 flex items-center justify-center"
-          title="Rafraîchir"
-        >
+        <button onClick={onRefresh} className="p-3 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50/80 transition-all duration-300 flex items-center justify-center" title="Rafraîchir">
           <FaRedo />
         </button>
       </div>
       <div className="flex items-center space-x-3 sm:space-x-4">
-        <button
-          onClick={onFullscreen}
-          className="px-4 sm:px-5 lg:px-6 py-3 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50/80 border border-slate-300/60 transition-all duration-300 flex items-center backdrop-blur-sm"
-        >
+        <button onClick={onFullscreen} className="px-4 sm:px-5 lg:px-6 py-3 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50/80 border border-slate-300/60 transition-all duration-300 flex items-center backdrop-blur-sm">
           <FaExpand className="mr-2" />
           <span>Plein écran</span>
         </button>
-        <button
-          onClick={onDownload}
-          className="px-4 sm:px-5 lg:px-6 py-3 rounded-xl text-slate-600 hover:text-emerald-600 hover:bg-emerald-50/80 border border-slate-300/60 transition-all duration-300 flex items-center backdrop-blur-sm"
-        >
+        <button onClick={onDownload} className="px-4 sm:px-5 lg:px-6 py-3 rounded-xl text-slate-600 hover:text-emerald-600 hover:bg-emerald-50/80 border border-slate-300/60 transition-all duration-300 flex items-center backdrop-blur-sm">
           <FaDownload className="mr-2" />
           <span>Télécharger</span>
         </button>
@@ -978,7 +989,7 @@ function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDown
           <div className="w-24 h-24 lg:w-28 lg:h-28 bg-gradient-to-br from-blue-100 to-blue-200 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl">
             <FaFile className="text-blue-600 text-4xl lg:text-5xl" />
           </div>
-          <h3 className="text-2xl lg:text-3xl font-light text-slate-800 mb-3">Aucun média</h3>
+          <h3 className="text-2xl lg:3xl font-light text-slate-800 mb-3">Aucun média</h3>
           <p className="text-slate-600 mt-2 max-w-md mx-auto">Ajoutez un média à l'article ou ouvrez l'onglet « Médias » pour explorer les fichiers disponibles.</p>
         </div>
       ) : (
@@ -1010,7 +1021,7 @@ function Medias({ mediaList }) {
       <p>Aucun média lié à cet article.</p>
     </div>
   );
-  
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
       {mediaList.map((m, i) => (
@@ -1098,7 +1109,7 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
     const bgColor = type === "excel" ? "bg-emerald-50/80 border-emerald-100/60" : "bg-blue-50/80 border-blue-100/60";
     const iconColor = type === "excel" ? "text-emerald-600" : "text-blue-600";
     const appName = type === "excel" ? "Excel" : "Word";
-    
+
     return (
       <div className="w-full flex flex-col">
         <div className="w-full bg-white/60 border border-slate-200/40 rounded-2xl overflow-hidden backdrop-blur-sm shadow-lg">
@@ -1224,7 +1235,7 @@ function Versions({ history }) {
     <div className="w-full h-full overflow-auto">
       <div className="space-y-4 max-h-[100vh] overflow-y-auto pr-2">
         {history.map((h) => (
-          <div key={h.id} className="bg-white/60 backdrop-blur-sm p-6 rounded-2xl  border border-slate-200/40  transition-all duration-500">
+          <div key={h.id} className="bg-white/60 backdrop-blur-sm p-6 rounded-2xl border border-slate-200/40 transition-all duration-500">
             <div className="flex items-start justify-between">
               <div>
                 <h4 className="font-medium text-slate-800 capitalize flex items-center text-lg">
@@ -1235,7 +1246,11 @@ function Versions({ history }) {
               </div>
               {h.user_agent && <span className="text-xs text-slate-400 mt-1 max-w-xs truncate">{h.user_agent}</span>}
             </div>
-            {h.notes && <p className="text-sm mt-4 text-slate-700 bg-slate-50/50 p-3 rounded-xl">{h.notes}</p>}
+            {h.notes && (
+              <p className="text-sm mt-4 text-slate-700 bg-slate-50/50 p-3 rounded-xl">
+                {h.notes}
+              </p>
+            )}
           </div>
         ))}
       </div>
@@ -1297,11 +1312,11 @@ function StatsCharts({ article }) {
               <div className="h-64 md:h-72 xl:h-80 2xl:h-[28rem] flex items-center justify-center">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie 
-                      dataKey="value" 
-                      data={engagementData} 
-                      innerRadius={50} 
-                      outerRadius={90} 
+                    <Pie
+                      dataKey="value"
+                      data={engagementData}
+                      innerRadius={50}
+                      outerRadius={90}
                       paddingAngle={3}
                       stroke="none"
                     >
@@ -1309,7 +1324,7 @@ function StatsCharts({ article }) {
                         <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{
                         backgroundColor: 'rgba(255, 255, 255, 0.95)',
                         border: 'none',
@@ -1330,35 +1345,35 @@ function StatsCharts({ article }) {
 
         {/* Tags/History Chart */}
         <div className="col-span-1">
-          <ChartCard 
-            title={tagsBarData.length ? "Tags populaires" : "Historique"} 
+          <ChartCard
+            title={tagsBarData.length ? "Tags populaires" : "Historique"}
             subtitle={tagsBarData.length ? "Usage global des tags" : "Actions effectuées"}
             icon={tagsBarData.length ? <FaTag /> : <FaHistory />}
           >
             <div className="h-64 md:h-72 xl:h-80 2xl:h-[28rem]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart 
-                  data={tagsBarData.length ? tagsBarData : historyBarData} 
+                <BarChart
+                  data={tagsBarData.length ? tagsBarData : historyBarData}
                   margin={{ top: 20, right: 20, left: 20, bottom: 60 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" opacity={0.6} />
-                  <XAxis 
-                    dataKey="name" 
-                    interval={0} 
-                    angle={-35} 
-                    textAnchor="end" 
-                    height={80} 
+                  <XAxis
+                    dataKey="name"
+                    interval={0}
+                    angle={-35}
+                    textAnchor="end"
+                    height={80}
                     tick={{ fill: '#64748b', fontSize: 12 }}
                     axisLine={false}
                     tickLine={false}
                   />
-                  <YAxis 
-                    allowDecimals={false} 
+                  <YAxis
+                    allowDecimals={false}
                     tick={{ fill: '#64748b', fontSize: 12 }}
                     axisLine={false}
                     tickLine={false}
                   />
-                  <Tooltip 
+                  <Tooltip
                     contentStyle={{
                       backgroundColor: 'rgba(255, 255, 255, 0.95)',
                       border: 'none',
@@ -1367,9 +1382,9 @@ function StatsCharts({ article }) {
                       fontSize: '14px'
                     }}
                   />
-                  <Bar 
-                    dataKey={tagsBarData.length ? "usage" : "count"} 
-                    fill="#3b82f6" 
+                  <Bar
+                    dataKey={tagsBarData.length ? "usage" : "count"}
+                    fill="#3b82f6"
                     radius={[6, 6, 0, 0]}
                     stroke="none"
                   />
@@ -1387,18 +1402,18 @@ function StatsCharts({ article }) {
                 <>
                   <div className="relative w-40 h-40 md:w-44 md:h-44 xl:w-48 xl:h-48 mb-6">
                     <ResponsiveContainer width="100%" height="100%">
-                      <RadialBarChart 
-                        innerRadius="60%" 
-                        outerRadius="90%" 
-                        data={[{ name: "Note", value: (avgRating / 5) * 100 }]} 
-                        startAngle={90} 
+                      <RadialBarChart
+                        innerRadius="60%"
+                        outerRadius="90%"
+                        data={[{ name: "Note", value: (avgRating / 5) * 100 }]}
+                        startAngle={90}
                         endAngle={-270}
                       >
-                        <RadialBar 
-                          dataKey="value" 
-                          minAngle={15} 
-                          clockWise 
-                          background={{ fill: '#e2e8f0' }} 
+                        <RadialBar
+                          dataKey="value"
+                          minAngle={15}
+                          clockWise
+                          background={{ fill: '#e2e8f0' }}
                           fill="#fbbf24"
                           cornerRadius={6}
                         />
@@ -1411,8 +1426,8 @@ function StatsCharts({ article }) {
                   </div>
                   <div className="flex items-center gap-1">
                     {[...Array(5)].map((_, i) => (
-                      <FaStar 
-                        key={i} 
+                      <FaStar
+                        key={i}
                         className={i < Math.round(avgRating) ? "text-yellow-400" : "text-gray-200"}
                         size={16}
                       />
@@ -1481,8 +1496,6 @@ function DetailsPanel({
   selectedFile, me, token, rights, onOpenRating, onOpenRatingEdit,
   ratingAverage, ratingCount, myRating, ratingLoaded
 }) {
-  const tags = article?.tags || [];
-
   const initialTopLevelApproved = useMemo(() => {
     if (Array.isArray(article?.approved_comments)) {
       return article.approved_comments.filter(c => c?.parent_id == null);
@@ -1493,102 +1506,98 @@ function DetailsPanel({
     return [];
   }, [article]);
 
+  const statusLabel = (article?.status || "—").toString();
+  const statusKey = statusLabel.toLowerCase();
+  const statusCls =
+    /publi|actif|online|en ligne/.test(statusKey)
+      ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+      : /brouillon|draft/.test(statusKey)
+      ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+      : /archiv|inactif|désactiv/.test(statusKey)
+      ? "bg-slate-100 text-slate-700 ring-1 ring-slate-200"
+      : "bg-blue-50 text-blue-700 ring-1 ring-blue-200";
+
+  const tags = article?.tags || [];
+
   return (
     <aside className="shrink-0 w-full sm:w-[20rem] lg:w-[22rem] xl:w-[24rem] 2xl:w-[26rem] p-6 lg:p-8">
       <h2 className="text-2xl font-light text-slate-800 mb-6 lg:mb-8 flex items-center">
         <FaInfoCircle className="mr-3 text-blue-600" />
         Détails du fichier
       </h2>
-        {(() => {
-        const statusLabel = (article?.status || "—").toString();
-        const statusKey = statusLabel.toLowerCase();
-        const statusCls =
-          /publi|actif|online|en ligne/.test(statusKey)
-            ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-            : /brouillon|draft/.test(statusKey)
-            ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-            : /archiv|inactif|désactiv/.test(statusKey)
-            ? "bg-slate-100 text-slate-700 ring-1 ring-slate-200"
-            : "bg-blue-50 text-blue-700 ring-1 ring-blue-200";
 
-        return (
-          <div className="relative overflow-hidden rounded-3xl border border-slate-200/60 bg-white/70 backdrop-blur-sm  mb-6">
-            {/* Ligne lumineuse */}
-            <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-sky-300 to-transparent" />
+      <div className="relative overflow-hidden rounded-3xl border border-slate-200/60 bg-white/70 backdrop-blur-sm mb-6">
+        {/* Ligne lumineuse */}
+        <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-sky-300 to-transparent" />
 
-            {/* Header compact */}
-            <div className="relative flex items-center gap-3 p-4 border-b border-slate-200/50">
-              <div
-                className={`w-12 h-12 ${iconBgForType(currentType)} rounded-xl flex items-center justify-center shadow-md ring-1 ring-inset ring-white/40`}
-              >
-                {iconForType(currentType, "text-lg")}
-              </div>
+        {/* Header compact */}
+        <div className="relative flex items-center gap-3 p-4 border-b border-slate-200/50">
+          <div className={`w-12 h-12 ${iconBgForType(currentType)} rounded-xl flex items-center justify-center shadow-md ring-1 ring-inset ring-white/40`}>
+            {iconForType(currentType, "text-lg")}
+          </div>
 
-              <div className="min-w-0">
-                <h3 className="text-base font-semibold text-slate-900 truncate leading-tight">
-                  {currentTitle || "Sans titre"}
-                </h3>
-                <p className="text-[11px] font-medium text-slate-500/80 mt-0.5 leading-snug">
-                  {formatDate(article?.created_at)} • {firstCategory(article)}
-                </p>
-              </div>
+          <div className="min-w-0">
+            <h3 className="text-base font-semibold text-slate-900 truncate leading-tight">
+              {currentTitle || "Sans titre"}
+            </h3>
+            <p className="text-[11px] font-medium text-slate-500/80 mt-0.5 leading-snug">
+              {formatDate(article?.created_at)} • {firstCategory(article)}
+            </p>
+          </div>
 
-              <div className="ml-auto flex items-center gap-1.5">
-                <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusCls}`}>
+          <div className="ml-auto flex items-center gap-1.5">
+            <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusCls}`}>
+              {statusLabel}
+            </span>
+            <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-sky-50 text-sky-700 ring-1 ring-sky-200">
+              {currentType ? currentType.toUpperCase() : "—"}
+            </span>
+          </div>
+        </div>
+
+        {/* Contenu compact */}
+        <div className="p-4">
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[13px] leading-tight">
+            <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
+              <dt className="text-slate-500">Date de création</dt>
+              <dd className="mt-0.5 font-medium text-slate-900">
+                {formatDate(article?.created_at)}
+              </dd>
+            </div>
+
+            <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
+              <dt className="text-slate-500">Dernière modification</dt>
+              <dd className="mt-0.5 font-medium text-slate-900">
+                {formatDate(article?.updated_at)}
+              </dd>
+            </div>
+
+            <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
+              <dt className="text-slate-500">Statut</dt>
+              <dd className="mt-0.5">
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusCls}`}>
                   {statusLabel}
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-sky-50 text-sky-700 ring-1 ring-sky-200">
-                  {currentType ? currentType.toUpperCase() : "—"}
-                </span>
-              </div>
+              </dd>
             </div>
 
-            {/* Contenu compact */}
-            <div className="p-4">
-              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[13px] leading-tight">
-                <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
-                  <dt className="text-slate-500">Date de création</dt>
-                  <dd className="mt-0.5 font-medium text-slate-900">
-                    {formatDate(article?.created_at)}
-                  </dd>
-                </div>
-
-                <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
-                  <dt className="text-slate-500">Dernière modification</dt>
-                  <dd className="mt-0.5 font-medium text-slate-900">
-                    {formatDate(article?.updated_at)}
-                  </dd>
-                </div>
-
-                <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
-                  <dt className="text-slate-500">Statut</dt>
-                  <dd className="mt-0.5">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusCls}`}>
-                      {statusLabel}
-                    </span>
-                  </dd>
-                </div>
-
-                <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
-                  <dt className="text-slate-500">Format</dt>
-                  <dd className="mt-0.5 font-medium text-slate-900">
-                    {currentType ? currentType.toUpperCase() : "—"}
-                  </dd>
-                </div>
-              </dl>
-
-              {/* Catégorie */}
-              <div className="mt-4">
-                <p className="text-slate-500 text-[13px] mb-1.5">Catégorie</p>
-                <span className="inline-flex items-center rounded-full bg-indigo-50 text-blue-700 ring-1 ring-indigo-200 px-2.5 py-1 text-[11px] font-semibold">
-                  {firstCategory(article)}
-                </span>
-              </div>
+            <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
+              <dt className="text-slate-500">Format</dt>
+              <dd className="mt-0.5 font-medium text-slate-900">
+                {currentType ? currentType.toUpperCase() : "—"}
+              </dd>
             </div>
+          </dl>
+
+          {/* Catégorie */}
+          <div className="mt-4">
+            <p className="text-slate-500 text-[13px] mb-1.5">Catégorie</p>
+            <span className="inline-flex items-center rounded-full bg-indigo-50 text-blue-700 ring-1 ring-indigo-200 px-2.5 py-1 text-[11px] font-semibold">
+              {firstCategory(article)}
+            </span>
           </div>
-        );
-      })()}
-
+        </div>
+      </div>
 
       {/* Qualité / Notation */}
       <div className="bg-white/60 backdrop-blur-sm p-6 rounded-2xl mb-8 border-2 border-slate-200/40">
@@ -1600,22 +1609,29 @@ function DetailsPanel({
                 {[...Array(5)].map((_, i) => (
                   <FaStar
                     key={i}
-                    className={i < Math.round(Math.max(0, Math.min(5, Number(ratingAverage || 0)))) ? "text-yellow-400" : "text-gray-200"}
+                    className={
+                      i < Math.round(Math.max(0, Math.min(5, Number(ratingAverage || 0))))
+                        ? "text-yellow-400"
+                        : "text-gray-200"
+                    }
                     size={16}
                   />
                 ))}
               </div>
               <span className="text-sm text-slate-600">
-                {(Number(ratingAverage || 0)).toFixed(1)} / 5 · {Number(ratingCount || 0)} {Number(ratingCount || 0) <= 1 ? "note" : "notes"}
+                {(Number(ratingAverage || 0)).toFixed(1)} / 5 · {Number(ratingCount || 0)}{" "}
+                {Number(ratingCount || 0) <= 1 ? "note" : "notes"}
               </span>
             </div>
           </div>
 
           {/* Si la notation est désactivée -> rien */}
           {article?.allow_rating === false ? null : (
-            ratingLoaded && typeof myRating === "number"
-              ? <RateButton onClick={onOpenRatingEdit} label="Modifier" />
-              : <RateButton onClick={onOpenRating} label="Noter" />
+            ratingLoaded && typeof myRating === "number" ? (
+              <RateButton onClick={onOpenRatingEdit} label="Modifier" />
+            ) : (
+              <RateButton onClick={onOpenRating} label="Noter" />
+            )
           )}
         </div>
       </div>
@@ -1635,23 +1651,23 @@ function DetailsPanel({
 }
 
 /* KPI Card */
-function KpiCard({ label, value, suffix, icon, color = 'blue' }) {
-    const colorClasses = {
-    blue: 'from-blue-50/80 to-blue-100/60 text-blue-600 border-blue-100/60',
-    green: 'from-emerald-50/80 to-emerald-100/60 text-emerald-600 border-emerald-100/60',
-    purple: 'from-purple-50/80 to-purple-100/60 text-purple-600 border-purple-100/60',
-    yellow: 'from-yellow-50/80 to-yellow-100/60 text-yellow-600 border-yellow-100/60',
-    orange: 'from-orange-50/80 to-orange-100/60 text-orange-600 border-orange-100/60',
-    indigo: 'from-indigo-50/80 to-indigo-100/60 text-indigo-600 border-indigo-100/60',
+function KpiCard({ label, value, suffix, icon, color = "blue" }) {
+  const colorClasses = {
+    blue: "from-blue-50/80 to-blue-100/60 text-blue-600 border-blue-100/60",
+    green: "from-emerald-50/80 to-emerald-100/60 text-emerald-600 border-emerald-100/60",
+    purple: "from-purple-50/80 to-purple-100/60 text-purple-600 border-purple-100/60",
+    yellow: "from-yellow-50/80 to-yellow-100/60 text-yellow-600 border-yellow-100/60",
+    orange: "from-orange-50/80 to-orange-100/60 text-orange-600 border-orange-100/60",
+    indigo: "from-indigo-50/80 to-indigo-100/60 text-indigo-600 border-indigo-100/60",
   };
 
   const gradientClasses = {
-    blue: 'from-blue-500 to-blue-600',
-    green: 'from-emerald-500 to-emerald-600',
-    purple: 'from-purple-500 to-purple-600',
-    yellow: 'from-yellow-500 to-yellow-600',
-    orange: 'from-orange-500 to-orange-600',
-    indigo: 'from-indigo-500 to-indigo-600',
+    blue: "from-blue-500 to-blue-600",
+    green: "from-emerald-500 to-emerald-600",
+    purple: "from-purple-500 to-purple-600",
+    yellow: "from-yellow-500 to-yellow-600",
+    orange: "from-orange-500 to-orange-600",
+    indigo: "from-indigo-500 to-indigo-600",
   };
 
   return (
@@ -1661,11 +1677,7 @@ function KpiCard({ label, value, suffix, icon, color = 'blue' }) {
         <div className="text-xs font-medium text-slate-600 uppercase tracking-wider">
           {label}
         </div>
-        {icon && (
-          <div className="opacity-40 group-hover:opacity-60 transition-opacity duration-500">
-            {icon}
-          </div>
-        )}
+        {icon && <div className="opacity-40 group-hover:opacity-60 transition-opacity duration-500">{icon}</div>}
       </div>
       <div className="text-2xl lg:text-3xl font-light text-slate-800 tracking-tight">
         {value ?? "—"}
@@ -1682,22 +1694,14 @@ function ChartCard({ title, subtitle, children, icon }) {
       <div className="flex items-center justify-between mb-6 lg:mb-8">
         <div>
           <h3 className="text-xl lg:text-2xl font-light text-slate-800 mb-2 flex items-center gap-4">
-            {icon && (
-              <span className="text-slate-400 group-hover:text-slate-600 transition-colors duration-500">
-                {icon}
-              </span>
-            )}
+            {icon && <span className="text-slate-400 group-hover:text-slate-600 transition-colors duration-500">{icon}</span>}
             {title}
           </h3>
-          {subtitle && (
-            <p className="text-sm text-slate-500">{subtitle}</p>
-          )}
+          {subtitle && <p className="text-sm text-slate-500">{subtitle}</p>}
         </div>
       </div>
       <div className="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent mb-6 lg:mb-8" />
-      <div className="relative">
-        {children}
-      </div>
+      <div className="relative">{children}</div>
     </div>
   );
 }
@@ -1710,159 +1714,6 @@ function EmptyChart({ message = "Pas assez de données pour ce graphique" }) {
         <FaChartBar className="text-2xl" />
       </div>
       <p className="text-sm text-center max-w-xs leading-relaxed">{message}</p>
-    </div>
-  );
-}
-
-/* ---------------- Modale avancée Mot de passe ---------------- */
-function UnlockModal({ open, onClose, onSubmit, busy, error, articleTitle }) {
-  const [pwd, setPwd] = useState("");
-  const [show, setShow] = useState(false);
-  const [caps, setCaps] = useState(false);
-  const dlgRef = useRef(null);
-  const inputRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e) => {
-      if (e.key === "Escape") onClose?.();
-      if (e.getModifierState && e.getModifierState("CapsLock") !== undefined) {
-        setCaps(e.getModifierState("CapsLock"));
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 100);
-    if (!open) { setPwd(""); setShow(false); setCaps(false); }
-  }, [open]);
-
-  const submit = (e) => {
-    e?.preventDefault?.();
-    if (!busy) onSubmit?.(pwd);
-  };
-
-  if (!open) return null;
-
-  return (
-    <div
-      aria-modal="true"
-      role="dialog"
-      aria-labelledby="unlock-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose?.();
-      }}
-    >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
-
-      {/* Dialog */}
-      <div
-        ref={dlgRef}
-        className="relative w-full max-w-md bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-6 sm:p-7 lg:p-8"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center">
-              <FaLock className="text-blue-600 text-xl" />
-            </div>
-            <div>
-              <h3 id="unlock-title" className="text-lg sm:text-xl font-semibold text-slate-900">
-                Contenu protégé
-              </h3>
-              <p className="text-xs text-slate-500">Saisissez le mot de passe pour {articleTitle ? `« ${articleTitle} »` : "cet article"}.</p>
-            </div>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition"
-            aria-label="Fermer"
-          >
-            <FaTimes />
-          </button>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={submit} className="mt-4">
-          <label className="block text-sm font-medium text-slate-700 mb-2">
-            Mot de passe
-          </label>
-
-          <div className="relative">
-            <input
-              ref={inputRef}
-              type={show ? "text" : "password"}
-              className="w-full rounded-2xl border border-slate-300/70 bg-white/80 backdrop-blur-sm px-4 py-3 pr-12 text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition"
-              placeholder="••••••••"
-              value={pwd}
-              onChange={(e) => setPwd(e.target.value)}
-              onKeyUp={(e) => setCaps(e.getModifierState && e.getModifierState("CapsLock"))}
-              autoComplete="current-password"
-              required
-              minLength={1}
-            />
-            <button
-              type="button"
-              onClick={() => setShow((s) => !s)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition"
-              aria-label={show ? "Masquer le mot de passe" : "Afficher le mot de passe"}
-              tabIndex={0}
-            >
-              {show ? <FaEyeSlash /> : <FaEye />}
-            </button>
-          </div>
-
-          {caps && (
-            <div className="mt-2 flex items-center gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs">
-              <FaExclamationTriangle />
-              <span>Verr. Maj active</span>
-            </div>
-          )}
-
-          {error && (
-            <div className="mt-3 flex items-center gap-2 text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-sm">
-              <FaExclamationTriangle className="flex-shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <div className="mt-5 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-3 rounded-xl border border-slate-300/60 text-slate-700 bg-white/80 hover:bg-white transition"
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              disabled={busy}
-              className="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-white bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg"
-            >
-              {busy ? (
-                <>
-                  <span className="inline-block w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                  <span>Vérification…</span>
-                </>
-              ) : (
-                <>
-                  <FaUnlock />
-                  <span>Déverrouiller</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          <p className="mt-4 text-[11px] text-slate-500">
-            Astuce : le mot de passe est transmis uniquement pour cette vérification, puis l’article est rechargé.
-          </p>
-        </form>
-      </div>
     </div>
   );
 }

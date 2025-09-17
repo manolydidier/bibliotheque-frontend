@@ -1,17 +1,21 @@
 // ------------------------------
 // File: media-library/parts/GridCard.jsx
-// Version "pastel light" + badges visibilité + popup password (avancé)
+// Version "pastel light" + badges visibilité + modal password réutilisable
 // ------------------------------
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   FaRegStar, FaStar, FaEye, FaUser,
-  FaHeart, FaRegHeart, FaTag, FaLock, FaLockOpen, FaKey, FaTimes
+  FaHeart, FaRegHeart, FaTag, FaLockOpen
 } from "react-icons/fa";
 import SmartImage from "./SmartImage";
 import ShareButton from "../Visualiseur/share/ShareButton";
 import { cls } from "../shared/utils/format";
 import { isFav, toggleFav, isRead, markRead } from "../shared/store/markers";
+
+// ✅ Modal & pass memory
+import PasswordModal from "../components/PasswordModal";
+import { getStoredPassword, setStoredPassword } from "../utils/passwordGate";
 
 /* =========================
    Utils
@@ -45,21 +49,18 @@ const cleanSlug = (x) => {
 };
 
 const VISUALISEUR_BASE = "/media-library";
-// Construit /media-library/:slug (ou :id si pas de slug)
 const buildVisualiserPath = (base, rec) => {
   const slug = cleanSlug(rec?.slug);
   const id   = rec?.id != null ? String(rec.id) : null;
-  const key  = slug || id || ''; // jamais "undefined"
+  const key  = slug || id || '';
   return `${base || VISUALISEUR_BASE}/${encodeURIComponent(key)}`;
 };
 
-// Préférences mouvement réduit (pour couper les grosses anims)
 const prefersReducedMotion = () =>
   typeof window !== "undefined" &&
   window.matchMedia &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-// Détection basique d'environnement "hoverable"
 const canHover = () =>
   typeof window !== "undefined" &&
   window.matchMedia &&
@@ -85,7 +86,7 @@ function useImpression(onSeen, once = true, threshold = 0.5) {
 }
 
 /* =========================
-   Visibilité
+   Visibilité helpers
 ========================= */
 const isPrivate = (v) => String(v || "").toLowerCase() === "private";
 const isPwdProtected = (v) => {
@@ -127,124 +128,21 @@ const CATEGORY_BORDER_COLORS = {
 };
 
 /* =========================
-   Modal Password (avancé)
-========================= */
-function PasswordDialog({ open, title = "Mot de passe requis", onClose, onSubmit, defaultValue = "" }) {
-  const [pwd, setPwd] = useState(defaultValue || "");
-  const [remember, setRemember] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (open) { setError(""); setPwd(defaultValue || ""); }
-  }, [open, defaultValue]);
-
-  if (!open) return null;
-
-  const submit = (e) => {
-    e?.preventDefault?.();
-    if (!pwd.trim()) {
-      setError("Veuillez saisir un mot de passe.");
-      return;
-    }
-    onSubmit?.(pwd.trim(), remember);
-  };
-
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="relative w-[92vw] max-w-md bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-6 animate-[fadeIn_.2s_ease-out]"
-      >
-        <button
-          className="absolute top-3 right-3 p-2 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100/80 transition"
-          onClick={onClose}
-          aria-label="Fermer"
-        >
-          <FaTimes />
-        </button>
-
-        <div className="mb-5">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-blue-50 text-blue-600 border border-blue-100">
-              <FaKey />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-              <p className="text-sm text-slate-500">Cet article est protégé. Entrez le mot de passe pour continuer.</p>
-            </div>
-          </div>
-        </div>
-
-        <form onSubmit={submit} className="space-y-4">
-          <div>
-            <label htmlFor="pwd-input" className="text-sm font-medium text-slate-700">Mot de passe</label>
-            <input
-              id="pwd-input"
-              type="password"
-              className="mt-1 w-full px-4 py-3 rounded-xl border border-slate-300/70 bg-white/90 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400"
-              placeholder="••••••••"
-              value={pwd}
-              onChange={(e) => setPwd(e.target.value)}
-              autoFocus
-            />
-            {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
-          </div>
-
-          <label className="inline-flex items-center gap-2 text-sm text-slate-600 select-none cursor-pointer">
-            <input
-              type="checkbox"
-              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-              checked={remember}
-              onChange={(e) => setRemember(e.target.checked)}
-            />
-            Mémoriser pendant la session
-          </label>
-
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-slate-300/70 text-slate-700 bg-white hover:bg-slate-50 transition"
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 shadow-lg transition"
-            >
-              Continuer
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-/* =========================
    Composant
 ========================= */
-
 export default function GridCard({ item, routeBase, onOpen }) {
   const navigate = useNavigate();
+  const to = useMemo(() => buildVisualiserPath(routeBase, item), [routeBase, item?.slug, item?.id]);
 
-  /* --------- Navigation --------- */
-  const to = useMemo(
-    () => buildVisualiserPath(routeBase, item),
-    [routeBase, item?.slug, item?.id]
-  );
-
-  /* --------- États locaux --------- */
   const [fav, setFav] = useState(() => isFav(item.id));
   const [read, setRead] = useState(() => isRead(item.id));
   const [isHovered, setIsHovered] = useState(false);
   const [liked, setLiked] = useState(false);
+
+  // ✅ modal pwd réutilisable
   const [pwdOpen, setPwdOpen] = useState(false);
   const [pwdDefault, setPwdDefault] = useState("");
 
-  /* --------- Dérivés visuels --------- */
   const primaryCategory = getCategoryFromTitle(item.title);
   const categoryColor = CATEGORY_COLORS[primaryCategory] || CATEGORY_COLORS.default;
   const borderColor = CATEGORY_BORDER_COLORS[primaryCategory] || CATEGORY_BORDER_COLORS.default;
@@ -252,8 +150,6 @@ export default function GridCard({ item, routeBase, onOpen }) {
     () => categoryColor.replace("/20", "/60").replace("/30", "/80"),
     [categoryColor]
   );
-
-  /* --------- Dérivés métier --------- */
 
   const authorName = useMemo(() => {
     const full = (...xs) => xs.filter(Boolean).join(" ").trim();
@@ -267,24 +163,15 @@ export default function GridCard({ item, routeBase, onOpen }) {
     return name || "Auteur";
   }, [item.author_name, item.author, item.createdBy, item.created_by, item.author_id]);
 
-  // Formats
-  const nf = useMemo(
-    () => new Intl.NumberFormat("fr-FR", { notation: "compact", maximumFractionDigits: 1 }),
-    []
-  );
-  const df = useMemo(
-    () => new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric" }),
-    []
-  );
+  const nf = useMemo(() => new Intl.NumberFormat("fr-FR", { notation: "compact", maximumFractionDigits: 1 }), []);
+  const df = useMemo(() => new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric" }), []);
 
-  // Temps de lecture : API > estimation (200 wpm)
   const readingTime = useMemo(() => {
     if (item.reading_time) return item.reading_time;
     const wc = item.word_count ?? (typeof item.content === "string" ? item.content.trim().split(/\s+/).length : 0);
     return Math.max(1, Math.round(wc / 200));
   }, [item.reading_time, item.word_count, item.content]);
 
-  // Image
   const imgUrl = useMemo(() => {
     if (item.featured_image_url) return toAbsolute(item.featured_image_url);
     if (typeof item.featured_image === "string") return toAbsolute(item.featured_image);
@@ -299,7 +186,6 @@ export default function GridCard({ item, routeBase, onOpen }) {
 
   const visLabel = useMemo(() => humanizeVisibility(item.visibility), [item.visibility]);
 
-  /* --------- Classes réutilisées --------- */
   const motionless = prefersReducedMotion();
   const hoverCls   = motionless ? "" : "hover:-translate-y-3 hover:scale-[1.02]";
 
@@ -320,8 +206,6 @@ export default function GridCard({ item, routeBase, onOpen }) {
 
   const smallStatBox = "rounded-lg p-2 text-center";
 
-  /* --------- Handlers --------- */
-
   const onToggleFav = useCallback((e) => {
     e.stopPropagation();
     try { toggleFav(item.id); } catch {}
@@ -336,10 +220,11 @@ export default function GridCard({ item, routeBase, onOpen }) {
   const onOpenCard = useCallback(() => {
     try { markRead(item.id); } catch {}
     setRead(true);
-    onOpen?.(item);
-  }, [item, onOpen]);
+    // Laisse le parent décider, mais on navigue aussi si non fourni
+    if (typeof onOpen === "function") onOpen(item);
+    else navigate(to);
+  }, [item, onOpen, navigate, to]);
 
-  // Prefetch (route + image HD)
   const prefetchDetail = useCallback(() => {
     if (imgUrl) { const im = new Image(); im.src = imgUrl; }
     try {
@@ -350,14 +235,11 @@ export default function GridCard({ item, routeBase, onOpen }) {
     } catch {}
   }, [imgUrl, to]);
 
-  // Lecture : si protégé, ouvrir la modale ; sinon naviguer directement
+  // ✅ Lecture : si protégé → ouvrir modal ; sinon → naviguer
   const handleRead = useCallback((e) => {
     if (isPwdProtected(item.visibility)) {
       e?.preventDefault?.();
-      // Pré-remplir avec un éventuel mot déjà saisi en session
-      const key = `article_pwd_${item.slug || item.id}`;
-      let current = "";
-      try { current = sessionStorage.getItem(key) || ""; } catch {}
+      const current = getStoredPassword(item.slug || item.id) || "";
       setPwdDefault(current);
       setPwdOpen(true);
       return;
@@ -365,27 +247,19 @@ export default function GridCard({ item, routeBase, onOpen }) {
     onOpenCard();
   }, [item.visibility, item.slug, item.id, onOpenCard]);
 
-  // Soumission du mot de passe depuis la modale
+  // ✅ Soumission du mot de passe → on le stocke pour le Visualiseur
   const submitPwd = useCallback((pwd, remember) => {
-    const key = `article_pwd_${item.slug || item.id}`;
-    try {
-      // on mémorise le mot de passe pendant la session (toujours en sessionStorage ici)
-      sessionStorage.setItem(key, pwd);
-    } catch {}
+    setStoredPassword(item.slug || item.id, pwd); // remember est pour l’UI ici, sessionStorage suffit
     setPwdOpen(false);
-    onOpenCard();
-    navigate(to);
-  }, [item.slug, item.id, to, navigate, onOpenCard]);
+    onOpenCard(); // Visualiseur relira le mot de passe et n’affichera pas la modale
+  }, [item.slug, item.id, onOpenCard]);
 
-  /* --------- Impression tracker --------- */
   const impressionRef = useImpression(() => {
     window.dispatchEvent(new CustomEvent("gridcard:seen", { detail: { id: item.id } }));
   });
 
-  /* --------- Share --------- */
   const shareUrl = (item.url || (typeof window !== "undefined" ? `${window.location.origin}${to}` : to));
 
-  /* --------- Render --------- */
   return (
     <>
       <article
@@ -414,17 +288,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
                 className="transition-all duration-700 group-hover:scale-110 group-hover:brightness-110 group-hover:saturate-110"
               />
 
-              {/* Badges de confidentialité sur l'image */}
-              {(isPrivate(item.visibility) || isPwdProtected(item.visibility)) && (
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
-                  <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-white/95 border border-slate-200/70 text-slate-800 shadow-lg">
-                    {isPrivate(item.visibility) ? <FaLock /> : <FaKey />}
-                    {visLabel}
-                  </span>
-                </div>
-              )}
-
-              {/* Overlay CLAIR */}
+              {/* Overlay clair */}
               <div
                 className={cls(
                   "absolute inset-0 bg-white/55 backdrop-blur-sm flex items-center justify-center gap-6 transition-all duration-500",
@@ -437,8 +301,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
                   to={to}
                   onMouseEnter={prefetchDetail}
                   onClick={handleRead}
-                  className={cls(overlayBtnClass, "hover:text-blue-600 hover:shadow-blue-200/50", isHovered ? "translate-y-0 opacity-100 rotate-0" : "translate-y-8 opacity-100 rotate-0")}
-                  style={{ transitionDelay: "0ms" }}
+                  className={cls(overlayBtnClass, "hover:text-blue-600 hover:shadow-blue-200/50")}
                   title="Lire l'article"
                 >
                   <FaEye size={24} />
@@ -446,8 +309,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
 
                 {/* Partage (icône) */}
                 <div
-                  className={cls(overlayBtnClass, "hover:text-purple-600 hover:shadow-purple-200/50", isHovered ? "translate-y-0 opacity-100 rotate-0" : "translate-y-8 opacity-100 rotate-0")}
-                  style={{ transitionDelay: "200ms" }}
+                  className={cls(overlayBtnClass, "hover:text-purple-600 hover:shadow-purple-200/50")}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <ShareButton
@@ -471,6 +333,16 @@ export default function GridCard({ item, routeBase, onOpen }) {
                 <div className={cls("absolute inset-0 blur-xl opacity-0 group-hover:opacity-30 transition-all duration-700", categoryColor)} />
               </div>
             </>
+          )}
+
+          {/* Badge Visibilité si != public */}
+          {item.visibility && item.visibility !== "public" && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-white/95 border border-slate-200/70 text-slate-800 shadow-lg">
+                <FaLockOpen />
+                {humanizeVisibility(item.visibility)}
+              </span>
+            </div>
           )}
 
           {/* Bouton de partage ABSOLU */}
@@ -523,16 +395,6 @@ export default function GridCard({ item, routeBase, onOpen }) {
             >
               {liked ? <FaHeart size={20} /> : <FaRegHeart size={20} />}
             </button>
-          </div>
-
-          {/* Badges "À la une" / "Épinglé" */}
-          <div className="absolute bottom-4 right-4 flex gap-2 z-10">
-            {item.is_featured && (
-              <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">⭐ À la une</div>
-            )}
-            {item.is_sticky && (
-              <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">📌 Épinglé</div>
-            )}
           </div>
         </div>
 
@@ -611,11 +473,11 @@ export default function GridCard({ item, routeBase, onOpen }) {
                 {item.visibility && item.visibility !== "public" && (
                   <div className="flex items-center gap-2 bg-blue-50 rounded-lg px-3 py-2 border border-blue-100">
                     <div className="p-1.5 bg-blue-100 rounded">
-                      {isPwdProtected(item.visibility) ? <FaKey className="text-blue-700" size={12} /> : <FaLockOpen className="text-blue-700" size={12} />}
+                      <FaLockOpen className="text-blue-700" size={12} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <span className="font-semibold text-blue-800 text-xs block truncate">
-                        {visLabel}
+                        {humanizeVisibility(item.visibility)}
                       </span>
                       <p className="text-blue-700 text-xs">Visibilité</p>
                     </div>
@@ -652,30 +514,10 @@ export default function GridCard({ item, routeBase, onOpen }) {
             <div className="text-amber-600 text-xs">{item.rating_count || 0} avis</div>
           </div>
         </div>
-
-        {/* Divers */}
-        <div className="flex p-6 w-full items-center gap-1 text-slate-500 pt-2 border-t border-slate-200/50 text-xs">
-          {item.word_count && <span>{item.word_count} mots</span>}
-          {item.word_count && item.categories?.length > 0 && <span>•</span>}
-          {item.categories?.length > 0 && (
-            <span>
-              {item.categories.length} catégorie{item.categories.length > 1 ? "s" : ""}
-            </span>
-          )}
-          {readingTime ? <><span>•</span><span>{readingTime} min</span></> : null}
-        </div>
-
-        {/* Décor lumineux subtil */}
-        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none">
-          <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-transparent via-white/60 to-transparent" />
-          <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/40 to-transparent" />
-          <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-transparent via-white/30 to-transparent" />
-          <div className="absolute top-0 right-0 w-1 h-full bg-gradient-to-b from-transparent via-white/30 to-transparent" />
-        </div>
       </article>
 
-      {/* Popup mot de passe */}
-      <PasswordDialog
+      {/* ✅ Modal Password réutilisable */}
+      <PasswordModal
         open={pwdOpen}
         title={`Accès à « ${item.title} »`}
         onClose={() => setPwdOpen(false)}

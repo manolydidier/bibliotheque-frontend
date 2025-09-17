@@ -485,7 +485,7 @@ export default function RatingModal({
           ref={modalRef}
           className={`rtg-modal ${size === "compact" ? "is-compact" : ""}`}
           onKeyDown={(e) => { if (e.key === 'Escape') onClose?.(); }}
-          onRatingmodalRequestClose={onClose}
+          // onclick={onClose}
         >
           <button className="rtg-close" aria-label="Fermer" onClick={onClose}>
             ×
