@@ -1,6 +1,13 @@
 // src/media-library/Visualiseur.jsx
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef,useCallback  } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import {
+  setAuthError,
+  clearAuthError,
+  selectAuthError
+} from "../../../store/slices/Slice"; // ⚠️ ajuste le chemin si besoin
+
 import {
   FaFolderOpen,
   FaArrowLeft, FaArrowRight, FaRedo, FaExpand, FaDownload,
@@ -32,6 +39,7 @@ import RatingModal, { RateButton } from "../RatingModal";
 // ✅ Modale factorisée + util pwd (mémoire session)
 import PasswordModal from "../components/PasswordModal";
 import { getStoredPassword, setStoredPassword } from "../utils/passwordGate";
+import { FiCalendar, FiClock, FiTag } from "react-icons/fi";
 
 /* ---------------- Helpers ---------------- */
 
@@ -72,7 +80,7 @@ const iconForType = (type, className = "") => {
     case "excel": return <FaFileExcel className={`${common} text-emerald-500`} />;
     case "word":  return <FaFileWord className={`${common} text-blue-500`} />;
     case "image": return <FaImage className={`${common} text-amber-500`} />;
-    case "video": return <FaFileVideo className={`${common} text-purple-500`} />;
+    case "video": return <FaFileVideo className={`${common} text-blue-500`} />;
     default:      return <FaFile className={`${common} text-slate-500`} />;
   }
 };
@@ -83,7 +91,7 @@ const iconBgForType = (type) => {
     case "excel": return "bg-emerald-50 border-emerald-100";
     case "word": return "bg-blue-50 border-blue-100";
     case "image": return "bg-amber-50 border-amber-100";
-    case "video": return "bg-purple-50 border-purple-100";
+    case "video": return "bg-blue-50 border-blue-100";
     default: return "bg-slate-50 border-slate-100";
   }
 };
@@ -254,6 +262,11 @@ function computeRights(permissions = []) {
 
 /* ---------------- Visualiseur ---------------- */
 export default function Visualiseur() {
+  const dispatch = useDispatch();
+  const unlockError = useSelector(selectAuthError);
+
+  
+
   const params = useParams();
   const navigate = useNavigate();
   const idOrSlug = useMemo(() => {
@@ -274,7 +287,6 @@ export default function Visualiseur() {
   const [lockedKind, setLockedKind] = useState(null); // 'password' | 'private' | 'unknown' | null
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [unlockBusy, setUnlockBusy] = useState(false);
-  const [unlockError, setUnlockError] = useState("");
 
   const [activeTab, setActiveTab] = useState("Aperçu");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -290,6 +302,104 @@ export default function Visualiseur() {
   const [ratingLoaded, setRatingLoaded] = useState(false);
   const previewRef = useRef(null);
 
+  /* ------- Actions ------- */
+  const openInNew = () => { const u = selectedFile?.fileUrl || primaryMediaUrl(article); if (u) window.open(u, "_blank", "noopener,noreferrer"); };
+  const downloadCurrent = () => {
+    const u = selectedFile?.fileUrl || primaryMediaUrl(article);
+    if (!u) return;
+    const a = document.createElement("a");
+    a.href = u; a.download = "";
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+
+  // 🔑 Soumission du mot de passe (utilisée par PasswordModal)
+  async function handleUnlock(password) {
+    if (!password) {
+      dispatch(setAuthError("Merci de saisir un mot de passe."));
+      return;
+    }
+    setUnlockBusy(true);
+    dispatch(clearAuthError());
+
+    const include = ["categories", "tags", "media", "comments", "approvedComments", "author", "history"];
+    const fields = [
+      "id","title","slug","excerpt","content",
+      "featured_image","featured_image_alt","status","visibility",
+      "published_at","updated_at","created_at","view_count","reading_time","word_count",
+      "share_count","comment_count","rating_average","rating_count",
+      "is_featured","is_sticky","author_id","author_name","meta","seo_data",
+      "allow_comments","allow_rating"
+    ];
+
+    try {
+      let art = null;
+
+      // 1) Tente l’endpoint d’unlock (session)
+      try {
+        art = await unlockArticle(idOrSlug, password, { include, fields });
+      } catch {
+        // 2) Si pas d’endpoint unlock, fallback: GET avec ?password
+        art = await fetchArticle(idOrSlug, { include, fields, password });
+      }
+
+      // 3) Si l’unlock ne renvoie pas l’article complet, refetch GET “normal”
+      if (!art || !art.id) {
+        art = await fetchArticle(idOrSlug, { include, fields });
+      }
+
+      setStoredPassword(idOrSlug, password);     // mémorise pour la session
+      setArticle(art || null);
+      setLockedKind(null);
+      setUnlockOpen(false);
+      dispatch(clearAuthError());
+      document.title = art?.title || "Visualiseur";
+    } catch (e) {
+      const msg = e?.response?.data?.message || "Mot de passe invalide.";
+      dispatch(setAuthError(msg));
+      setUnlockOpen(true);
+    } finally {
+      setUnlockBusy(false);
+    }
+  }
+// ✅ helper pour rouvrir la modale depuis partout (clavier, API globale, évènement custom)
+const requestOpenModal = useCallback(() => {
+  dispatch(clearAuthError());
+  setUnlockOpen(true);
+}, [dispatch, setUnlockOpen]);
+
+// ✅ Raccourcis clavier + API globale + event custom
+useEffect(() => {
+  function onKeyDown(e) {
+    // Active si contenu verrouillé par mot de passe (article pas encore chargé)
+    if (!((lockedKind === "password" || lockedKind === "unknown") && !article)) return;
+
+    const key = (e.key || "").toLowerCase();
+    const ctrlK = e.ctrlKey && key === "k";
+    const enter = key === "enter";
+    const pKey  = key === "p";
+
+    if (ctrlK || enter || pKey) {
+      e.preventDefault();
+      requestOpenModal();
+    }
+  }
+
+  const openEvtHandler = () => requestOpenModal();
+
+  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("visualiseur:openPassword", openEvtHandler);
+
+  // API globale pour script externe : window.visualiseur.openPassword()
+  window.visualiseur = window.visualiseur || {};
+  window.visualiseur.openPassword = openEvtHandler;
+
+  return () => {
+    window.removeEventListener("keydown", onKeyDown);
+    window.removeEventListener("visualiseur:openPassword", openEvtHandler);
+    if (window.visualiseur) delete window.visualiseur.openPassword;
+  };
+}, [lockedKind, article, requestOpenModal]);
+
   /* ------- Load article ------- */
   useEffect(() => {
     let mounted = true;
@@ -297,7 +407,7 @@ export default function Visualiseur() {
     setErr("");
     setLockedKind(null);
     setUnlockOpen(false);
-    setUnlockError("");
+    dispatch(clearAuthError());
 
     if (!idOrSlug) {
       setLoading(false);
@@ -316,18 +426,11 @@ export default function Visualiseur() {
       "allow_comments","allow_rating"
     ];
 
-    const doFetch = (passwordMaybe) =>
-      fetchArticle(idOrSlug, { include, fields, password: passwordMaybe });
-
     (async () => {
       try {
-        // 1er essai sans mot de passe
-        // const art = await doFetch();
-        // 1er essai : utilise le mdp en session si dispo
-     const savedPwd = getStoredPassword(idOrSlug);
-     const art = await fetchArticle(idOrSlug, {
-       include, fields, password: savedPwd || undefined
-     });
+        // 1er essai avec mdp stocké s'il existe
+        const savedPwd = getStoredPassword(idOrSlug);
+        const art = await fetchArticle(idOrSlug, { include, fields, password: savedPwd || undefined });
         if (!mounted) return;
         setArticle(art);
         document.title = art?.title || "Visualiseur";
@@ -341,36 +444,22 @@ export default function Visualiseur() {
             setLockedKind("private");
             setUnlockOpen(false);
             setErr("");
+            dispatch(clearAuthError());
           } else if (/password/.test(code) || !code) {
-            // 🔁 Essai auto avec un éventuel mdp mémorisé
-            const savedPwd = getStoredPassword(idOrSlug);
-            if (savedPwd) {
-              try {
-                const art2 = await doFetch(savedPwd);
-                if (!mounted) return;
-                setArticle(art2);
-                setLockedKind(null);
-                setUnlockOpen(false);
-                setErr("");
-                document.title = art2?.title || "Visualiseur";
-                return;
-              } catch {
-                setLockedKind("password");
-                setUnlockOpen(true);
-                setErr("");
-              }
-            } else {
-              setLockedKind("password");
-              setUnlockOpen(true);
-              setErr("");
-            }
+            setLockedKind("password");
+            setUnlockOpen(true);
+            setErr("");
+            // message par défaut si on a un mauvais mdp en session
+            dispatch(setAuthError("Mot de passe invalide ou expiré."));
           } else {
             setLockedKind("unknown");
             setUnlockOpen(true);
             setErr("");
+            dispatch(setAuthError("Accès restreint — authentification requise."));
           }
         } else {
           setErr(e?.message || "Erreur lors du chargement");
+          dispatch(clearAuthError());
         }
       } finally {
         if (mounted) setLoading(false);
@@ -378,6 +467,7 @@ export default function Visualiseur() {
     })();
 
     return () => { mounted = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idOrSlug, params]);
 
   /* ------- Charger récap des notes (dont ma note) ------- */
@@ -443,13 +533,13 @@ export default function Visualiseur() {
   }, [article]);
 
   /* ------- Default selected media ------- */
-  useEffect(() => {
-    if (mediaList.length && !selectedFile) setSelectedFile(mediaList[0]);
-  }, [mediaList, selectedFile]);
-
   const currentType  = selectedFile?.type || inferTypeFromUrl(primaryMediaUrl(article));
   const currentUrl   = selectedFile?.fileUrl || primaryMediaUrl(article);
   const currentTitle = selectedFile?.title || article?.title || "Sélectionnez un fichier";
+
+  useEffect(() => {
+    if (mediaList.length && !selectedFile) setSelectedFile(mediaList[0]);
+  }, [mediaList, selectedFile]);
 
   /* ------- Similar articles ------- */
   useEffect(() => {
@@ -515,7 +605,7 @@ export default function Visualiseur() {
               <button onClick={() => navigate(-1)} className="px-5 py-3 rounded-xl border border-slate-300/60 text-slate-700 bg-white/80 hover:bg-white transition">
                 Retour
               </button>
-              <a href="/login" className="px-5 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 transition">
+              <a href="/auth" className="px-5 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 transition">
                 Se connecter
               </a>
             </div>
@@ -530,21 +620,31 @@ export default function Visualiseur() {
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 font-sans px-3 sm:px-4 lg:px-6 2xl:px-10 py-10">
         <div className="max-w-2xl mx-auto text-center text-slate-600">
-          <div className="inline-flex items-center gap-3 px-5 py-3 rounded-2xl bg-white/70 border border-white/60 shadow">
-            <FaLock className="text-blue-600" />
-            <span>Contenu protégé — entrez le mot de passe</span>
-          </div>
-        </div>
+   <div
+     role="button"
+     tabIndex={0}
+     onClick={requestOpenModal}
+     onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && requestOpenModal()}
+     title="Cliquez, double-cliquez, Entrée, P ou Ctrl+K pour rouvrir la fenêtre"
+     className="inline-flex items-center gap-3 px-5 py-3 rounded-2xl bg-white/70 border border-white/60 shadow cursor-pointer select-none"
+   >
+    <FaLock className="text-blue-600" />
+     <span>Contenu protégé — cliquez ou appuyez sur P pour entrer le mot de passe</span>
+   </div>
+  <p className="mt-3 text-xs text-slate-500">
+     Astuce : P, Entrée ou Ctrl+K rouvrent la fenêtre. Vous pouvez aussi déclencher <code>window.visualiseur.openPassword()</code> ou l’événement <code>visualiseur:openPassword</code>.
+  </p>
+ </div>
 
-       <PasswordModal
-        open={unlockOpen}
-        onClose={() => setUnlockOpen(false)}
-        onSubmit={handleUnlock}      // ta fonction async qui throw en cas d'erreur
-        defaultValue={getStoredPassword(idOrSlug)}
-        title="Déverrouiller l’article"
-        error={unlockError}          // <- string depuis le parent
-        busy={unlockBusy}            // <- bool depuis le parent
-      />
+        <PasswordModal
+          open={unlockOpen}
+          onClose={() => { dispatch(clearAuthError()); setUnlockOpen(false); }}
+          onSubmit={handleUnlock}
+          defaultValue={getStoredPassword(idOrSlug)}
+          title="Déverrouiller l’article"
+          error={unlockError}
+          busy={unlockBusy}
+        />
       </div>
     );
   }
@@ -562,6 +662,13 @@ export default function Visualiseur() {
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 font-sans px-3 sm:px-4 lg:px-6 2xl:px-10 py-4">
+      {/* Bannière d’erreur globale si nécessaire */}
+      {unlockError && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {unlockError}
+        </div>
+      )}
+
       {/* Layout horizontal */}
       <div className="flex gap-4 lg:gap-6 xl:gap-8">
         {/* Sidebar */}
@@ -665,7 +772,7 @@ export default function Visualiseur() {
                 )}
                 {activeTab === "Médias" && <Medias mediaList={mediaList} />}
                 {activeTab === "Métadonnées" && <Metadonnees article={article} currentType={currentType} currentTitle={currentTitle} />}
-                {activeTab === "Versions" && hasHistory && <Versions history={article.history} />}
+                {activeTab === "Versions" && <Versions history={article.history} />}
                 {activeTab === "Statistiques" && <StatsCharts article={article} />}
                 {activeTab === "SEO" && <SeoPanel article={article} />}
               </div>
@@ -739,10 +846,10 @@ export default function Visualiseur() {
         </details>
       )}
 
-      {/* 🔑 Modale mot de passe (si besoin pendant que l'article est affiché) */}
+      {/* 🔑 Modale mot de passe (quand l'article est déjà affiché) */}
       <PasswordModal
         open={unlockOpen}
-        onClose={() => setUnlockOpen(false)}
+        onClose={() => { dispatch(clearAuthError()); setUnlockOpen(false); }}
         onSubmit={handleUnlock}
         defaultValue={getStoredPassword(idOrSlug)}
         title="Déverrouiller l’article"
@@ -751,74 +858,14 @@ export default function Visualiseur() {
       />
     </div>
   );
-
-  /* ------- Actions ------- */
-  function openInNew() { if (currentUrl) window.open(currentUrl, "_blank", "noopener,noreferrer"); }
-  function downloadCurrent() {
-    if (!currentUrl) return;
-    const a = document.createElement("a");
-    a.href = currentUrl; a.download = "";
-    document.body.appendChild(a); a.click(); a.remove();
-  }
-
-  // 🔑 Soumission du mot de passe
- // remplace ta fonction handleUnlock par ceci :
-async function handleUnlock(password) {
-  if (!password) {
-    setUnlockError("Merci de saisir un mot de passe.");
-    return;
-  }
-  setUnlockBusy(true);
-  setUnlockError("");
-
-  const include = ["categories", "tags", "media", "comments", "approvedComments", "author", "history"];
-  const fields = [
-    "id","title","slug","excerpt","content",
-    "featured_image","featured_image_alt","status","visibility",
-    "published_at","updated_at","created_at","view_count","reading_time","word_count",
-    "share_count","comment_count","rating_average","rating_count",
-    "is_featured","is_sticky","author_id","author_name","meta","seo_data",
-    "allow_comments","allow_rating"
-  ];
-
-  try {
-    let art = null;
-
-    // 1) Tente l’endpoint d’unlock (session)
-    try {
-      art = await unlockArticle(idOrSlug, password, { include, fields });
-    } catch {
-      // 2) Si pas d’endpoint unlock, fallback: GET avec ?password
-      art = await fetchArticle(idOrSlug, { include, fields, password });
-    }
-
-    // 3) Si l’unlock ne renvoie pas l’article complet, refetch GET “normal”
-    if (!art || !art.id) {
-      art = await fetchArticle(idOrSlug, { include, fields });
-    }
-
-    setStoredPassword(idOrSlug, password);     // mémorise pour la session
-    setArticle(art || null);
-    setLockedKind(null);
-    setUnlockOpen(false);
-    document.title = art?.title || "Visualiseur";
-  } catch (e) {
-    const msg = e?.response?.data?.message || "Mot de passe invalide.";
-    setUnlockError(msg);
-    setUnlockOpen(true);
-  } finally {
-    setUnlockBusy(false);
-  }
-}
-
 }
 
 /* ---------------- Sub-UI ---------------- */
 function Sidebar({ open, toggle, mediaCount, tags, mediaList, selectedFile, onSelectFile, similar, similarLoading, onOpenSimilar, onOpenTagManager }) {
   return (
     <div className={`sidebar pt-4 overflow-auto w-72 lg:w-80 bg-white/70 backdrop-blur-xl shadow-2xl border-r border-white/40 flex-shrink-0 transition-all duration-500 ${open ? "" : "hidden"} lg:block`}>
-      <div className="p-6 border-b border-slate-200/30">
-        <h2 className="text-2xl font-light text-slate-800 flex items-center">
+      <div className="p-6 border-b border-slate-200/30 sticky top-0 bg-white/70 backdrop-blur-xl z-10">
+        <h2 className="text-2xl font-light text-slate-800 flex items-center st">
           <FaFolderOpen className="mr-3 text-blue-500" />
           Bibliothèque
         </h2>
@@ -890,45 +937,11 @@ function Sidebar({ open, toggle, mediaCount, tags, mediaList, selectedFile, onSe
         </div>
 
         {/* Similaires */}
-        <div className="p-6 border-t border-slate-200/30">
-          <h3 className="font-medium text-slate-700 mb-5 flex items-center text-lg">
-            <FaChartBar className="mr-2 text-blue-700" />
-            Similaires
-          </h3>
-          <div className="space-y-3 overflow-auto min-h-96" style={{ maxHeight: "18rem" }}>
-            {similarLoading && <div className="text-sm text-slate-500 py-12 text-center bg-slate-50/50 rounded-2xl">Chargement…</div>}
-            {!similarLoading && (similar.length ? similar.map((it) => {
-              const cover =
-                (typeof it.featured_image === "string" && it.featured_image) ||
-                it.featured_image?.url ||
-                it.media?.[0]?.url ||
-                null;
-              return (
-                <button
-                  key={it.id}
-                  onClick={() => onOpenSimilar(it.slug || it.id)}
-                  className="w-full text-left p-4 rounded-2xl cursor-pointer flex items-center border border-slate-200/40 bg-white/60 hover:border-purple-200/60 hover:shadow-md hover:scale-[1.01] transition-all duration-300"
-                >
-                  <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mr-4 overflow-hidden">
-                    {cover ? (
-                      <img src={cover} alt={it.title} className="w-full h-full object-cover" />
-                    ) : (
-                      <FaFile className="text-slate-600 text-2xl" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-slate-800 truncate">{it.title}</p>
-                    <p className="text-xs text-slate-500 truncate">
-                      {(it.categories || []).map((c) => c.name).join(", ") || "—"}
-                    </p>
-                  </div>
-                </button>
-              );
-            }) : (
-              <div className="text-sm text-slate-500 py-12 text-center bg-slate-50/50 rounded-2xl">Aucun article similaire.</div>
-            ))}
-          </div>
-        </div>
+        <SimilarList
+          similar={similar}
+          loading={similarLoading}
+          onOpenSimilar={onOpenSimilar}
+        />
       </div>
       <button
         onClick={toggle}
@@ -941,9 +954,93 @@ function Sidebar({ open, toggle, mediaCount, tags, mediaList, selectedFile, onSe
   );
 }
 
+function SimilarList({ similar, loading, onOpenSimilar }) {
+  return (
+    <div className="p-6 border-t border-slate-200/30">
+      <h3 className="font-medium text-slate-700 mb-5 flex items-center text-lg">
+        <FaChartBar className="mr-2 text-blue-700" />
+        Similaires
+      </h3>
+      <div className="space-y-4 overflow-auto min-h-96 max-h-72 pr-2 custom-scrollbar">
+        {loading && (
+          <div className="text-center py-16 bg-gradient-to-br from-blue-50/80 to-indigo-50/80 rounded-2xl border border-blue-100/40 backdrop-blur-sm">
+            <div className="inline-block w-8 h-8 border-4 border-blue-300 border-t-blue-600 rounded-full animate-spin mb-4"></div>
+            <p className="text-base font-medium text-blue-700 mb-1">Chargement…</p>
+            <p className="text-sm text-blue-500">Recherche d'articles similaires</p>
+          </div>
+        )}
+
+        {!loading && (similar.length ? similar.map((it, index) => {
+          const cover =
+            (typeof it.featured_image === "string" && it.featured_image) ||
+            it.featured_image?.url ||
+            it.media?.[0]?.url ||
+            null;
+          return (
+            <button
+              key={it.id ?? `${it.slug}-${index}`}
+              onClick={() => onOpenSimilar(it.slug || it.id)}
+              className="w-full text-left p-5 rounded-2xl cursor-pointer flex items-center border border-slate-200/60 bg-white/80 backdrop-blur-sm hover:border-blue-300/70 hover:shadow-lg hover:shadow-blue-100/40 hover:scale-[1.02] transform transition-all duration-300 group"
+              style={{ animationDelay: `${index * 80}ms`, animation: 'slideInUp 0.5s ease-out forwards' }}
+            >
+              <div className="relative w-14 h-14 bg-gradient-to-br from-slate-100 to-slate-200 rounded-xl flex items-center justify-center mr-4 overflow-hidden shadow-sm group-hover:shadow-md transition-all duration-300">
+                {cover ? (
+                  <>
+                    <img src={cover} alt={it.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  </>
+                ) : (
+                  <FaFile className="text-slate-500 text-xl group-hover:text-blue-600 transition-colors duration-300" />
+                )}
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 scale-0 group-hover:scale-100 flex items-center justify-center">
+                  <span className="text-white text-xs">→</span>
+                </div>
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-slate-800 group-hover:text-blue-800 transition-colors duration-300 truncate mb-1">
+                  {it.title}
+                </p>
+                <p className="text-xs text-slate-500 group-hover:text-slate-600 transition-colors duration-300 truncate">
+                  {(it.categories || []).map((c) => c.name).join(", ") || "—"}
+                </p>
+              </div>
+
+              <div className="ml-3 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
+                <div className="w-7 h-7 bg-blue-100 group-hover:bg-blue-200 rounded-full flex items-center justify-center">
+                  <span className="text-blue-600 text-sm font-bold">→</span>
+                </div>
+              </div>
+            </button>
+          );
+        }) : (
+          <div className="text-center py-16 bg-gradient-to-br from-slate-50/80 to-slate-100/80 rounded-2xl border border-slate-200/40 backdrop-blur-sm">
+            <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-4">
+              <FaFile className="text-slate-400 text-xl" />
+            </div>
+            <p className="text-base font-medium text-slate-600 mb-1">Aucun article similaire.</p>
+            <p className="text-sm text-slate-500">Revenez plus tard pour découvrir du nouveau contenu</p>
+          </div>
+        ))}
+
+        <style jsx>{`
+          @keyframes slideInUp {
+            from { opacity: 0; transform: translateY(15px); }
+            to   { opacity: 1; transform: translateY(0); }
+          }
+          .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+          .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 3px; }
+          .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+          .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        `}</style>
+      </div>
+    </div>
+  );
+}
+
 function Toolbar({ onBack, onRefresh, onFullscreen, onDownload, shareData }) {
   return (
-    <div className="border-b border-slate-200/30 p-4 sm:p-5 lg:p-6 flex justify-between items-center bg-gradient-to-r from-white/30 to-transparent">
+    <div className="border-b border-slate-200/30 p-4 sm:p-5 lg:p-6 flex justify-between items-center bg-gradient-to-r from-white/30 to-transparent sty">
       <div className="flex items-center space-x-2 sm:space-x-3">
         <button onClick={onBack} className="p-3 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50/80 transition-all duration-300 flex items-center justify-center" title="Retour">
           <FaArrowLeft />
@@ -1163,7 +1260,7 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
           </div>
         </div>
         <div className="mt-6 sm:mt-8 flex justify-center">
-          <a href={url} target="_blank" rel="noreferrer" className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-8 py-4 rounded-2xl flex items-center shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+          <a href={url} target="_blank" rel="noreferrer" className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl flex items-center shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
             <FaPlay className="mr-3" /> Lire la vidéo
           </a>
         </div>
@@ -1318,7 +1415,7 @@ function StatsCharts({ article }) {
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6 mb-12 lg:mb-20 text-lg">
         <KpiCard label="Vues" value={views} icon={<FaEye />} color="blue" />
         <KpiCard label="Partages" value={shares} icon={<FaShareAlt />} color="green" />
-        <KpiCard label="Commentaires" value={comments} icon={<FaComment />} color="purple" />
+        <KpiCard label="Commentaires" value={comments} icon={<FaComment />} color="blue" />
         <KpiCard label="Note moyenne" value={avgRating.toFixed(2)} suffix="/5" icon={<FaStar />} color="orange" />
       </div>
 
@@ -1550,8 +1647,8 @@ function DetailsPanel({
         <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-sky-300 to-transparent" />
 
         {/* Header compact */}
-        <div className="relative flex items-center gap-3 p-4 border-b border-slate-200/50">
-          <div className={`w-12 h-12 ${iconBgForType(currentType)} rounded-xl flex items-center justify-center shadow-md ring-1 ring-inset ring-white/40`}>
+        <div className="relative  flex items-center gap-3 p-4 border-b border-slate-200/50">
+          <div className={`w-12 h-12 ${iconBgForType(currentType)} rounded-xl  flex items-center justify-center shadow-md ring-1 ring-inset ring-white/40`}>
             {iconForType(currentType, "text-lg")}
           </div>
 
@@ -1564,7 +1661,7 @@ function DetailsPanel({
             </p>
           </div>
 
-          <div className="ml-auto flex items-center gap-1.5">
+          <div className="ml-auto flex items-center gap-1.5 flex-col">
             <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusCls}`}>
               {statusLabel}
             </span>
@@ -1578,39 +1675,31 @@ function DetailsPanel({
         <div className="p-4">
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[13px] leading-tight">
             <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
-              <dt className="text-slate-500">Date de création</dt>
-              <dd className="mt-0.5 font-medium text-slate-900">
+              <dt className="flex items-center gap-2 text-slate-500">
+                <FiCalendar className="w-4 h-4" />
+                <span>Date de création</span>
+              </dt>
+              <dd className="mt-0.5 ml-6 font-medium text-slate-900">
                 {formatDate(article?.created_at)}
               </dd>
             </div>
-
             <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
-              <dt className="text-slate-500">Dernière modification</dt>
-              <dd className="mt-0.5 font-medium text-slate-900">
+              <dt className="flex items-center gap-2 text-slate-500">
+                <FiClock className="w-4 h-4" />
+                <span>Dernière modification</span>
+              </dt>
+              <dd className="mt-0.5 ml-6 font-medium text-slate-900">
                 {formatDate(article?.updated_at)}
-              </dd>
-            </div>
-
-            <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
-              <dt className="text-slate-500">Statut</dt>
-              <dd className="mt-0.5">
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusCls}`}>
-                  {statusLabel}
-                </span>
-              </dd>
-            </div>
-
-            <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
-              <dt className="text-slate-500">Format</dt>
-              <dd className="mt-0.5 font-medium text-slate-900">
-                {currentType ? currentType.toUpperCase() : "—"}
               </dd>
             </div>
           </dl>
 
           {/* Catégorie */}
-          <div className="mt-4">
-            <p className="text-slate-500 text-[13px] mb-1.5">Catégorie</p>
+          <div className="mt-4 flex gap-4 items-center justify-start">
+            <div className="flex items-center gap-2 text-slate-500 text-[13px]">
+              <FiTag className="w-4 h-4" />
+              <span>Catégorie</span>
+            </div>
             <span className="inline-flex items-center rounded-full bg-indigo-50 text-blue-700 ring-1 ring-indigo-200 px-2.5 py-1 text-[11px] font-semibold">
               {firstCategory(article)}
             </span>
@@ -1619,38 +1708,35 @@ function DetailsPanel({
       </div>
 
       {/* Qualité / Notation */}
-      <div className="bg-white/60 backdrop-blur-sm p-6 rounded-2xl mb-8 border-2 border-slate-200/40">
+      <div className="bg-white/40 backdrop-blur-sm p-4 rounded-xl border border-slate-200/30">
         <div className="flex items-center justify-between">
-          <div>
-            <p className="text-slate-500 text-sm mb-1">Note moyenne</p>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center">
-                {[...Array(5)].map((_, i) => (
-                  <FaStar
-                    key={i}
-                    className={
-                      i < Math.round(Math.max(0, Math.min(5, Number(ratingAverage || 0))))
-                        ? "text-yellow-400"
-                        : "text-gray-200"
-                    }
-                    size={16}
-                  />
-                ))}
-              </div>
-              <span className="text-sm text-slate-600">
-                {(Number(ratingAverage || 0)).toFixed(1)} / 5 · {Number(ratingCount || 0)}{" "}
-                {Number(ratingCount || 0) <= 1 ? "note" : "notes"}
-              </span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center">
+              {[...Array(5)].map((_, i) => (
+                <FaStar
+                  key={i}
+                  className={
+                    i < Math.round(Math.max(0, Math.min(5, Number(ratingAverage || 0))))
+                      ? "text-yellow-400"
+                      : "text-gray-300"
+                  }
+                  size={14}
+                />
+              ))}
             </div>
+            <span className="text-sm text-slate-600 font-medium">
+              {(Number(ratingAverage || 0)).toFixed(1)}
+            </span>
+            <span className="text-xs text-slate-400">
+              ({Number(ratingCount || 0)} {Number(ratingCount || 0) <= 1 ? "note" : "notes"})
+            </span>
           </div>
 
-          {/* Si la notation est désactivée -> rien */}
-          {article?.allow_rating === false ? null : (
-            ratingLoaded && typeof myRating === "number" ? (
-              <RateButton onClick={onOpenRatingEdit} label="Modifier" />
-            ) : (
-              <RateButton onClick={onOpenRating} label="Noter" />
-            )
+          {article?.allow_rating !== false && (
+            <RateButton
+              onClick={ratingLoaded && typeof myRating === "number" ? onOpenRatingEdit : onOpenRating}
+              label={ratingLoaded && typeof myRating === "number" ? "Modifier" : "Noter"}
+            />
           )}
         </div>
       </div>
@@ -1674,7 +1760,6 @@ function KpiCard({ label, value, suffix, icon, color = "blue" }) {
   const colorClasses = {
     blue: "from-blue-50/80 to-blue-100/60 text-blue-600 border-blue-100/60",
     green: "from-emerald-50/80 to-emerald-100/60 text-emerald-600 border-emerald-100/60",
-    purple: "from-purple-50/80 to-purple-100/60 text-purple-600 border-purple-100/60",
     yellow: "from-yellow-50/80 to-yellow-100/60 text-yellow-600 border-yellow-100/60",
     orange: "from-orange-50/80 to-orange-100/60 text-orange-600 border-orange-100/60",
     indigo: "from-indigo-50/80 to-indigo-100/60 text-indigo-600 border-indigo-100/60",
@@ -1683,7 +1768,6 @@ function KpiCard({ label, value, suffix, icon, color = "blue" }) {
   const gradientClasses = {
     blue: "from-blue-500 to-blue-600",
     green: "from-emerald-500 to-emerald-600",
-    purple: "from-purple-500 to-purple-600",
     yellow: "from-yellow-500 to-yellow-600",
     orange: "from-orange-500 to-orange-600",
     indigo: "from-indigo-500 to-indigo-600",
@@ -1712,7 +1796,7 @@ function ChartCard({ title, subtitle, children, icon }) {
     <div className="group rounded-3xl border border-white/60 bg-white/50 backdrop-blur-xl p-6 sm:p-8 lg:p-10 shadow-xl hover:shadow-2xl transition-all duration-700 hover:-translate-y-2">
       <div className="flex items-center justify-between mb-6 lg:mb-8">
         <div>
-          <h3 className="text-xl lg:text-2xl font-light text-slate-800 mb-2 flex items-center gap-4">
+          <h3 className="text-xl lg:2xl font-light text-slate-800 mb-2 flex items-center gap-4">
             {icon && <span className="text-slate-400 group-hover:text-slate-600 transition-colors duration-500">{icon}</span>}
             {title}
           </h3>

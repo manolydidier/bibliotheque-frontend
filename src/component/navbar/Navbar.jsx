@@ -55,7 +55,7 @@ const Navbar = () => {
     },
     { 
       name: t('platform'), 
-      path: '/platform', 
+      path: '/articles', 
       submenu: [
         { icon: faFileAlt, name: t('sumary'), path: '/platform/summary' },
         { icon: faVideo, name: t('video'), path: '/platform/video' },

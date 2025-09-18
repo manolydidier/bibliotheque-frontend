@@ -1,6 +1,6 @@
 import React from 'react';
 import ProfileInfo from './ProfileInfo';
-import UserSkills from './UserSkills';
+import UserSkills from './MySkillsDisplay';
 import ActivityLog from '../ActivityTab/ActivityLog';
 
 
@@ -13,9 +13,11 @@ const ProfileTab = () => {
         </div>
         <div className="lg:w-2/3">
           <ActivityLog />
-          <UserSkills />
+        
         </div>
+          
       </div>
+      <UserSkills />
     </div>
   );
 };

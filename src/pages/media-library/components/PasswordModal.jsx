@@ -1,3 +1,4 @@
+// src/media-library/components/PasswordModal.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { FaKey, FaTimes, FaExclamationTriangle } from "react-icons/fa";
 
@@ -46,7 +47,7 @@ export default function PasswordModal({
     setError("");
 
     try {
-      // onSubmit peut : 
+      // onSubmit peut :
       //  - réussir (rien à faire)
       //  - throw une erreur (catch ci-dessous)
       //  - retourner une string d'erreur (ex: "Mot de passe invalide")

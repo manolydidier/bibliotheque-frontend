@@ -112,13 +112,17 @@ const RolePermissionMatrix = () => {
 
   // ---- Axios config ----
   useEffect(() => {
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('tokenGuard');
     if (token) axios.defaults.headers.common.Authorization = `Bearer ${token}`;
     axios.defaults.baseURL = API_BASE_URL;
     axios.defaults.timeout = 20000;
   }, [API_BASE_URL]);
 
-  useEffect(() => () => { mountedRef.current = false; }, []);
+  // mountedRef correct pour HMR (et abort à l’unmount)
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; cancelRefresh(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- Persist UI state ----
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.selectedRoles, JSON.stringify(selectedRoles)); }, [selectedRoles]);
@@ -133,6 +137,7 @@ const RolePermissionMatrix = () => {
     if (payload && payload.data && Array.isArray(payload.data.data)) return payload.data.data;
     return [];
   };
+
   const buildIndexes = useCallback((permList) => {
     const byKey = new Map();
     const resSet = new Set();
@@ -146,6 +151,7 @@ const RolePermissionMatrix = () => {
     }
     return { byKey, resources: Array.from(resSet).sort((a, b) => a.localeCompare(b)) };
   }, []);
+
   const applyData = useCallback((rolesData, permsData, rpsData) => {
     setRoles(rolesData.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))));
     setPermissions(permsData);
@@ -203,6 +209,9 @@ const RolePermissionMatrix = () => {
     }
     const req = (url) => axios.get(url, reqConfig);
 
+    // ✅ On log juste, sans déclencher 3 requêtes accidentelles
+    console.log('Fetching: /roles, /permissions, /role-permissions');
+
     try {
       const [rolesS, permsS, rpsS] = await Promise.allSettled([
         req('/roles').then((r)=>{ setStatus(s=>({...s,roles:'ok'})); return r; }).catch((e)=>{ setStatus(s=>({...s,roles:'err'})); throw e; }),
@@ -210,15 +219,16 @@ const RolePermissionMatrix = () => {
         req('/role-permissions').then((r)=>{ setStatus(s=>({...s,rps:'ok'})); return r; }).catch((e)=>{ setStatus(s=>({...s,rps:'err'})); throw e; }),
       ]);
 
-      if (!mountedRef.current) return;
-
+      // ❌ on ne bloque plus sur mountedRef ici (AbortController gère l’unmount)
       const rolesData = rolesS.status === 'fulfilled' ? extractArray(rolesS.value.data) : [];
       const permsData = permsS.status === 'fulfilled' ? extractArray(permsS.value.data) : [];
       const rpsData   = rpsS.status === 'fulfilled' ? extractArray(rpsS.value.data)   : [];
 
       applyData(rolesData, permsData, rpsData);
 
-      try { localStorage.setItem(STORAGE_KEYS.lkg, JSON.stringify({ roles: rolesData, perms: permsData, rps: rpsData })); } catch {}
+      try {
+        localStorage.setItem(STORAGE_KEYS.lkg, JSON.stringify({ roles: rolesData, perms: permsData, rps: rpsData }));
+      } catch {}
 
       if ([rolesS, permsS, rpsS].some((s) => s.status === 'rejected')) {
         setError(t('partial_load_warning') || 'Chargement partiel : certaines données ont échoué.');
@@ -240,7 +250,7 @@ const RolePermissionMatrix = () => {
       controllerRef.current = null;
       cancelSourceRef.current = null;
       setRefreshing(false);
-      if (mountedRef.current) setLoading(false);
+      setLoading(false); // ✅ plus de garde mountedRef
     }
   }, [applyData, isStale, t]);
 
@@ -361,7 +371,6 @@ const RolePermissionMatrix = () => {
   }, []);
 
   const bulkApplyForResource = useCallback(async (resource, desiredHas) => {
-    // Applique pour toutes les actions *et* pour tous les rôles affichés
     const tasks = [];
     for (const action of ACTIONS) {
       const perm = getPermissionFor(resource, action.key);
@@ -377,22 +386,19 @@ const RolePermissionMatrix = () => {
 
     const changeAccumulator = [];
     await throttleRun(tasks, (done, total) => setBatchProgress({ done, total }));
-    // Recalcule les changements pour l’historique (post-run)
     for (const action of ACTIONS) {
       const perm = getPermissionFor(resource, action.key);
       if (!perm) continue;
       for (const role of displayedRoles) {
-        const keyPair = `${role.id}:${perm.id}`;
-        const prevHas = !desiredHas; // on suppose tout inversé localement pour ce bulk
+        const prevHas = !desiredHas;
         const nextHas = desiredHas;
         changeAccumulator.push({ roleId: role.id, permId: perm.id, prevHas, nextHas });
       }
     }
     pushHistory(changeAccumulator);
-  }, [ACTIONS, displayedRoles, getPermissionFor, rolePermissionSet, setPermissionDesired, throttleRun, pushHistory]);
+  }, [displayedRoles, getPermissionFor, rolePermissionSet, setPermissionDesired, throttleRun, pushHistory]);
 
   const bulkApplyForActionEverywhere = useCallback(async (actionKey, desiredHas) => {
-    // Applique pour *toutes les ressources filtrées* et tous les rôles affichés
     const tasks = [];
     for (const resource of filteredResources) {
       const perm = getPermissionFor(resource, actionKey);
@@ -425,8 +431,7 @@ const RolePermissionMatrix = () => {
     setHistoryBack((p) => p.slice(0, -1));
     setHistoryForward((p) => [...p, last]);
 
-    const tasks = changes.map(({ roleId, permId, prevHas, nextHas }) => () => {
-      // nous voulons revenir à prevHas
+    const tasks = changes.map(({ roleId, permId, prevHas }) => () => {
       const fakePerm = { id: permId };
       return setPermissionDesired(roleId, fakePerm, prevHas, { recordHistory: false });
     });
@@ -440,7 +445,7 @@ const RolePermissionMatrix = () => {
     setHistoryForward((p) => p.slice(0, -1));
     setHistoryBack((p) => [...p, last]);
 
-    const tasks = changes.map(({ roleId, permId, prevHas, nextHas }) => () => {
+    const tasks = changes.map(({ roleId, permId, nextHas }) => () => {
       const fakePerm = { id: permId };
       return setPermissionDesired(roleId, fakePerm, nextHas, { recordHistory: false });
     });
@@ -449,7 +454,6 @@ const RolePermissionMatrix = () => {
 
   // Presets
   const exportJSON = useCallback(() => {
-    // Exporte les permissions des rôles affichés
     const grants = {};
     for (const role of displayedRoles) {
       const ids = [];
