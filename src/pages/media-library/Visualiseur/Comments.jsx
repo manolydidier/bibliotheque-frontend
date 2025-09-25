@@ -211,30 +211,26 @@ function useMeFromLaravel() {
   return { me, loading, token };
 }
 
-/* --------- DROITS + RÔLES --------- */
-function computeRights(permissions = [], roles = []) {
-  const plist = Array.isArray(permissions) ? permissions : [];
-  const rlist = Array.isArray(roles) ? roles : [];
+/* --------- DROITS + RÔLES (robuste) --------- */
+function computeRights(permissions = [], roles = [], user = {}) {
+  const merge = (arr) => (Array.isArray(arr) ? arr : []);
+  const allPerms = [...merge(permissions), ...merge(user?.permissions)];
+  const allRoles = [...merge(roles), ...merge(user?.roles)];
+
+  const hasModWord = (s) => /(moderateur|modérateur|moderator|moderate|approver|approve|manage|manager|gerer|gérer)/i.test(String(s||""));
+  const hasAdminWord = (s) => /(admin(istrateur)?|owner|super)/i.test(String(s||""));
 
   const isModerator =
-    plist.some(p =>
-      String(p?.resource).toLowerCase() === "comments" &&
-      /(moderateur|approver|approve|manage|admin|gerer|moderator|manager)/i.test(String(p?.name))
-    ) ||
-    rlist.some(r => /(mod(erat(eur|or))?)/i.test(String(r?.name || r)));
+    allPerms.some(p => String(p?.resource||"").toLowerCase()==="comments" && (hasModWord(p?.name) || hasAdminWord(p?.name))) ||
+    allRoles.some(r => hasModWord(r?.name || r) || hasAdminWord(r?.name || r));
 
-  const isAdmin = rlist.some(r =>
-    /(admin(istrateur)?|owner|super)/i.test(String(r?.name || r))
-  ) || plist.some(p =>
-    /(admin|super|owner)/i.test(String(p?.name))
-  );
+  const isAdmin =
+    allRoles.some(r => hasAdminWord(r?.name || r)) ||
+    allPerms.some(p => hasAdminWord(p?.name));
 
   const canDeleteAny =
     isAdmin || isModerator ||
-    plist.some(p =>
-      String(p?.resource).toLowerCase() === "comments" &&
-      /(supprimer|delete|remove)/i.test(String(p?.name))
-    );
+    allPerms.some(p => String(p?.resource||"").toLowerCase()==="comments" && /(supprimer|delete|remove)/i.test(String(p?.name||"")));
 
   return { isModerator, isAdmin, canDeleteAny };
 }
@@ -243,14 +239,11 @@ function computeRights(permissions = [], roles = []) {
 function RoleBadge({ variant }) {
   if (!variant) return null;
   const isAdmin = variant === "admin";
-  const cls =
-    isAdmin
-      ? " text-yellow-700  italic"
-      : " text-blue-700 ";
+  const cls = isAdmin ? "text-yellow-700 italic" : "text-blue-700";
   const label = isAdmin ? "Admin" : "Modérateur";
   return (
     <span className={`ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] ${cls}`}>
-      <FaShieldAlt className={isAdmin ? "text-yellow-500" : "text-yellow-700"} />
+      <FaShieldAlt className={isAdmin ? "text-yellow-500" : "text-blue-600"} />
       {label}
     </span>
   );
@@ -269,8 +262,8 @@ export default function Comments({
   const { me, loading: meLoading, token } = useMeFromLaravel();
   const currentUser = me.user;
   const { isModerator, isAdmin, canDeleteAny } = useMemo(
-    () => computeRights(me.permissions, me.roles),
-    [me.permissions, me.roles]
+    () => computeRights(me.permissions, me.roles, me.user),
+    [me]
   );
 
   /* ========= API Comments ========= */
@@ -315,9 +308,7 @@ export default function Comments({
   // ---- TRI (icônes only) ----
   const [sortRoot, setSortRoot] = useState("newest");          // newest | oldest
   const [featuredFirstRoot, setFeaturedFirstRoot] = useState(true);
-
-  // Les réponses suivent AUTOMATIQUEMENT le tri des commentaires
-  const sortReplies = sortRoot;
+  const sortReplies = sortRoot; // les réponses suivent le tri des commentaires
 
   /* ========= Utils ========= */
   function normalizeComment(c, seed, i = 0) {
@@ -653,12 +644,10 @@ export default function Comments({
 
   /* ---------------- UI ---------------- */
   const meBanner = currentUser && (
-    <div className="mb-4 flex items-center gap-3 text-sm text-gray-700  px-3 py-2">
-      <span className="flex items-center">
-        {(isAdmin || isModerator) && (
-          <RoleBadge variant={isAdmin ? "admin" : "moderator"} />
-        )}
-      </span>
+    <div className="mb-4 flex items-center gap-3 text-sm text-gray-700 px-3 py-2">
+      {(isAdmin || isModerator) && (
+        <RoleBadge variant={isAdmin ? "admin" : "moderator"} />
+      )}
     </div>
   );
 
@@ -700,15 +689,13 @@ export default function Comments({
     <div>
       <h2 className="text-xl font-bold text-gray-800 mb-3 flex items-center">Commentaires</h2>
       <div className="flex flex-raw gap-3 mb-4 justify-between">
-          {meLoading ? (
-              <div className="mb-4 flex items-center text-sm text-gray-600">
-                <FaSpinner className="animate-spin mr-2" /> Chargement de votre profil…
-              </div>
-            ) : meBanner}
-
-            {toolbar}
+        {meLoading ? (
+          <div className="mb-4 flex items-center text-sm text-gray-600">
+            <FaSpinner className="animate-spin mr-2" /> Chargement de votre profil…
+          </div>
+        ) : meBanner}
+        {toolbar}
       </div>
-     
 
       {localError && (
         <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md text-sm whitespace-pre-line">{localError}</div>
@@ -740,7 +727,6 @@ export default function Comments({
           const borderLine = "border-b border-gray-200/50";
           const containerClass = `${wrapperBase} ${c.featured ? wrapperFeatured : borderLine}`;
 
-          // Badge rôle sur VOS commentaires/réponses
           const showMyRoleBadge = isSelf(c) && (isAdmin || isModerator);
 
           return (
@@ -807,6 +793,52 @@ export default function Comments({
                       <FaTrash /> <span>Supprimer</span>
                     </div>
                   </button>
+                )}
+
+                {/* === Boutons MODÉRATION (rétablis) === */}
+                {(isModerator || isAdmin) && !isEditing && (
+                  <>
+                    <button
+                      onClick={() => openApproveModal(c)}
+                      className="text-green-600 hover:text-green-800 text-xs"
+                      title="Approuver"
+                    >
+                      <div className="flex flex-col items-center">
+                        <FaCheck /> <span>Approuver</span>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => handleReject(c.id)}
+                      className="text-orange-600 hover:text-orange-800 text-xs"
+                      title="Rejeter"
+                    >
+                      <div className="flex flex-col items-center">
+                        <FaTimes /> <span>Rejeter</span>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => handleSpam(c.id)}
+                      className="text-pink-600 hover:text-pink-800 text-xs"
+                      title="Spam"
+                    >
+                      <div className="flex flex-col items-center">
+                        <FaBan /> <span>Spam</span>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => handleFeature(c.id, !c.featured)}
+                      className={`${c.featured ? "text-amber-600 hover:text-amber-700" : "text-yellow-600 hover:text-yellow-800"} text-xs`}
+                      title={c.featured ? "Retirer de l'avant" : "Mettre en avant"}
+                    >
+                      <div className="flex flex-col items-center">
+                        <FaStar />
+                        <span>{c.featured ? "Retirer" : "En avant"}</span>
+                      </div>
+                    </button>
+                  </>
                 )}
               </div>
             )}
@@ -1021,6 +1053,38 @@ export default function Comments({
                                     <FaTrash /> <span>Supprimer</span>
                                   </div>
                                 </button>
+                              )}
+
+                              {/* === Boutons MODÉRATION (réponses) === */}
+                              {(isModerator || isAdmin) && !isEditingReply && (
+                                <>
+                                  <button onClick={() => openApproveModal(rep)} className="text-green-600 hover:text-green-800 text-[11px]" title="Approuver">
+                                    <div className="flex flex-col items-center">
+                                      <FaCheck /> <span>Approuver</span>
+                                    </div>
+                                  </button>
+                                  <button onClick={() => handleReject(rep.id)} className="text-orange-600 hover:text-orange-800 text-[11px]" title="Rejeter">
+                                    <div className="flex flex-col items-center">
+                                      <FaTimes /> <span>Rejeter</span>
+                                    </div>
+                                  </button>
+                                  <button onClick={() => handleSpam(rep.id)} className="text-pink-600 hover:text-pink-800 text-[11px]" title="Spam">
+                                    <div className="flex flex-col items-center">
+                                      <FaBan /> <span>Spam</span>
+                                    </div>
+                                  </button>
+                                  {/* Si tu veux “mettre en avant” aussi les réponses, dé-commente : */}
+                                  {/* <button
+                                    onClick={() => handleFeature(rep.id, !rep.featured)}
+                                    className={`${rep.featured ? "text-amber-600 hover:text-amber-700" : "text-yellow-600 hover:text-yellow-800"} text-[11px]`}
+                                    title={rep.featured ? "Retirer de l'avant" : "Mettre en avant"}
+                                  >
+                                    <div className="flex flex-col items-center">
+                                      <FaStar />
+                                      <span>{rep.featured ? "Retirer" : "En avant"}</span>
+                                    </div>
+                                  </button> */}
+                                </>
                               )}
                             </div>
                           )}

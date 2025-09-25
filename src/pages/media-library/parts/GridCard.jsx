@@ -1,5 +1,4 @@
 // src/media-library/parts/GridCard.jsx
-// Version "pastel light" + badges visibilité + modal password réutilisable
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -95,6 +94,21 @@ const humanizeVisibility = (v) => {
   if (isPrivate(k)) return "Privé";
   if (isPwdProtected(k)) return "Protégé par mot de passe";
   return v || "—";
+};
+
+/* =========================
+   Token helper (unifié)
+========================= */
+const getTokenGuard = () => {
+  try {
+    return (
+      sessionStorage.getItem("tokenGuard") ||
+      localStorage.getItem("tokenGuard") ||
+      null
+    );
+  } catch {
+    return null;
+  }
 };
 
 /* =========================
@@ -235,8 +249,6 @@ export default function GridCard({ item, routeBase, onOpen }) {
 
   // ✅ Lecture : gère Private vs Password
   const handleRead = useCallback((e) => {
-    const token = sessionStorage.getItem("tokenGuard") || null;
-
     // 1) Protégé par mot de passe -> modale
     if (isPwdProtected(item.visibility)) {
       e?.preventDefault?.();
@@ -246,22 +258,19 @@ export default function GridCard({ item, routeBase, onOpen }) {
       return;
     }
 
-    // 2) Privé -> exige un token (sanctum)
+    // 2) Privé -> on laisse TOUJOURS le Visualiseur décider (pas de redirection /auth ici)
     if (isPrivate(item.visibility)) {
       e?.preventDefault?.();
-      if (!token) {
-        // pas connecté : renvoyer vers page auth
-        navigate("/auth");
-        return;
-      }
-      // token présent -> laisser le contrôleur décider (permission articles.read_private)
+      // On peut encore vérifier le token si tu veux, mais on n'empêche plus la navigation
+      // const token = getTokenGuard();
+      // (Optionnel) si tu veux éviter un flash, tu peux stocker un flag UI ici
       onOpenCard();
       return;
     }
 
     // 3) Public
     onOpenCard();
-  }, [item.visibility, item.slug, item.id, onOpenCard, navigate]);
+  }, [item.visibility, item.slug, item.id, onOpenCard]);
 
   // ✅ Soumission du mot de passe → on le stocke pour le Visualiseur
   const submitPwd = useCallback((pwd, remember) => {
@@ -276,7 +285,6 @@ export default function GridCard({ item, routeBase, onOpen }) {
 
   const shareUrl = (item.url || (typeof window !== "undefined" ? `${window.location.origin}${to}` : to));
 
-  // Ouverture manuelle de la modale mot de passe
   const openPwdManually = useCallback((e) => {
     e?.stopPropagation?.();
     const current = getStoredPassword(item.slug || item.id) || "";
@@ -472,19 +480,6 @@ export default function GridCard({ item, routeBase, onOpen }) {
                   <FaEye size={14} />
                   <span>Lire</span>
                 </Link>
-
-                {/* Bouton pour rouvrir la modale mdp si besoin */}
-                {/* {isPwdProtected(item.visibility) && (
-                  <button
-                    type="button"
-                    onClick={openPwdManually}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-300/70 text-slate-700 bg-white hover:bg-slate-50 transition shadow-sm"
-                    title="Entrer le mot de passe"
-                  >
-                    <FaLock size={14} />
-                    <span>Mot de passe</span>
-                  </button>
-                )} */}
 
                 {read && (
                   <div className="flex items-center gap-2 bg-emerald-100/80 rounded-full px-4 py-2">

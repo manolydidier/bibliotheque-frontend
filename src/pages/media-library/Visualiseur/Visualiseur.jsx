@@ -1,5 +1,5 @@
 // src/media-library/Visualiseur.jsx
-import React, { useEffect, useMemo, useState, useRef,useCallback  } from "react";
+import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -13,7 +13,7 @@ import {
   FaArrowLeft, FaArrowRight, FaRedo, FaExpand, FaDownload,
   FaExternalLinkAlt, FaChevronLeft, FaChevronRight, FaSearchPlus, FaSearchMinus,
   FaFilePdf, FaFileExcel, FaFileWord, FaImage, FaFileVideo, FaFile, FaTag, FaStar, FaClock, FaEye, FaComment, FaChartBar, FaHistory, FaInfoCircle, FaSearch, FaPlus, FaPlay, FaTimes, FaShareAlt,
-  FaLock, FaShieldAlt
+  FaLock
 } from "react-icons/fa";
 import {
   ResponsiveContainer,
@@ -27,7 +27,8 @@ import {
   buildArticleShowUrl,
   DEBUG_HTTP,
   fetchArticle,
-  unlockArticle
+  unlockArticle,
+  fetchRatingsSummary,
 } from "../api/articles";
 import { formatDate } from "../shared/utils/format";
 import Comments from "./Comments";
@@ -215,9 +216,29 @@ function useMeFromLaravel() {
   const [me, setMe] = useState({ user: null, roles: [], permissions: [] });
   const [loading, setLoading] = useState(false);
 
+  // ✅ lire depuis sessionStorage ou localStorage
   const token = useMemo(() => {
-    try { return sessionStorage.getItem("tokenGuard") || null; } catch { return null; }
+    try {
+      return (
+        sessionStorage.getItem("tokenGuard") ||
+        localStorage.getItem("tokenGuard") ||
+        null
+      );
+    } catch {
+      return null;
+    }
   }, []);
+
+  // ✅ propager le token à axios (utile si l’instance axios de l’API n’est pas isolée)
+  useEffect(() => {
+    try {
+      if (token) {
+        axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+      } else {
+        delete axios.defaults.headers.common["Authorization"];
+      }
+    } catch {}
+  }, [token]);
 
   useEffect(() => {
     let cancelled = false;
@@ -232,8 +253,11 @@ function useMeFromLaravel() {
         const user = data?.user || data || null;
         const roles = data?.roles || user?.roles || [];
         const permissions = data?.permissions || user?.permissions || [];
+        console.log("[/user] payload:", data);
+
         if (!cancelled) setMe({ user, roles, permissions });
-      } catch {
+      } catch (e) {
+        console.warn("[/user] échec:", e?.message || e);
         if (!cancelled) setMe({ user: null, roles: [], permissions: [] });
       } finally {
         if (!cancelled) setLoading(false);
@@ -245,17 +269,54 @@ function useMeFromLaravel() {
   return { me, loading, token };
 }
 
+// ✅ Helper d’accès privé (côté front) — version stricte + logs utiles
+function hasPrivateAccess(me) {
+  const roles = (me?.roles || []).map(r =>
+    (r?.name ?? r?.slug ?? r?.title ?? r)?.toString().toLowerCase()
+  );
+  const roleMatch = roles.find(r => /(admin|owner|super-?admin|manager)/.test(r));
+  if (roleMatch) {
+    console.debug("[auth] accès privé via rôle:", roleMatch);
+    return true;
+  }
+
+  const perms = Array.isArray(me?.permissions) ? me.permissions : [];
+  const permMatch = perms.find(p => {
+    const name = String(p?.name ?? "").toLowerCase();        // ex: "lire articles privés"
+    const action = String(p?.action ?? "").toLowerCase();    // ex: "articles.read_private"
+    const resource = String(p?.resource ?? "").toLowerCase();// ex: "articles"
+    const isArticles = resource === "articles";
+    const hasAction = action === "articles.read_private" || action === "articles.view_private";
+    const hasLabel  = /priv(e|é)s?/i.test(name);             // "privé", "privés"
+    return isArticles && (hasAction || hasLabel);
+  });
+
+  if (permMatch) {
+    console.debug("[auth] accès privé via permission:", {
+      id: permMatch.id,
+      name: permMatch.name,
+      action: permMatch.action,
+      resource: permMatch.resource,
+    });
+    return true;
+  }
+
+  return false;
+}
+
 function computeRights(permissions = []) {
   const list = Array.isArray(permissions) ? permissions : [];
   const isModerator = list.some(p =>
-    String(p?.resource).toLowerCase() === "comments" &&
-    /(moderateur|approver|approve|manage|admin|gerer)/i.test(String(p?.name))
+    String(p?.resource ?? p?.name ?? p)
+      .toLowerCase()
+      .includes("comments") &&
+    /(moderateur|approver|approve|manage|admin|gerer)/i.test(String(p?.name ?? p))
   );
   const canDeleteAny =
     isModerator ||
     list.some(p =>
-      String(p?.resource).toLowerCase() === "comments" &&
-      /(supprimer|delete|remove)/i.test(String(p?.name))
+      String(p?.resource ?? p?.name ?? p).toLowerCase().includes("comments") &&
+      /(supprimer|delete|remove)/i.test(String(p?.name ?? p))
     );
   return { isModerator, canDeleteAny };
 }
@@ -264,8 +325,6 @@ function computeRights(permissions = []) {
 export default function Visualiseur() {
   const dispatch = useDispatch();
   const unlockError = useSelector(selectAuthError);
-
-  
 
   const params = useParams();
   const navigate = useNavigate();
@@ -332,73 +391,68 @@ export default function Visualiseur() {
     ];
 
     try {
-      let art = null;
+      const art = await unlockArticle(idOrSlug, password, { include, fields });
 
-      // 1) Tente l’endpoint d’unlock (session)
-      try {
-        art = await unlockArticle(idOrSlug, password, { include, fields });
-      } catch {
-        // 2) Si pas d’endpoint unlock, fallback: GET avec ?password
-        art = await fetchArticle(idOrSlug, { include, fields, password });
-      }
-
-      // 3) Si l’unlock ne renvoie pas l’article complet, refetch GET “normal”
-      if (!art || !art.id) {
-        art = await fetchArticle(idOrSlug, { include, fields });
-      }
-
-      setStoredPassword(idOrSlug, password);     // mémorise pour la session
+      setStoredPassword(idOrSlug, password);
       setArticle(art || null);
       setLockedKind(null);
       setUnlockOpen(false);
       dispatch(clearAuthError());
       document.title = art?.title || "Visualiseur";
     } catch (e) {
-      const msg = e?.response?.data?.message || "Mot de passe invalide.";
-      dispatch(setAuthError(msg));
-      setUnlockOpen(true);
+      const apiCode = e?.response?.data?.code?.toString()?.toLowerCase?.() || "";
+      if (apiCode === "private") {
+        dispatch(setAuthError("Cet article est privé — aucun mot de passe ne permet d’y accéder. Demandez une autorisation à un administrateur."));
+        setLockedKind("private");
+        setUnlockOpen(false);
+      } else if (e.incorrectPassword) {
+        const msg = e.message || "Mot de passe invalide.";
+        dispatch(setAuthError(msg));
+        setUnlockOpen(true);
+      } else {
+        const msg = e?.response?.data?.message || "Erreur lors du déverrouillage.";
+        dispatch(setAuthError(msg));
+      }
     } finally {
       setUnlockBusy(false);
     }
   }
-// ✅ helper pour rouvrir la modale depuis partout (clavier, API globale, évènement custom)
-const requestOpenModal = useCallback(() => {
-  dispatch(clearAuthError());
-  setUnlockOpen(true);
-}, [dispatch, setUnlockOpen]);
+  // ✅ helper pour rouvrir la modale depuis partout (clavier, API globale, évènement custom)
+  const requestOpenModal = useCallback(() => {
+    dispatch(clearAuthError());
+    setUnlockOpen(true);
+  }, [dispatch, setUnlockOpen]);
 
-// ✅ Raccourcis clavier + API globale + event custom
-useEffect(() => {
-  function onKeyDown(e) {
-    // Active si contenu verrouillé par mot de passe (article pas encore chargé)
-    if (!((lockedKind === "password" || lockedKind === "unknown") && !article)) return;
+  // ✅ Raccourcis clavier + API globale + event custom
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (!((lockedKind === "password" || lockedKind === "unknown") && !article)) return;
 
-    const key = (e.key || "").toLowerCase();
-    const ctrlK = e.ctrlKey && key === "k";
-    const enter = key === "enter";
-    const pKey  = key === "p";
+      const key = (e.key || "").toLowerCase();
+      const ctrlK = e.ctrlKey && key === "k";
+      const enter = key === "enter";
+      const pKey  = key === "p";
 
-    if (ctrlK || enter || pKey) {
-      e.preventDefault();
-      requestOpenModal();
+      if (ctrlK || enter || pKey) {
+        e.preventDefault();
+        requestOpenModal();
+      }
     }
-  }
 
-  const openEvtHandler = () => requestOpenModal();
+    const openEvtHandler = () => requestOpenModal();
 
-  window.addEventListener("keydown", onKeyDown);
-  window.addEventListener("visualiseur:openPassword", openEvtHandler);
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("visualiseur:openPassword", openEvtHandler);
 
-  // API globale pour script externe : window.visualiseur.openPassword()
-  window.visualiseur = window.visualiseur || {};
-  window.visualiseur.openPassword = openEvtHandler;
+    window.visualiseur = window.visualiseur || {};
+    window.visualiseur.openPassword = openEvtHandler;
 
-  return () => {
-    window.removeEventListener("keydown", onKeyDown);
-    window.removeEventListener("visualiseur:openPassword", openEvtHandler);
-    if (window.visualiseur) delete window.visualiseur.openPassword;
-  };
-}, [lockedKind, article, requestOpenModal]);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("visualiseur:openPassword", openEvtHandler);
+      if (window.visualiseur) delete window.visualiseur.openPassword;
+    };
+  }, [lockedKind, article, requestOpenModal]);
 
   /* ------- Load article ------- */
   useEffect(() => {
@@ -430,27 +484,31 @@ useEffect(() => {
       try {
         // 1er essai avec mdp stocké s'il existe
         const savedPwd = getStoredPassword(idOrSlug);
-        const art = await fetchArticle(idOrSlug, { include, fields, password: savedPwd || undefined });
+        const art = await fetchArticle(idOrSlug, { 
+          include, 
+          fields, 
+          password: savedPwd || undefined 
+        });
+        
         if (!mounted) return;
         setArticle(art);
         document.title = art?.title || "Visualiseur";
       } catch (e) {
         if (!mounted) return;
-        const status = e?.response?.status;
-        const code = (e?.response?.data?.visibility || e?.response?.data?.code || "").toString().toLowerCase();
+        
+        if (e.locked) {
+          const code = (e.code || "").toString().toLowerCase();
 
-        if (status === 403) {
           if (/private/.test(code)) {
             setLockedKind("private");
             setUnlockOpen(false);
             setErr("");
-            dispatch(clearAuthError());
+            dispatch(setAuthError("Accès restreint — permission requise."));
           } else if (/password/.test(code) || !code) {
             setLockedKind("password");
             setUnlockOpen(true);
             setErr("");
-            // message par défaut si on a un mauvais mdp en session
-            dispatch(setAuthError("Mot de passe invalide ou expiré."));
+            dispatch(setAuthError("Mot de passe requis."));
           } else {
             setLockedKind("unknown");
             setUnlockOpen(true);
@@ -467,33 +525,66 @@ useEffect(() => {
     })();
 
     return () => { mounted = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idOrSlug, params]);
+  }, [idOrSlug, dispatch]);
+
+  /* ------- Garde-fou UI pour les articles privés (STRICT) ------- */
+  useEffect(() => {
+    if (!article || meLoading) return;
+    const isPrivate = String(article.visibility || "").toLowerCase() === "private";
+
+    // 🚫 Toujours masquer un article privé si l'utilisateur n'a PAS la permission,
+    // token ou pas. On ne “fait plus confiance” à un back qui renverrait par erreur un privé.
+    if (isPrivate && !hasPrivateAccess(me)) {
+      setArticle(null);
+      setLockedKind("private");
+      setUnlockOpen(false);
+    }
+  }, [article, me, meLoading]);
+
+  /* ------- Logs de debug permissions/visibilité ------- */
+  useEffect(() => {
+    if (meLoading) return;
+    const rolesDbg = (me?.roles || []).map(r => r?.name ?? r?.slug ?? r?.title ?? r).join(", ");
+    const permsDbg = (me?.permissions || []).map(p => p?.action ?? p?.name ?? p?.code ?? p).join(", ");
+    console.debug("[auth] token present:", !!token);
+    console.debug("[auth] roles:", rolesDbg || "(aucun)");
+    console.debug("[auth] perms:", permsDbg || "(aucune)");
+    console.debug("[auth] hasPrivateAccess:", hasPrivateAccess(me));
+  }, [me, meLoading, token]);
+
+  useEffect(() => {
+    console.debug("[article] visibility:", article?.visibility);
+  }, [article?.visibility]);
 
   /* ------- Charger récap des notes (dont ma note) ------- */
   useEffect(() => {
     if (!article?.id) return;
     let cancelled = false;
     setRatingLoaded(false);
+    
     (async () => {
       try {
-        const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const { data } = await axios.get(`/articles/${article.id}/ratings`, { headers, withCredentials: false });
-        const d = data?.data ?? data ?? {};
+        const data = await fetchRatingsSummary(article.id);
         if (cancelled) return;
-        if (Number.isFinite(Number(d?.rating_average)) && Number.isFinite(Number(d?.rating_count))) {
-          setArticle(a => ({ ...(a || {}), rating_average: Number(d.rating_average), rating_count: Number(d.rating_count) }));
+        
+        if (Number.isFinite(Number(data?.rating_average)) && Number.isFinite(Number(data?.rating_count))) {
+          setArticle(a => ({ 
+            ...(a || {}), 
+            rating_average: Number(data.rating_average), 
+            rating_count: Number(data.rating_count) 
+          }));
         }
-        setMyRating(typeof d?.my_rating === "number" ? d.my_rating : null);
-        setMyReview(typeof d?.my_review === "string" ? d.my_review : "");
-      } catch {
-        // silencieux
+        setMyRating(typeof data?.my_rating === "number" ? data.my_rating : null);
+        setMyReview(typeof data?.my_review === "string" ? data.my_review : "");
+      } catch (error) {
+        console.error("Erreur lors du chargement des notes:", error);
       } finally {
         if (!cancelled) setRatingLoaded(true);
       }
     })();
+    
     return () => { cancelled = true; };
-  }, [article?.id, token]);
+  }, [article?.id]);
 
   /* ------- Media list ------- */
   const mediaList = useMemo(() => {
@@ -590,61 +681,70 @@ useEffect(() => {
     );
   }
 
-  // 🔒 Accès privé : écran dédié
-  if (lockedKind === "private") {
-    return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 font-sans px-3 sm:px-4 lg:px-6 2xl:px-10 py-10">
-        <div className="max-w-3xl mx-auto">
-          <div className="bg-white/70 backdrop-blur-xl border border-white/60 rounded-3xl shadow-2xl p-8 text-center">
-            <div className="mx-auto w-20 h-20 rounded-2xl bg-slate-100 flex items-center justify-center mb-5">
-              <FaShieldAlt className="text-slate-600 text-3xl" />
-            </div>
-            <h2 className="text-2xl font-light text-slate-800 mb-3">Accès restreint</h2>
-            <p className="text-slate-600">Cet article est <strong>privé</strong>. Vous devez être autorisé(e) ou connecté(e) avec un compte ayant les droits nécessaires.</p>
-            <div className="mt-6 flex justify-center gap-3">
-              <button onClick={() => navigate(-1)} className="px-5 py-3 rounded-xl border border-slate-300/60 text-slate-700 bg-white/80 hover:bg-white transition">
-                Retour
-              </button>
-              <a href="/auth" className="px-5 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 transition">
-                Se connecter
-              </a>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // 🔑 Protégé par mot de passe et article non chargé : page neutre + modale ouverte
-  if (!article && (lockedKind === "password" || lockedKind === "unknown")) {
+  // 🔒 Tous les cas d'accès restreint (privé / protégé / inconnu) : page neutre
+  if (!article && (lockedKind === "private" || lockedKind === "password" || lockedKind === "unknown")) {
+    const isPrivateLock = lockedKind === "private";
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 font-sans px-3 sm:px-4 lg:px-6 2xl:px-10 py-10">
         <div className="max-w-2xl mx-auto text-center text-slate-600">
-   <div
-     role="button"
-     tabIndex={0}
-     onClick={requestOpenModal}
-     onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && requestOpenModal()}
-     title="Cliquez, double-cliquez, Entrée, P ou Ctrl+K pour rouvrir la fenêtre"
-     className="inline-flex items-center gap-3 px-5 py-3 rounded-2xl bg-white/70 border border-white/60 shadow cursor-pointer select-none"
-   >
-    <FaLock className="text-blue-600" />
-     <span>Contenu protégé — cliquez ou appuyez sur P pour entrer le mot de passe</span>
-   </div>
-  <p className="mt-3 text-xs text-slate-500">
-     Astuce : P, Entrée ou Ctrl+K rouvrent la fenêtre. Vous pouvez aussi déclencher <code>window.visualiseur.openPassword()</code> ou l’événement <code>visualiseur:openPassword</code>.
-  </p>
- </div>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={!isPrivateLock ? requestOpenModal : undefined}
+            onKeyDown={(e) => {
+              const k = (e.key || "").toLowerCase();
+              if (!isPrivateLock && (k === "enter" || k === " ")) requestOpenModal();
+            }}
+            title={
+              isPrivateLock
+                ? "Accès restreint — vous n’avez pas la permission."
+                : "Cliquez, Entrée, P ou Ctrl+K pour entrer le mot de passe"
+            }
+            className="inline-flex items-center gap-3 px-5 py-3 rounded-2xl bg-white/70 border border-white/60 shadow cursor-pointer select-none"
+          >
+            <FaLock className="text-blue-600" />
+            <span>
+              {isPrivateLock
+                ? "Accès restreint — vous n’avez pas la permission de consulter cet article."
+                : "Contenu protégé — cliquez ou appuyez sur P pour entrer le mot de passe"}
+            </span>
+          </div>
 
-        <PasswordModal
-          open={unlockOpen}
-          onClose={() => { dispatch(clearAuthError()); setUnlockOpen(false); }}
-          onSubmit={handleUnlock}
-          defaultValue={getStoredPassword(idOrSlug)}
-          title="Déverrouiller l’article"
-          error={unlockError}
-          busy={unlockBusy}
-        />
+          <p className="mt-3 text-xs text-slate-500">
+            {isPrivateLock
+              ? "Demandez une autorisation à un administrateur ou revenez en arrière."
+              : "Astuce : P, Entrée ou Ctrl+K rouvrent la fenêtre. Vous pouvez aussi déclencher window.visualiseur.openPassword() ou l’événement « visualiseur:openPassword »."}
+          </p>
+
+          <div className="mt-6 flex items-center justify-center gap-3">
+            <button
+              onClick={() => navigate(-1)}
+              className="px-5 py-3 rounded-xl border border-slate-300/60 text-slate-700 bg-white/80 hover:bg-white transition"
+            >
+              Retour
+            </button>
+            {!token && (
+              <a
+                href="/auth"
+                className="px-5 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 transition"
+              >
+                Se connecter
+              </a>
+            )}
+          </div>
+        </div>
+
+        {(lockedKind === "password" || lockedKind === "unknown") && (
+          <PasswordModal
+            open={unlockOpen}
+            onClose={() => { dispatch(clearAuthError()); setUnlockOpen(false); }}
+            onSubmit={handleUnlock}
+            defaultValue={getStoredPassword(idOrSlug)}
+            title="Déverrouiller l’article"
+            error={unlockError}
+            busy={unlockBusy}
+          />
+        )}
       </div>
     );
   }
@@ -1023,16 +1123,17 @@ function SimilarList({ similar, loading, onOpenSimilar }) {
           </div>
         ))}
 
-        <style jsx>{`
-          @keyframes slideInUp {
-            from { opacity: 0; transform: translateY(15px); }
-            to   { opacity: 1; transform: translateY(0); }
-          }
-          .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-          .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 3px; }
-          .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-          .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        `}</style>
+       <style>{`
+  @keyframes slideInUp {
+    from { opacity: 0; transform: translateY(15px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 3px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+`}</style>
+
       </div>
     </div>
   );
@@ -1271,7 +1372,7 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
   return (
     <div className="w-full flex flex-col items-center justify-center py-14 lg:py-16">
       <div className="text-center">
-        <div className="w-24 h-24 lg:w-28 lg:h-28 bg-gradient-to-br from-slate-100 to-slate-200 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl">
+        <div className="w-24 h-24 lg:w-28 lg:h-28 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl">
           <FaFile className="text-slate-600 text-4xl lg:text-5xl" />
         </div>
         <h3 className="text-2xl lg:text-3xl font-light text-slate-800 mb-3">{title}</h3>
@@ -1402,38 +1503,53 @@ function StatsCharts({ article }) {
   const historyBarData = Object.entries(actionsCount).map(([k, v]) => ({ name: k, count: v }));
 
   return (
-    <div className="w-full bg-gradient-to-br from-slate-50/30 via-white/30 to-blue-50/30 backdrop-blur-sm rounded-2xl p-6 sm:p-8 lg:p-10">
-      <Toaster/>
+     <div className="w-full bg-gradient-to-br from-slate-50/30 via-white/30 to-blue-50/30 backdrop-blur-sm rounded-2xl p-4 sm:p-6 lg:p-8">
+      <Toaster />
 
       {/* Header */}
-      <div className="mb-10 lg:mb-16">
-        <h1 className="text-3xl lg:text-4xl font-light text-slate-800 mb-3">Statistiques de l'article</h1>
-        <div className="h-1 w-20 lg:w-24 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full"></div>
+      <div className="mb-8 lg:mb-10">
+        <h1 className="text-2xl lg:text-3xl font-light text-slate-800 mb-2 leading-tight">
+          Statistiques de l'article
+        </h1>
+        <div className="h-[3px] w-16 lg:w-20 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full" />
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6 mb-12 lg:mb-20 text-lg">
-        <KpiCard label="Vues" value={views} icon={<FaEye />} color="blue" />
-        <KpiCard label="Partages" value={shares} icon={<FaShareAlt />} color="green" />
-        <KpiCard label="Commentaires" value={comments} icon={<FaComment />} color="blue" />
-        <KpiCard label="Note moyenne" value={avgRating.toFixed(2)} suffix="/5" icon={<FaStar />} color="orange" />
+      {/* KPIs — compact */}
+      <div className="flex flex-wrap gap-3 sm:gap-4 lg:gap-5 mb-8 lg:mb-12 text-base leading-tight">
+        <div className="flex-1 min-w-[140px] sm:min-w-[160px] md:min-w-[180px] xl:min-w-[200px]">
+          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm"
+            label="Vues" value={views} icon={<FaEye />} color="blue" />
+        </div>
+        <div className="flex-1 min-w-[140px] sm:min-w-[160px] md:min-w-[180px] xl:min-w-[200px]">
+          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm"
+            label="Partages" value={shares} icon={<FaShareAlt />} color="green" />
+        </div>
+        <div className="flex-1 min-w-[140px] sm:min-w-[160px] md:min-w-[180px] xl:min-w-[200px]">
+          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm"
+            label="Commentaires" value={comments} icon={<FaComment />} color="blue" />
+        </div>
+        <div className="flex-1 min-w-[140px] sm:min-w-[160px] md:min-w-[180px] xl:min-w-[200px]">
+          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm"
+            label="Note moyenne" value={avgRating?.toFixed(2)} suffix="/5" icon={<FaStar />} color="orange" />
+        </div>
       </div>
 
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 lg:gap-6">
-        {/* Engagement Chart */}
-        <div className="col-span-1">
-          <ChartCard title="Engagement" subtitle="Répartition des interactions" icon={<FaChartBar />}>
+      {/* Charts — compact */}
+      <div className="flex flex-wrap gap-3 lg:gap-4">
+        {/* Engagement */}
+        <div className="flex-1 basis-full xl:basis-1/3 min-w-[240px]">
+          <ChartCard className="p-4 sm:p-5 rounded-xl shadow-sm"
+            title="Engagement" subtitle="Répartition des interactions" icon={<FaChartBar />}>
             {engagementData.length ? (
-              <div className="h-64 md:h-72 xl:h-80 2xl:h-[28rem] flex items-center justify-center">
+              <div className="h-56 md:h-64 xl:h-72 2xl:h-[24rem] flex items-center justify-center">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
                       dataKey="value"
                       data={engagementData}
-                      innerRadius={50}
-                      outerRadius={90}
-                      paddingAngle={3}
+                      innerRadius={44}
+                      outerRadius={80}
+                      paddingAngle={2}
                       stroke="none"
                     >
                       {engagementData.map((_, i) => (
@@ -1445,11 +1561,12 @@ function StatsCharts({ article }) {
                         backgroundColor: 'rgba(255, 255, 255, 0.95)',
                         border: 'none',
                         borderRadius: '12px',
-                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
-                        fontSize: '14px'
+                        boxShadow: '0 8px 20px -6px rgba(0,0,0,0.12)',
+                        fontSize: '13px',
+                        padding: '8px 10px',
                       }}
                     />
-                    <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '13px' }} />
+                    <Legend wrapperStyle={{ paddingTop: 12, fontSize: 12 }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -1459,33 +1576,32 @@ function StatsCharts({ article }) {
           </ChartCard>
         </div>
 
-        {/* Tags/History Chart */}
-        <div className="col-span-1">
-          <ChartCard
-            title={tagsBarData.length ? "Tags populaires" : "Historique"}
-            subtitle={tagsBarData.length ? "Usage global des tags" : "Actions effectuées"}
-            icon={tagsBarData.length ? <FaTag /> : <FaHistory />}
-          >
-            <div className="h-64 md:h-72 xl:h-80 2xl:h-[28rem]">
+        {/* Tags / Historique */}
+        <div className="flex-1 basis-full xl:basis-1/3 min-w-[240px]">
+          <ChartCard className="p-4 sm:p-5 rounded-xl shadow-sm"
+            title={tagsBarData.length ? 'Tags populaires' : 'Historique'}
+            subtitle={tagsBarData.length ? 'Usage global des tags' : 'Actions effectuées'}
+            icon={tagsBarData.length ? <FaTag /> : <FaHistory />}>
+            <div className="h-56 md:h-64 xl:h-72 2xl:h-[24rem]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={tagsBarData.length ? tagsBarData : historyBarData}
-                  margin={{ top: 20, right: 20, left: 20, bottom: 60 }}
+                  margin={{ top: 16, right: 16, left: 12, bottom: 52 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" opacity={0.6} />
                   <XAxis
                     dataKey="name"
                     interval={0}
-                    angle={-35}
+                    angle={-30}
                     textAnchor="end"
-                    height={80}
-                    tick={{ fill: '#64748b', fontSize: 12 }}
+                    height={70}
+                    tick={{ fill: '#64748b', fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
                     allowDecimals={false}
-                    tick={{ fill: '#64748b', fontSize: 12 }}
+                    tick={{ fill: '#64748b', fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                   />
@@ -1494,15 +1610,17 @@ function StatsCharts({ article }) {
                       backgroundColor: 'rgba(255, 255, 255, 0.95)',
                       border: 'none',
                       borderRadius: '12px',
-                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
-                      fontSize: '14px'
+                      boxShadow: '0 8px 20px -6px rgba(0,0,0,0.12)',
+                      fontSize: '13px',
+                      padding: '8px 10px',
                     }}
                   />
                   <Bar
-                    dataKey={tagsBarData.length ? "usage" : "count"}
+                    dataKey={tagsBarData.length ? 'usage' : 'count'}
                     fill="#3b82f6"
                     radius={[6, 6, 0, 0]}
                     stroke="none"
+                    barSize={18}
                   />
                 </BarChart>
               </ResponsiveContainer>
@@ -1510,24 +1628,25 @@ function StatsCharts({ article }) {
           </ChartCard>
         </div>
 
-        {/* Rating Chart */}
-        <div className="col-span-1">
-          <ChartCard title="Qualité" subtitle="Note moyenne attribuée" icon={<FaStar />}>
-            <div className="h-64 md:h-72 xl:h-80 2xl:h-[28rem] flex flex-col items-center justify-center">
+        {/* Qualité */}
+        <div className="flex-1 basis-full xl:basis-1/3 min-w-[240px]">
+          <ChartCard className="p-4 sm:p-5 rounded-xl shadow-sm"
+            title="Qualité" subtitle="Note moyenne attribuée" icon={<FaStar />}>
+            <div className="h-56 md:h-64 xl:h-72 2xl:h-[24rem] flex flex-col items-center justify-center">
               {avgRating > 0 ? (
                 <>
-                  <div className="relative w-40 h-40 md:w-44 md:h-44 xl:w-48 xl:h-48 mb-6">
+                  <div className="relative w-36 h-36 md:w-40 md:h-40 xl:w-44 xl:h-44 mb-4">
                     <ResponsiveContainer width="100%" height="100%">
                       <RadialBarChart
-                        innerRadius="60%"
-                        outerRadius="90%"
-                        data={[{ name: "Note", value: (avgRating / 5) * 100 }]}
+                        innerRadius="62%"
+                        outerRadius="88%"
+                        data={[{ name: 'Note', value: (avgRating / 5) * 100 }]}
                         startAngle={90}
                         endAngle={-270}
                       >
                         <RadialBar
                           dataKey="value"
-                          minAngle={15}
+                          minAngle={12}
                           clockWise
                           background={{ fill: '#e2e8f0' }}
                           fill="#fbbf24"
@@ -1536,19 +1655,23 @@ function StatsCharts({ article }) {
                       </RadialBarChart>
                     </ResponsiveContainer>
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <div className="text-3xl md:text-4xl font-light text-slate-800">{avgRating.toFixed(1)}</div>
-                      <div className="text-sm text-slate-500">sur 5</div>
+                      <div className="text-2xl md:text-3xl font-light text-slate-800">
+                        {avgRating.toFixed(1)}
+                      </div>
+                      <div className="text-xs text-slate-500">sur 5</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
                     {[...Array(5)].map((_, i) => (
                       <FaStar
                         key={i}
-                        className={i < Math.round(avgRating) ? "text-yellow-400" : "text-gray-200"}
-                        size={16}
+                        className={i < Math.round(avgRating) ? 'text-yellow-400' : 'text-gray-200'}
+                        size={14}
                       />
                     ))}
-                    <span className="ml-2 text-sm text-slate-600">({ratings} {ratings <= 1 ? 'note' : 'notes'})</span>
+                    <span className="ml-2 text-xs sm:text-sm text-slate-600">
+                      ({ratings} {ratings <= 1 ? 'note' : 'notes'})
+                    </span>
                   </div>
                 </>
               ) : (

@@ -1,12 +1,11 @@
-// src/api/articles.js
 import axios from "axios";
 
-/* ===================== Base ===================== */
+/* ===================== Configuration de base ===================== */
 export const DEBUG_HTTP = import.meta.env.VITE_DEBUG_HTTP === "true";
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/+$/, "");
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
 export const api = axios.create({
-  baseURL: API_BASE, // ex: http://127.0.0.1:8000/api
+  baseURL: API_BASE,
   withCredentials: true,
   headers: {
     Accept: "application/json",
@@ -14,24 +13,79 @@ export const api = axios.create({
   },
 });
 
-/* Helpers */
+/* ===================== Gestion du token d'authentification ===================== */
+function getToken() {
+  try {
+    return (
+      sessionStorage.getItem("tokenGuard") ||
+      localStorage.getItem("tokenGuard") ||
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
+// Installation des intercepteurs pour ajouter le token aux requêtes
+let _interceptorsInstalled = false;
+export function installApiInterceptors() {
+  if (_interceptorsInstalled) return;
+  _interceptorsInstalled = true;
+
+  api.interceptors.request.use(
+    (config) => {
+      const token = getToken();
+      if (token) config.headers.Authorization = `Bearer ${token}`;
+      return config;
+    },
+    (error) => Promise.reject(error)
+  );
+
+  // ✅ on NE redirige PAS : on laisse le Visualiseur montrer l'écran adéquat
+  api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      const status = error?.response?.status;
+      if (status === 401) {
+        if (DEBUG_HTTP) console.warn("[API] 401 – non authentifié (aucune redirection auto)");
+        // (optionnel) on nettoie un token invalide
+        try {
+          sessionStorage.removeItem("tokenGuard");
+          localStorage.removeItem("tokenGuard");
+        } catch {}
+        return Promise.reject(error);
+      }
+      if (status === 403) {
+        if (DEBUG_HTTP) console.warn("[API] 403 – accès restreint (laisser l'UI gérer)");
+        return Promise.reject(error);
+      }
+      return Promise.reject(error);
+    }
+  );
+}
+
+installApiInterceptors();
+
+/* ===================== Utilitaires ===================== */
 const toParam = (v) => (Array.isArray(v) ? v.join(",") : v || "");
 const cleanKey = (x) => {
   const s = (x ?? "").toString().trim();
   if (!s || s === "undefined" || s === "null") return null;
   return s;
 };
+
+// Extraction de l'article de la réponse (gestion des différents formats de réponse)
 const unwrapArticle = (payload) => {
   const p = payload ?? null;
-  // backend peut répondre { data: article, meta: {...} } ou directement article
   return p?.data?.data ?? p?.data ?? p;
 };
 
-/* ===================== SHOW ===================== */
-export function buildArticleShowUrl(
-  idOrSlug,
-  { include = [], fields = [], password, increment_view } = {}
-) {
+/* ===================== Fonctions pour les articles ===================== */
+
+/**
+ * Construction de l'URL pour récupérer un article
+ */
+export function buildArticleShowUrl(idOrSlug, { include = [], fields = [], password, increment_view } = {}) {
   const key = cleanKey(idOrSlug);
   if (!key) throw new Error("idOrSlug manquant pour buildArticleShowUrl");
 
@@ -46,12 +100,11 @@ export function buildArticleShowUrl(
 }
 
 /**
- * GET /articles/:idOrSlug
- * @returns {Promise<Object>} -> objet article (pas l’enveloppe)
+ * Récupération d'un article spécifique
  */
 export async function fetchArticle(idOrSlug, opts = {}) {
   const key = cleanKey(idOrSlug);
-  if (!key) throw new Error("idOrSlug manquant pour fetchArticle");
+  if (!key) throw new Error("idOrslug manquant pour fetchArticle");
 
   const { include = [], fields = [], password, increment_view } = opts;
   const params = {};
@@ -65,16 +118,29 @@ export async function fetchArticle(idOrSlug, opts = {}) {
     console.log("[API] GET /articles/:id", key, logParams);
   }
 
-  const resp = await api.get(`/articles/${encodeURIComponent(key)}`, {
-   params,
-   headers: { "Cache-Control": "no-store" },
- });
-  return unwrapArticle(resp);
+  try {
+    const resp = await api.get(`/articles/${encodeURIComponent(key)}`, {
+      params,
+      headers: { "Cache-Control": "no-store" },
+    });
+    
+    return unwrapArticle(resp);
+  } catch (error) {
+    if (error.response?.status === 403) {
+      // Article verrouillé - on propage l'erreur avec les détails
+      throw {
+        ...error,
+        locked: true,
+        visibility: error.response.data?.visibility,
+        code: error.response.data?.code
+      };
+    }
+    throw error;
+  }
 }
 
 /**
- * POST /articles/:idOrSlug/unlock { password }
- * Renvoie l’article déverrouillé (si mot de passe OK)
+ * Déverrouillage d'un article protégé par mot de passe
  */
 export async function unlockArticle(idOrSlug, password, opts = {}) {
   const key = cleanKey(idOrSlug);
@@ -88,18 +154,28 @@ export async function unlockArticle(idOrSlug, password, opts = {}) {
 
   if (DEBUG_HTTP) console.log("[API] POST /articles/:id/unlock", key, { params });
 
-  const resp = await api.post(
-    `/articles/${encodeURIComponent(key)}/unlock`,
-    { password },
-    { params }
-  );
-  return unwrapArticle(resp);
+  try {
+    const resp = await api.post(
+      `/articles/${encodeURIComponent(key)}/unlock`,
+      { password },
+      { params }
+    );
+    return unwrapArticle(resp);
+  } catch (error) {
+    if (error.response?.status === 403) {
+      // Mot de passe incorrect
+      throw {
+        ...error,
+        incorrectPassword: true,
+        message: error.response.data?.message || "Mot de passe incorrect"
+      };
+    }
+    throw error;
+  }
 }
 
-/* ===================== SIMILAIRES ===================== */
 /**
- * Essaie plusieurs schémas de filtre courants (Laravel) pour trouver des articles similaires
- * selon catégories/tags. Ne renvoie JAMAIS de données inventées : [] si rien.
+ * Récupération des articles similaires
  */
 export async function fetchSimilarArticles({
   categoryIds = [],
@@ -107,11 +183,11 @@ export async function fetchSimilarArticles({
   excludeId,
   limit = 8,
 } = {}) {
-  const fields = ["id", "title", "slug", "excerpt", "published_at", "featured_image"];
+  const fields = ["id", "title", "slug", "excerpt", "published_at", "featured_image", "visibility"];
   const include = ["categories", "media"];
 
+  // Essayer différents formats de paramètres pour compatibilité
   const attempts = [
-    // 1) style "filter[...]"
     {
       params: {
         fields: fields.join(","),
@@ -119,46 +195,47 @@ export async function fetchSimilarArticles({
         "filter[categories]": categoryIds.join(",") || undefined,
         "filter[tag_ids]": tagIds.join(",") || undefined,
         "filter[exclude_id]": excludeId || undefined,
-        limit,
+        per_page: limit,
         status: "published",
       },
     },
-    // 2) style simple
     {
       params: {
         fields: fields.join(","),
         include: include.join(","),
-        categories: categoryIds.join(",") || undefined,
-        tags: tagIds.join(",") || undefined,
+        category_ids: categoryIds.join(",") || undefined,
+        tag_ids: tagIds.join(",") || undefined,
         exclude_id: excludeId || undefined,
-        limit,
+        per_page: limit,
         status: "published",
       },
-    },
-    // 3) style array
-    {
-      params: {
-        fields: fields.join(","),
-        include: include.join(","),
-        category_ids: categoryIds,
-        tag_ids: tagIds,
-        exclude_id: excludeId || undefined,
-        limit,
-        status: "published",
-      },
-    },
+    }
   ];
 
   for (const att of attempts) {
     try {
       if (DEBUG_HTTP) console.log("[API] GET /articles (similar) params=", att.params);
-      const { data } = await api.get("/articles", { params: att.params });
-      const list = data?.data || data || [];
+      const response = await api.get("/articles", { params: att.params });
+      
+      // Le backend renvoie les données dans data.data pour les listes paginées
+      const list = response.data?.data || [];
       if (Array.isArray(list) && list.length) return list;
     } catch (e) {
       if (DEBUG_HTTP) console.warn("[API] similar attempt failed:", e?.response?.status);
-      // on tente la suivante
     }
   }
   return [];
+}
+
+/**
+ * Récupération du résumé des notes
+ */
+export async function fetchRatingsSummary(articleId) {
+  try {
+    const response = await api.get(`/articles/${articleId}/ratings`);
+    return response.data?.data || response.data;
+  } catch (error) {
+    console.error("Erreur lors de la récupération des notes:", error);
+    throw error;
+  }
 }
