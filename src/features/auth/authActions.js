@@ -5,70 +5,69 @@ import { loginStart, loginSuccess, loginFailure, logoutUser as logoutAction } fr
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-/* ============================================================================
-   Helpers Remember Me (persistance)
-   ========================================================================== */
-const AUTH_TOKEN_KEY = 'auth_token';
-const AUTH_USER_KEY  = 'user';
+// ==== Storage keys ===========================================================
+const TOKEN_KEY = 'tokenGuard';
+const USER_KEY  = 'user';
 const REMEMBER_EMAIL = 'remember_email';
 
-const getAuthToken = () =>
-  (typeof localStorage !== 'undefined' && localStorage.getItem(AUTH_TOKEN_KEY)) ||
-  (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(AUTH_TOKEN_KEY)) ||
-  null;
+// ✅ Helpers de stockage: session vs local selon "remember me"
+const getToken = () => {
+  try {
+    return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY) || null;
+  } catch { return null; }
+};
 
 const getActiveStorage = () => {
   try {
-    if (localStorage.getItem(AUTH_TOKEN_KEY)) return localStorage;
-    if (sessionStorage.getItem(AUTH_TOKEN_KEY)) return sessionStorage;
+    if (sessionStorage.getItem(TOKEN_KEY)) return 'session';
+    if (localStorage.getItem(TOKEN_KEY)) return 'local';
   } catch {}
-  return localStorage;
+  return null;
 };
 
-const saveAuthSession = (token, user, rememberMe) => {
-  const primary   = rememberMe ? localStorage : sessionStorage;
-  const secondary = rememberMe ? sessionStorage : localStorage;
+const saveSession = (token, user, { persist = false, rememberEmail = null } = {}) => {
   try {
-    primary.setItem(AUTH_TOKEN_KEY, token);
-    primary.setItem(AUTH_USER_KEY, JSON.stringify(user));
-    if (rememberMe && user?.email) localStorage.setItem(REMEMBER_EMAIL, user.email);
-    if (!rememberMe) localStorage.removeItem(REMEMBER_EMAIL);
-    secondary.removeItem(AUTH_TOKEN_KEY);
-    secondary.removeItem(AUTH_USER_KEY);
+    const target = persist ? localStorage : sessionStorage;
+    const other  = persist ? sessionStorage : localStorage;
+
+    if (token) target.setItem(TOKEN_KEY, token);
+    if (user)  target.setItem(USER_KEY, JSON.stringify(user));
+
+    // Nettoyer l'autre stockage pour éviter les doublons / incohérences
+    other.removeItem(TOKEN_KEY);
+    other.removeItem(USER_KEY);
+
+    // Mémorisation d'email (toujours en localStorage)
+    if (rememberEmail) localStorage.setItem(REMEMBER_EMAIL, rememberEmail);
+    else localStorage.removeItem(REMEMBER_EMAIL);
   } catch {}
 };
 
-const clearAuth = () => {
-  try { localStorage.removeItem(AUTH_TOKEN_KEY); localStorage.removeItem(AUTH_USER_KEY); } catch {}
-  try { sessionStorage.removeItem(AUTH_TOKEN_KEY); sessionStorage.removeItem(AUTH_USER_KEY); } catch {}
+const clearSession = () => {
+  try {
+    [localStorage, sessionStorage].forEach(s => {
+      s.removeItem(TOKEN_KEY);
+      s.removeItem(USER_KEY);
+    });
+    localStorage.removeItem(REMEMBER_EMAIL);
+  } catch {}
 };
 
-const getStoredUser = () => {
-  const raw =
-    (typeof localStorage !== 'undefined' && localStorage.getItem(AUTH_USER_KEY)) ||
-    (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(AUTH_USER_KEY));
-  try { return raw ? JSON.parse(raw) : null; } catch { return null; }
-};
-
-/* ============================================================================
-   Axios + interceptor
-   ========================================================================== */
+// ==== Axios ================================================================
 axios.defaults.baseURL = API_BASE_URL;
 axios.defaults.headers.common['Accept'] = 'application/json';
 axios.defaults.headers.common['Content-Type'] = 'application/json';
 
 axios.interceptors.request.use(
   (config) => {
-    const token = getAuthToken();
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    const t = getToken();
+    if (t) config.headers.Authorization = `Bearer ${t}`;
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-/* ============================================================================
-   Gestion d’erreurs API
-   ========================================================================== */
+// ==== Helpers erreurs ======================================================
 const handleAuthError = (error) => {
   if (error?.response) {
     const { data } = error.response;
@@ -77,13 +76,10 @@ const handleAuthError = (error) => {
   return { message: error?.message || 'An error occurred', errors: {} };
 };
 
-/* ============================================================================
-   EMAIL VERIFICATION (OTP)
-   ========================================================================== */
+// ==== OTP (inchangé) =======================================================
 const EMAIL_EXISTS_EP     = '/email/exists';
 const EMAIL_SEND_CODE_EP  = '/email/verification/request';
 const EMAIL_CHECK_CODE_EP = '/email/verification/confirm';
-
 const emailRegexSimple = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const checkEmailExists = async (email, langue='fr') => {
@@ -125,7 +121,7 @@ export const preVerifyEmail = (email, langue='fr', intent='login') => async () =
     toast.success(langue === 'fr' ? 'Code envoyé par e-mail.' : 'Verification code sent.', {
       duration: 3000, position: 'top-right', color: 'bg-green-100 text-green-800 border-green-300', closable: true
     });
-    return data; // { success:true, ttl:120 }
+    return data;
   } catch (error) {
     const err = (error?.response?.data?.message) || (langue === 'fr' ? "Échec d'envoi du code." : 'Failed to send code.');
     toast.error(err, { duration: 5000, position: 'top-right' });
@@ -155,7 +151,7 @@ export const verifyEmailCode = (email, code, langue='fr') => async () => {
         { duration: 5000, position: 'top-right' }
       );
     }
-    return data; // { verified:true }
+    return data;
   } catch (error) {
     const err = (error?.response?.data?.message) || (langue === 'fr' ? 'Vérification impossible.' : 'Verification failed.');
     toast.error(err, { duration: 5000, position: 'top-right' });
@@ -163,9 +159,7 @@ export const verifyEmailCode = (email, code, langue='fr') => async () => {
   }
 };
 
-/* ============================================================================
-   AUTH: login / register / fetch / logout
-   ========================================================================== */
+// ==== AUTH ================================================================
 export const loginUser = (credentials) => async (dispatch) => {
   dispatch(loginStart());
   toast.loading(credentials.langue === 'fr' ? 'Connexion en cours...' : 'Signing in...', {
@@ -176,9 +170,18 @@ export const loginUser = (credentials) => async (dispatch) => {
     const enriched = { ...credentials, last_login: new Date().toISOString() };
     const { data } = await axios.post('/login', enriched);
 
-    saveAuthSession(data.token, data.user, !!credentials.rememberMe);
-    if (credentials.rememberMe) localStorage.setItem(REMEMBER_EMAIL, credentials.email);
-    else localStorage.removeItem(REMEMBER_EMAIL);
+    // ✅ Persistance contrôlée par rememberMe
+    saveSession(
+      data.token,
+      data.user,
+      {
+        persist: !!credentials.rememberMe,
+        rememberEmail: credentials.rememberMe ? credentials.email : null
+      }
+    );
+
+    // (optionnel) Assure l'en-tête immédiatement après login (utile avant la 1re requête interceptée)
+    axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`;
 
     dispatch(loginSuccess({
       user: data.user,
@@ -186,14 +189,14 @@ export const loginUser = (credentials) => async (dispatch) => {
       roles: data.user?.roles || [],
       permissions: data.permissions || data.user?.permissions || []
     }));
-    localStorage.setItem('tokenGuard', data.token);
+
     toast.success(credentials.langue === 'fr' ? 'Connexion réussie !' : 'Login success', {
       duration: 3000, position: 'top-right', color: 'bg-green-100 text-green-800 border-green-300', closable: true
     });
     return data;
 
   } catch (error) {
-    clearAuth();
+    clearSession();
     const err = handleAuthError(error);
     dispatch(loginFailure(err.message || 'Login failed'));
     toast.error(err.message || (credentials.langue === 'fr' ? 'Échec de la connexion' : 'Login failed'), {
@@ -226,8 +229,13 @@ export const registerUser = (userData) => async (dispatch) => {
       transformRequest: [(d) => JSON.stringify(d)],
     });
 
-    // persiste en localStorage par défaut
-    saveAuthSession(data.token, data.user, true);
+    // 🔒 Par défaut après inscription: session-only (non persistant)
+    saveSession(
+      data.token,
+      data.user,
+      { persist: false, rememberEmail: null }
+    );
+    axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`;
 
     dispatch(loginSuccess({
       user: data.user,
@@ -235,7 +243,6 @@ export const registerUser = (userData) => async (dispatch) => {
       roles: data.user?.roles || [],
       permissions: data.permissions || data.user?.permissions || []
     }));
-    localStorage.setItem('tokenGuard', data.token);
 
     toast.success(userData.langue === 'fr' ? 'Inscription réussie !' : 'Registration success', {
       duration: 3000, position: 'top-right', color: 'bg-green-100 text-green-800 border-green-300', closable: true
@@ -243,7 +250,7 @@ export const registerUser = (userData) => async (dispatch) => {
     return data;
 
   } catch (error) {
-    clearAuth();
+    clearSession();
     const err = handleAuthError(error);
     dispatch(loginFailure(err.message || 'Registration failed'));
     toast.error(err.message || (userData.langue === 'fr' ? "Échec de l'inscription" : 'Registration failed'), {
@@ -261,7 +268,7 @@ export const registerUser = (userData) => async (dispatch) => {
 };
 
 export const fetchCurrentUser = () => async (dispatch) => {
-  const token = getAuthToken();
+  const token = getToken();
   if (!token) {
     dispatch(loginFailure('No token found'));
     return;
@@ -270,9 +277,13 @@ export const fetchCurrentUser = () => async (dispatch) => {
   try {
     const { data } = await axios.get('/user');
     const user = data.user || data;
-// console.log(data);
 
-    try { getActiveStorage().setItem(AUTH_USER_KEY, JSON.stringify(user)); } catch {}
+    // 🔄 Range le user dans le même stockage que le token
+    try {
+      const where = getActiveStorage() || 'local';
+      const store = where === 'session' ? sessionStorage : localStorage;
+      store.setItem(USER_KEY, JSON.stringify(user));
+    } catch {}
 
     dispatch(loginSuccess({
       user,
@@ -282,7 +293,7 @@ export const fetchCurrentUser = () => async (dispatch) => {
     }));
     return data;
   } catch (error) {
-    clearAuth();
+    clearSession();
     const err = handleAuthError(error);
     dispatch(loginFailure(err.message || 'Fetch user failed'));
     throw err;
@@ -290,19 +301,12 @@ export const fetchCurrentUser = () => async (dispatch) => {
 };
 
 export const logoutUser = (langue) => async (dispatch) => {
-  const token = getAuthToken();
+  const token = getToken();
   if (token) {
-    try {
-      await axios.post('/logout');
-    } catch (error) {
-      toast.error(langue === 'fr' ? 'Échec de la déconnexion côté serveur!' : 'Server logout failed', {
-        duration: 5000, position: 'top-right'
-      });
-    }
+    try { await axios.post('/logout'); } catch {}
   }
-    localStorage.removeItem('tokenGuard');
-  
-  clearAuth();
+  clearSession();
+  delete axios.defaults.headers.common['Authorization'];
   dispatch(logoutAction());
   toast.success(langue === 'fr' ? 'Déconnexion réussie !' : 'Logout success', {
     duration: 3000, position: 'top-right', color: 'bg-green-100 text-green-800 border-green-300', closable: true
@@ -316,14 +320,9 @@ export const checkUnique = async (field, value, ignoreId, lang = 'fr') => {
   return data;
 };
 
-/* ============================================================================
-   Réhydratation au démarrage
-   ========================================================================== */
+// Réhydratation au démarrage (depuis sessionStorage ou localStorage)
 export const rehydrateAuthFromStorage = () => async (dispatch) => {
-  const token =
-    (typeof localStorage !== 'undefined' && localStorage.getItem(AUTH_TOKEN_KEY)) ||
-    (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(AUTH_TOKEN_KEY));
-
+  const token = getToken();
   if (!token) return;
 
   try {
@@ -331,7 +330,13 @@ export const rehydrateAuthFromStorage = () => async (dispatch) => {
     const { data } = await axios.get('/user');
     const user = data.user || data;
 
-    try { getActiveStorage().setItem(AUTH_USER_KEY, JSON.stringify(user)); } catch {}
+    try {
+      const where = getActiveStorage() || 'local';
+      const store = where === 'session' ? sessionStorage : localStorage;
+      store.setItem(USER_KEY, JSON.stringify(user));
+    } catch {}
+
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
     dispatch(loginSuccess({
       user,
@@ -340,7 +345,7 @@ export const rehydrateAuthFromStorage = () => async (dispatch) => {
       permissions: data.permissions || user?.permissions || []
     }));
   } catch {
-    clearAuth();
+    clearSession();
     dispatch(loginFailure('Session invalid'));
   }
 };

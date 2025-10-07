@@ -1,14 +1,59 @@
 // src/media-library/Comments.jsx
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import axios from "axios";
 import {
   FaUser, FaSpinner, FaTrash, FaThumbsUp, FaThumbsDown,
   FaCheck, FaTimes, FaBan, FaStar, FaEnvelope, FaSmile, FaEyeSlash,
-  FaEdit, FaSave, FaUndo, FaShieldAlt
+  FaEdit, FaSave, FaUndo, FaShieldAlt, FaEllipsisH
 } from "react-icons/fa";
 import { BsArrowDown, BsArrowUp, BsStar } from "react-icons/bs";
 
-/* ------------------ AVATAR HELPERS ------------------ */
+/* -------------------------------------------------------------------------- */
+/* ANIM HELPERS                                                               */
+/* -------------------------------------------------------------------------- */
+function useMountFade() {
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    const id = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+  return mounted;
+}
+
+// Transition de hauteur pour ouvrir/fermer un bloc à hauteur variable (réponses)
+function HeightTransition({ open, children, duration = 250, easing = 'ease' }) {
+  const innerRef = React.useRef(null);
+  const [height, setHeight] = React.useState(open ? 'auto' : 0);
+
+  React.useEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+
+    if (open) {
+      const full = el.scrollHeight;
+      setHeight(full);
+      const t = setTimeout(() => setHeight('auto'), duration);
+      return () => clearTimeout(t);
+    } else {
+      const full = el.scrollHeight;
+      requestAnimationFrame(() => {
+        setHeight(full);
+        requestAnimationFrame(() => setHeight(0));
+      });
+    }
+  }, [open, children, duration]);
+
+  return (
+    <div style={{ height, transition: `height ${duration}ms ${easing}`, overflow: 'hidden' }} aria-hidden={!open}>
+      <div ref={innerRef}>{children}</div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* AVATAR HELPERS                                                             */
+/* -------------------------------------------------------------------------- */
 const PLACEHOLDER_AVATAR = "https://randomuser.me/api/portraits/lego/2.jpg";
 const cleanBaseStorage = () => (import.meta.env.VITE_API_BASE_STORAGE || "").replace(/\/+$/,"");
 function buildAvatarSrc(avatar_url, updated_at) {
@@ -21,7 +66,9 @@ function buildAvatarSrc(avatar_url, updated_at) {
   return `${abs}${abs.includes("?") ? "&" : "?"}${t ? `${t}&` : ""}${cb}`;
 }
 
-/* ------------------ axios helpers ------------------ */
+/* -------------------------------------------------------------------------- */
+/* axios helpers                                                              */
+/* -------------------------------------------------------------------------- */
 function makeAxios(token) {
   const base = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/,"");
   const apiBase = `${base.replace(/\/api\/?$/,'')}/api`;
@@ -63,8 +110,10 @@ function extractLaravelError(err) {
   return d?.message || err.message || 'Erreur inconnue';
 }
 
-/* ------------------ Emoji picker (no deps) ------------------ */
-function EmojiPopover({ onSelect, onClose, title = "Emojis pro" }) {
+/* -------------------------------------------------------------------------- */
+/* Emoji picker (no deps)                                                     */
+/* -------------------------------------------------------------------------- */
+function EmojiPopover({ onSelect, onClose, title = "Emojis" }) {
   const EMOJIS = [
     "😀","😁","😂","🤣","😊","😍","😘","😎","🙂","🙃","🤩","😇","🤔","🤨","😅","😭","😡",
     "👍","👎","🙏","👏","💯","🔥","✨","🎉","✅","❌","⚠️","💡","📌","📣","⏳","📅","📝","🔗","❤️","🚀",
@@ -76,7 +125,7 @@ function EmojiPopover({ onSelect, onClose, title = "Emojis pro" }) {
   ];
   return (
     <div
-      className="absolute bottom-full mb-2 right-0 w-72 max-h-64 overflow-auto bg-white border border-gray-200 rounded-xl shadow-lg p-2 z-50"
+      className="absolute bottom-full mb-2 right-0 w-72 max-h-64 overflow-auto bg-white border border-gray-200 rounded-xl shadow-lg p-2 z-[9999]"
       role="dialog"
       aria-label="Sélecteur d’emojis"
       onClick={(e)=>e.stopPropagation()}
@@ -130,7 +179,7 @@ function ApproveModal({ open, onClose, onConfirm, comment }) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200">
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
@@ -178,9 +227,7 @@ function useMeFromLaravel() {
     try {
       return (
         localStorage.getItem("auth_token") ||
-        sessionStorage.getItem("auth_token") ||
         localStorage.getItem("tokenGuard") ||
-        sessionStorage.getItem("tokenGuard") ||
         null
       );
     } catch { return null; }
@@ -192,9 +239,8 @@ function useMeFromLaravel() {
       if (!token) { setMe({ user: null, roles: [], permissions: [] }); return; }
       try {
         setLoading(true);
-        const { data } = await axios.get('/user', {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
+        const api = makeAxios(token);
+        const { data } = await api.get('/user');
         const user = data?.user || data || null;
         const roles = data?.roles || user?.roles || [];
         const permissions = data?.permissions || user?.permissions || [];
@@ -235,7 +281,7 @@ function computeRights(permissions = [], roles = [], user = {}) {
   return { isModerator, isAdmin, canDeleteAny };
 }
 
-/* --------- BADGE RÔLE --------- */
+/* --------- BADGES --------- */
 function RoleBadge({ variant }) {
   if (!variant) return null;
   const isAdmin = variant === "admin";
@@ -248,6 +294,172 @@ function RoleBadge({ variant }) {
     </span>
   );
 }
+const Chip = ({ className="", children }) => (
+  <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full ${className}`}>{children}</span>
+);
+
+/* --------- TOOLBAR --------- */
+function Toolbar({ sortRoot, setSortRoot, featuredFirstRoot, setFeaturedFirstRoot, resetLists }) {
+  return (
+    <div className="mb-3 flex items-center justify-end gap-2">
+      <button
+        type="button"
+        onClick={() => { setSortRoot(prev => (prev === "newest" ? "oldest" : "newest")); resetLists?.(); }}
+        title={sortRoot === "newest" ? "Plus récent → moins récent" : "Plus ancien → plus récent"}
+        aria-label="Basculer l’ordre de tri"
+        className="w-8 h-8 inline-flex items-center justify-center rounded-md border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 transition"
+      >
+        {sortRoot === "newest"
+          ? <BsArrowDown className="w-3 h-3 text-gray-700" />
+          : <BsArrowUp className="w-3 h-3 text-gray-700" />
+        }
+      </button>
+
+      <label
+        className="w-8 h-8 inline-flex items-center justify-center rounded-md border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 transition cursor-pointer"
+        title="Mettre les commentaires en avant en priorité"
+        aria-label="Mis en avant d’abord"
+      >
+        <input
+          type="checkbox"
+          className="sr-only"
+          checked={featuredFirstRoot}
+          onChange={(e) => { setFeaturedFirstRoot(e.target.checked); resetLists?.(); }}
+        />
+        <BsStar className={`w-3 h-3 ${featuredFirstRoot ? "text-amber-500" : "text-gray-500"}`} />
+      </label>
+    </div>
+  );
+}
+
+/* --------- ÉDITEUR inline réutilisable --------- */
+function EditableArea({ value, onChange, onSave, onCancel, saving=false, placeholder="Modifier…" }) {
+  const ref = useRef(null);
+  useEffect(() => { ref.current?.focus(); }, []);
+  return (
+    <div className="mt-2">
+      <textarea
+        ref={ref}
+        className="w-full border border-blue-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        rows={3}
+        value={value}
+        onChange={(e)=>onChange(e.target.value)}
+        placeholder={placeholder}
+        disabled={saving}
+      />
+      <div className="mt-2 flex gap-2">
+        <button
+          onClick={onSave}
+          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs disabled:opacity-50"
+          disabled={saving || !value.trim()}
+        >
+          <FaSave className="inline mr-2" /> Enregistrer
+        </button>
+        <button
+          onClick={onCancel}
+          className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg text-xs"
+        >
+          <FaUndo className="inline mr-2" /> Annuler
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* --------- MENU D’ACTIONS COMPACT (portal + z-index très élevé) --------- */
+function ActionsMenu({ children }) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  const updatePos = useCallback(() => {
+    if (!btnRef.current) return;
+    const r = btnRef.current.getBoundingClientRect();
+    const mw = menuRef.current?.offsetWidth || 176;
+    const mh = menuRef.current?.offsetHeight || 0;
+
+    let left = r.right - mw;
+    let top  = r.bottom + 6;
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    if (left < 8) left = 8;
+    if (left + mw > vw - 8) left = vw - mw - 8;
+    if (top + mh > vh - 8) top = Math.max(8, r.top - mh - 6);
+
+    setPos({ top, left });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    updatePos();
+    const onScroll = () => updatePos();
+    const onResize = () => updatePos();
+    document.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      document.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [open, updatePos]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => {
+      const inBtn  = btnRef.current?.contains(e.target);
+      const inMenu = menuRef.current?.contains(e.target);
+      if (!inBtn && !inMenu) setOpen(false);
+    };
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("mousedown", onDown, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative inline-flex">
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-8 h-8 inline-flex items-center justify-center rounded-md border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 transition"
+        title="Actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <FaEllipsisH className="text-gray-700" />
+      </button>
+
+      {open && createPortal(
+        <div
+          ref={menuRef}
+          role="menu"
+          className="w-44 bg-white border border-gray-200 rounded-xl shadow-xl p-1"
+          style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 100000 }}
+        >
+          {children}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+const MenuItem = ({ onClick, icon:Icon, children, danger, title }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-gray-50 ${danger ? "text-red-600 hover:text-red-700" : "text-gray-700"}`}
+    role="menuitem"
+  >
+    {Icon && <Icon className={danger ? "opacity-90" : "text-gray-500"} />}
+    <span>{children}</span>
+  </button>
+);
 
 /* ------------------ Main component ------------------ */
 export default function Comments({
@@ -288,11 +500,10 @@ export default function Comments({
   const replyRef = useRef(null);
   const emojiReplyWrapRef = useRef(null);
 
-  // ---- ÉDITION ----
-  const [editingId, setEditingId] = useState(null);
+  // ---- ÉDITION factorisée ----
+  const [editingId, setEditingId] = useState(null); // id du node (comment ou reply)
   const [editText, setEditText] = useState("");
   const [editBusy, setEditBusy] = useState(false);
-  const editRef = useRef(null);
 
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
@@ -305,10 +516,10 @@ export default function Comments({
   const sentinelRef = useRef(null);
   const canLoad = !!articleId && !loading && hasMore;
 
-  // ---- TRI (icônes only) ----
+  // ---- TRI ----
   const [sortRoot, setSortRoot] = useState("newest");          // newest | oldest
   const [featuredFirstRoot, setFeaturedFirstRoot] = useState(true);
-  const sortReplies = sortRoot; // les réponses suivent le tri des commentaires
+  const sortReplies = sortRoot;
 
   /* ========= Utils ========= */
   function normalizeComment(c, seed, i = 0) {
@@ -318,7 +529,6 @@ export default function Comments({
     const email = u.email || c?.guest_email || "";
     const created = c?.created_at ? new Date(c.created_at) : null;
 
-    // avatar
     const avatarRaw = u?.avatar_url_full || u?.avatar_url || c?.avatar_url || null;
     const avatar = buildAvatarSrc(avatarRaw, u?.updated_at || c?.updated_at || null);
 
@@ -331,13 +541,13 @@ export default function Comments({
       date: created ? created.toLocaleDateString() : "—",
       created_ts: created ? created.getTime() : 0,
       content: c?.content || c?.body || "",
-      status: c?.status || "approved",
+      status: (c?.status || "approved").toLowerCase(),
       featured: !!(c?.is_featured ?? c?.featured ?? c?.pinned ?? c?._pinned),
       like_count: c?.like_count ?? 0,
       dislike_count: c?.dislike_count ?? 0,
       reply_count: c?.reply_count ?? 0,
-      _liked: false,
-      _disliked: false,
+      _liked: !!c?._liked,
+      _disliked: !!c?._disliked,
       _raw: c,
     };
   }
@@ -356,25 +566,59 @@ export default function Comments({
     return false;
   }, [isModerator, isAdmin, isSelf]);
 
-  // On respecte l'ordre du serveur → on filtre juste côté client
   const visibleComments = useMemo(() => comments.filter(isVisible), [comments, isVisible]);
 
   const canSeeDeleteFor = useCallback((node) => {
     return isAdmin || isModerator || canDeleteAny || isSelf(node);
   }, [isAdmin, isModerator, canDeleteAny, isSelf]);
 
-  function canEdit(node) {
+  const canEdit = useCallback((node) => {
     if (!token) return false;
     if (!isSelf(node)) return false;
     const status = (node?.status || "").toLowerCase();
-    if (status === "approved") return false;
-    if (status === "rejected" || status === "spam") return false;
+    if (status === "approved" || status === "rejected" || status === "spam") return false;
     const replies = Number(node?.reply_count || 0);
     if (replies > 0) return false;
     return true;
-  }
+  }, [token, isSelf]);
 
-  /* ========= Chargement liste (observe tri) ========= */
+  /* ---- Helpers de MAJ pour commentaires & réponses ---- */
+  const findNodeById = useCallback((id) => {
+    const inComments = comments.find(c => c.id === id);
+    if (inComments) return inComments;
+    for (const k in repliesMap) {
+      const arr = repliesMap[k]?.items || [];
+      const found = arr.find(x => x.id === id);
+      if (found) return found;
+    }
+    return null;
+  }, [comments, repliesMap]);
+
+  const updateNodeById = useCallback((id, updater) => {
+    // update in root comments
+    setComments(prev => prev.map(c => (c.id === id ? updater(c) : c)));
+    // update in replies
+    setRepliesMap(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const pid in next) {
+        const r = next[pid];
+        const items = r.items || [];
+        let any = false;
+        const newItems = items.map(it => {
+          if (it.id === id) { any = true; return updater(it); }
+          return it;
+        });
+        if (any) {
+          next[pid] = { ...r, items: newItems };
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, []);
+
+  /* ========= Chargement liste ========= */
   useEffect(() => {
     if (!articleId) return;
     setLoading(true);
@@ -413,7 +657,7 @@ export default function Comments({
     return () => obs.disconnect();
   }, [infinite, canLoad]);
 
-  /* ========= Fermer popovers emoji ========= */
+  /* ========= Gestion fermetures popovers emoji ========= */
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") {
@@ -499,51 +743,88 @@ export default function Comments({
     }
   }, [api, seed, token, sortReplies]);
 
+  // --- helpers like/dislike (optimistes, pour commentaires ET réponses)
+  const softToggleLike = useCallback((node) => {
+    const nowLiked = !node._liked;
+    const likeDelta = nowLiked ? 1 : -1;
+    const undoDislike = node._disliked ? 1 : 0;
+    return {
+      ...node,
+      _liked: nowLiked,
+      _disliked: false,
+      like_count: Math.max(0, node.like_count + likeDelta),
+      dislike_count: Math.max(0, node.dislike_count - undoDislike),
+    };
+  }, []);
+  const softToggleDislike = useCallback((node) => {
+    const now = !node._disliked;
+    const dDelta = now ? 1 : -1;
+    const undoLike = node._liked ? 1 : 0;
+    return {
+      ...node,
+      _disliked: now,
+      _liked: false,
+      dislike_count: Math.max(0, node.dislike_count + dDelta),
+      like_count: Math.max(0, node.like_count - undoLike),
+    };
+  }, []);
+
   const handleLike = useCallback(async (id) => {
     try {
-      setComments(prev => prev.map(c => {
-        if (c.id !== id) return c;
-        const nowLiked = !c._liked;
-        const likeDelta = nowLiked ? 1 : -1;
-        const undoDislike = c._disliked ? 1 : 0;
-        return { ...c, _liked: nowLiked, _disliked: false, like_count: c.like_count + likeDelta, dislike_count: c.dislike_count - undoDislike };
-      }));
-      const target = comments.find(c => c.id === id);
-      const action = target?._liked ? "unlike" : "like";
-      await api.like(id, action === "like" ? "like" : "unlike");
+      const before = findNodeById(id);
+      const prevLiked = !!before?._liked;
+      updateNodeById(id, softToggleLike);
+      await api.like(id, prevLiked ? "unlike" : "like");
     } catch (err) {
       console.error("Erreur like:", err);
       setLocalError(extractLaravelError(err));
     }
-  }, [api, comments]);
+  }, [api, findNodeById, updateNodeById, softToggleLike]);
 
   const handleDislike = useCallback(async (id) => {
     try {
-      setComments(prev => prev.map(c => {
-        if (c.id !== id) return c;
-        const now = !c._disliked;
-        const dDelta = now ? 1 : -1;
-        const undoLike = c._liked ? 1 : 0;
-        return { ...c, _disliked: now, _liked: false, dislike_count: c.dislike_count + dDelta, like_count: c.like_count - undoLike };
-      }));
-      const target = comments.find(c => c.id === id);
-      const action = target?._disliked ? "undislike" : "dislike";
-      await api.dislike(id, action === "dislike" ? "dislike" : "undislike");
+      const before = findNodeById(id);
+      const prevDisliked = !!before?._disliked;
+      updateNodeById(id, softToggleDislike);
+      await api.dislike(id, prevDisliked ? "undislike" : "dislike");
     } catch (err) {
       console.error("Erreur dislike:", err);
       setLocalError(extractLaravelError(err));
     }
-  }, [api, comments]);
+  }, [api, findNodeById, updateNodeById, softToggleDislike]);
 
   // --- Approve modal state ---
   const [approveFor, setApproveFor] = useState(null);
   const openApproveModal = (c) => setApproveFor({ id: c.id, author: c.author, email: c.email, content: c.content });
   const closeApproveModal = () => setApproveFor(null);
+  const applyServerUpdate = useCallback((updated) => {
+    const norm = normalizeComment(updated, seed);
+    setComments(prev => prev.map(c => (c.id === norm.id ? norm : c)));
+    setRepliesMap(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const pid in next) {
+        const r = next[pid];
+        const items = r.items || [];
+        let any = false;
+        const newItems = items.map(it => (it.id === norm.id ? norm : it));
+        if (items.length !== newItems.length || newItems.some((it, i) => it !== items[i])) {
+          any = true;
+        }
+        if (any) {
+          next[pid] = { ...r, items: newItems };
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [seed]);
+
   const confirmApprove = async (notes) => {
     if (!approveFor) return;
     try {
       const updated = await api.approve(approveFor.id, notes || null);
-      setComments(prev => prev.map(c => c.id === approveFor.id ? normalizeComment(updated, seed) : c));
+      applyServerUpdate(updated);
       closeApproveModal();
     } catch (err) {
       setLocalError(extractLaravelError(err));
@@ -553,31 +834,31 @@ export default function Comments({
   const handleReject = useCallback(async (id, notes = "Non conforme") => {
     try {
       const updated = await api.reject(id, notes);
-      setComments(prev => prev.map(c => c.id === id ? normalizeComment(updated, seed) : c));
+      applyServerUpdate(updated);
     } catch (err) {
       setLocalError(extractLaravelError(err));
     }
-  }, [api, seed]);
+  }, [api, applyServerUpdate]);
 
   const handleSpam = useCallback(async (id, notes = null) => {
     try {
       const updated = await api.spam(id, notes);
-      setComments(prev => prev.map(c => c.id === id ? normalizeComment(updated, seed) : c));
+      applyServerUpdate(updated);
     } catch (err) {
       setLocalError(extractLaravelError(err));
     }
-  }, [api, seed]);
+  }, [api, applyServerUpdate]);
 
   const handleFeature = useCallback(async (id, featured = true) => {
     try {
       const updated = await api.feature(id, featured);
-      setComments(prev => prev.map(c => c.id === id ? normalizeComment(updated, seed) : c));
+      applyServerUpdate(updated);
     } catch (err) {
       setLocalError(extractLaravelError(err));
     }
-  }, [api, seed]);
+  }, [api, applyServerUpdate]);
 
-  /* ========= Réponses: open/close/fetch (observe tri) ========= */
+  /* ========= Réponses ========= */
   const fetchReplies = useCallback(async (parentId, nextPage = 1, per = 3) => {
     setRepliesMap(prev => {
       const r = prev[parentId] || { items: [], page: 0, last_page: 1, per_page: per, open: true, loading: false, error: null };
@@ -642,68 +923,47 @@ export default function Comments({
     });
   }, []);
 
-  /* ---------------- UI ---------------- */
+  /* ---------------- RENDER ---------------- */
   const meBanner = currentUser && (
-    <div className="mb-4 flex items-center gap-3 text-sm text-gray-700 px-3 py-2">
-      {(isAdmin || isModerator) && (
-        <RoleBadge variant={isAdmin ? "admin" : "moderator"} />
-      )}
+    <div className="mb-2 flex items-center gap-3 text-sm text-gray-700 px-3 py-2 rounded-xl bg-gray-50">
+      {currentUser?.username || `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "Vous"}
+      {(isAdmin || isModerator) && <RoleBadge variant={isAdmin ? "admin" : "moderator"} />}
     </div>
   );
 
-  // --- Toolbar ultra-épurée (icônes only) ---
-  const toolbar = (
-    <div className="mb-3 flex items-center justify-end gap-2">
-      {/* Toggle ordre (↓ / ↑) */}
-      <button
-        type="button"
-        onClick={() => { setSortRoot(prev => (prev === "newest" ? "oldest" : "newest")); setPage(1); setRepliesMap({}); }}
-        title={sortRoot === "newest" ? "Plus récent → moins récent" : "Plus ancien → plus récent"}
-        aria-label="Basculer l’ordre de tri"
-        className="w-8 h-8 inline-flex items-center justify-center rounded-md border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 transition"
-      >
-        {sortRoot === "newest"
-          ? <BsArrowDown className="w-3 h-3 text-gray-700" />
-          : <BsArrowUp className="w-3 h-3 text-gray-700" />
-        }
-      </button>
-
-      {/* Checkbox “mis en avant d’abord” */}
-      <label
-        className="w-8 h-8 inline-flex items-center justify-center rounded-md border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 transition cursor-pointer"
-        title="Mettre les commentaires en avant en priorité"
-        aria-label="Mis en avant d’abord"
-      >
-        <input
-          type="checkbox"
-          className="sr-only"
-          checked={featuredFirstRoot}
-          onChange={(e) => { setFeaturedFirstRoot(e.target.checked); setPage(1); }}
-        />
-        <BsStar className={`w-3 h-3 ${featuredFirstRoot ? "text-amber-500" : "text-gray-500"}`} />
-      </label>
-    </div>
-  );
+  const resetLists = () => { setPage(1); setRepliesMap({}); };
+  const mounted = useMountFade();
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-800 mb-3 flex items-center">Commentaires</h2>
-      <div className="flex flex-raw gap-3 mb-4 justify-between">
+      <h2 className="text-xl font-semibold text-gray-900 mb-2">Commentaires</h2>
+
+      <div className="flex flex-row gap-3 mb-3 justify-between items-center">
         {meLoading ? (
-          <div className="mb-4 flex items-center text-sm text-gray-600">
+          <div className="flex items-center text-sm text-gray-600">
             <FaSpinner className="animate-spin mr-2" /> Chargement de votre profil…
           </div>
         ) : meBanner}
-        {toolbar}
+        <Toolbar
+          sortRoot={sortRoot}
+          setSortRoot={setSortRoot}
+          featuredFirstRoot={featuredFirstRoot}
+          setFeaturedFirstRoot={setFeaturedFirstRoot}
+          resetLists={resetLists}
+        />
       </div>
 
       {localError && (
-        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md text-sm whitespace-pre-line">{localError}</div>
+        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm whitespace-pre-line border border-red-200">{localError}</div>
       )}
 
-      <div className="comment-box bg-white p-5 rounded-xl mb-6 border border-gray-200/50 shadow-sm overflow-y-auto" style={{ maxHeight: "520px" }}>
+      <div
+        className={`bg-white p-4 rounded-2xl mb-6 border border-gray-100 shadow-sm overflow-y-auto transform transition
+                    ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
+        style={{ maxHeight: "520px" }}
+      >
         {loading && comments.length === 0 && (
-          <div className="flex items-center justify-center py-4">
+          <div className="flex items-center justify-center py-6">
             <FaSpinner className="animate-spin mr-2" />
             <span className="text-sm text-gray-500">Chargement des commentaires…</span>
           </div>
@@ -713,563 +973,369 @@ export default function Comments({
           <p className="text-sm text-gray-500">Aucun commentaire.</p>
         )}
 
-        {visibleComments.map((c) => {
-          const r = repliesMap[c.id] || {};
-          const visibleReplies = (r.items || []).filter(isVisible);
-          const hasReplies = (c.reply_count ?? 0) > 0 || visibleReplies.length > 0;
-          const showToggle = hasReplies || r.open;
-          const showDeleteThis = canSeeDeleteFor(c);
-          const allowEdit = canEdit(c);
-          const isEditing = editingId === c.id;
+        <div className="space-y-5">
+          {visibleComments.map((c, idx) => {
+            const r = repliesMap[c.id] || {};
+            const visibleReplies = (r.items || []).filter(isVisible);
+            const hasReplies = (c.reply_count ?? 0) > 0 || visibleReplies.length > 0; // (non utilisé ici mais utile si besoin)
+            const showDeleteThis = canSeeDeleteFor(c);
+            const allowEdit = canEdit(c);
+            const isEditing = editingId === c.id;
+            const showMyRoleBadge = isSelf(c) && (isAdmin || isModerator);
 
-          const wrapperBase = "group relative flex mb-6 pb-6 border-b last:border-b-0 last:mb-0 last:pb-0";
-          const wrapperFeatured = "bg-amber-50/60 border-amber-300 rounded-xl ring-1 ring-amber-300/60 p-3 -mx-3 px-4";
-          const borderLine = "border-b border-gray-200/50";
-          const containerClass = `${wrapperBase} ${c.featured ? wrapperFeatured : borderLine}`;
-
-          const showMyRoleBadge = isSelf(c) && (isAdmin || isModerator);
-
-          return (
-          <div key={c.id} className={containerClass}>
-            {(showDeleteThis || isModerator || isAdmin || allowEdit) && (
-              <div className="absolute right-0 top-0 flex items-center gap-3 bg-white/90 backdrop-blur px-2 py-1 rounded-bl-lg border border-gray-200
-                              opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                {allowEdit && !isEditing && (
-                  <button
-                    onClick={() => { setEditingId(c.id); setEditText(c.content); setTimeout(()=>editRef.current?.focus(),0); }}
-                    className="text-blue-600 hover:text-blue-800 text-xs"
-                    title="Modifier"
-                  >
-                    <div className="flex flex-col items-center">
-                      <FaEdit /> <span>Modifier</span>
-                    </div>
-                  </button>
-                )}
-
-                {isEditing && (
-                  <>
-                    <button
-                      onClick={async () => {
-                        if (!editText.trim()) return;
-                        setEditBusy(true);
-                        try {
-                          const updated = await api.update(c.id, { content: editText.trim() });
-                          setComments(prev => prev.map(x => x.id === c.id ? normalizeComment(updated, seed) : x));
-                          setEditingId(null);
-                          setEditText("");
-                        } catch (err) {
-                          setLocalError(extractLaravelError(err));
-                        } finally {
-                          setEditBusy(false);
-                        }
-                      }}
-                      className="text-green-600 hover:text-green-800 text-xs disabled:opacity-50"
-                      disabled={editBusy || !editText.trim()}
-                      title="Enregistrer"
-                    >
-                      <div className="flex flex-col items-center">
-                        <FaSave /> <span>Enregistrer</span>
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => { setEditingId(null); setEditText(""); }}
-                      className="text-gray-600 hover:text-gray-800 text-xs"
-                      title="Annuler"
-                    >
-                      <div className="flex flex-col items-center">
-                        <FaUndo /> <span>Annuler</span>
-                      </div>
-                    </button>
-                  </>
-                )}
-
-                {showDeleteThis && (
-                  <button
-                    onClick={() => handleDeleteComment(c.id, null)}
-                    className="text-red-600 hover:text-red-800 text-xs"
-                    title="Supprimer"
-                  >
-                    <div className="flex flex-col items-center">
-                      <FaTrash /> <span>Supprimer</span>
-                    </div>
-                  </button>
-                )}
-
-                {/* === Boutons MODÉRATION (rétablis) === */}
-                {(isModerator || isAdmin) && !isEditing && (
-                  <>
-                    <button
-                      onClick={() => openApproveModal(c)}
-                      className="text-green-600 hover:text-green-800 text-xs"
-                      title="Approuver"
-                    >
-                      <div className="flex flex-col items-center">
-                        <FaCheck /> <span>Approuver</span>
-                      </div>
-                    </button>
-
-                    <button
-                      onClick={() => handleReject(c.id)}
-                      className="text-orange-600 hover:text-orange-800 text-xs"
-                      title="Rejeter"
-                    >
-                      <div className="flex flex-col items-center">
-                        <FaTimes /> <span>Rejeter</span>
-                      </div>
-                    </button>
-
-                    <button
-                      onClick={() => handleSpam(c.id)}
-                      className="text-pink-600 hover:text-pink-800 text-xs"
-                      title="Spam"
-                    >
-                      <div className="flex flex-col items-center">
-                        <FaBan /> <span>Spam</span>
-                      </div>
-                    </button>
-
-                    <button
-                      onClick={() => handleFeature(c.id, !c.featured)}
-                      className={`${c.featured ? "text-amber-600 hover:text-amber-700" : "text-yellow-600 hover:text-yellow-800"} text-xs`}
-                      title={c.featured ? "Retirer de l'avant" : "Mettre en avant"}
-                    >
-                      <div className="flex flex-col items-center">
-                        <FaStar />
-                        <span>{c.featured ? "Retirer" : "En avant"}</span>
-                      </div>
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Avatar */}
-            <div className="w-10 h-10 rounded-full mr-3 flex-shrink-0 overflow-hidden border border-blue-200 bg-blue-100 flex items-center justify-center">
-              {c.avatar ? (
-                <img
-                  src={c.avatar}
-                  alt="avatar"
-                  className="w-full h-full object-cover"
-                  onError={(e)=>{ e.currentTarget.src = PLACEHOLDER_AVATAR; }}
-                />
-              ) : (
-                <FaUser className="text-blue-600 text-sm" />
-              )}
-            </div>
-
-            {/* Body */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate flex items-center gap-2">
-                    {c.author}
-                    {showMyRoleBadge && <RoleBadge variant={isAdmin ? "admin" : "moderator"} />}
-                    {c.featured && (
-                      <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                        <FaStar className="opacity-90" />
-                        Mis en avant
-                      </span>
-                    )}
-                    {c.status !== "approved" && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 align-middle">
-                        {c.status === "pending" ? "En modération" : c.status}
-                      </span>
-                    )}
-                  </p>
-                  {c.email && (
-                    <p className="text-xs text-gray-500 flex items-center mt-0.5">
-                      <FaEnvelope className="mr-1 opacity-70" /> {c.email}
-                    </p>
-                  )}
-                </div>
-                <p className="text-xs text-gray-500">{c.date}</p>
-              </div>
-
-              {/* Badge auteur si non approuvé */}
-              {c.status !== "approved" && isSelf(c) && (
-                <div className="mt-1">
-                  <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                    <FaEyeSlash className="opacity-70" />
-                    Vous seul(e) pouvez voir ce commentaire
-                  </span>
-                </div>
-              )}
-
-              {/* Contenu / Édition */}
-              {!isEditing ? (
-                <p className="text-sm mt-1 whitespace-pre-line break-words">{c.content}</p>
-              ) : (
-                <div className="mt-2">
-                  <textarea
-                    ref={editRef}
-                    className="w-full border border-blue-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    rows={3}
-                    value={editText}
-                    onChange={(e)=>setEditText(e.target.value)}
-                    placeholder="Modifier votre commentaire…"
-                    disabled={editBusy}
-                  />
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      onClick={async () => {
-                        if (!editText.trim()) return;
-                        setEditBusy(true);
-                        try {
-                          const updated = await api.update(c.id, { content: editText.trim() });
-                          setComments(prev => prev.map(x => x.id === c.id ? normalizeComment(updated, seed) : x));
-                          setEditingId(null);
-                          setEditText("");
-                        } catch (err) {
-                          setLocalError(extractLaravelError(err));
-                        } finally {
-                          setEditBusy(false);
-                        }
-                      }}
-                      className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs disabled:opacity-50"
-                      disabled={editBusy || !editText.trim()}
-                    >
-                      <FaSave className="inline mr-2" /> Enregistrer
-                    </button>
-                    <button
-                      onClick={() => { setEditingId(null); setEditText(""); }}
-                      className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg text-xs"
-                    >
-                      <FaUndo className="inline mr-2" /> Annuler
-                    </button>
+            return (
+              <article
+                key={c.id}
+                className={`group relative rounded-2xl border
+                            ${c.featured ? "border-amber-300/70 bg-amber-50/40" : "border-gray-100 bg-gray-50/50"}
+                            p-4 hover:shadow-sm transition-all transform
+                            ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
+                style={{ transitionDuration: '300ms', transitionDelay: `${idx * 25}ms` }}
+              >
+                {/* HEAD */}
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full overflow-hidden border border-blue-200 bg-blue-100 flex items-center justify-center flex-shrink-0">
+                    {c.avatar ? (
+                      <img
+                        src={c.avatar}
+                        alt="avatar"
+                        className="w-full h-full object-cover"
+                        onError={(e)=>{ e.currentTarget.src = PLACEHOLDER_AVATAR; }}
+                      />
+                    ) : <FaUser className="text-blue-600 text-sm" />}
                   </div>
-                </div>
-              )}
 
-              {/* Actions */}
-              <div className="mt-2 flex items-center gap-3 text-xs">
-                <button onClick={() => handleLike(c.id)} className="flex items-center gap-1 text-gray-600 hover:text-blue-700">
-                  <FaThumbsUp className={c._liked ? "opacity-100" : "opacity-60"} />
-                  {c.like_count}
-                </button>
-                <button onClick={() => handleDislike(c.id)} className="flex items-center gap-1 text-gray-600 hover:text-blue-700">
-                  <FaThumbsDown className={c._disliked ? "opacity-100" : "opacity-60"} />
-                  {c.dislike_count}
-                </button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-medium text-gray-900 truncate">{c.author}</p>
+                          {showMyRoleBadge && <RoleBadge variant={isAdmin ? "admin" : "moderator"} />}
+                          {c.featured && <Chip className="bg-amber-100 text-amber-800"><FaStar /> Mis en avant</Chip>}
+                          {c.status !== "approved" && (
+                            <Chip className="bg-yellow-100 text-yellow-700">
+                              {c.status === "pending" ? "En modération" : c.status}
+                            </Chip>
+                          )}
+                        </div>
+                        {c.email && (
+                          <p className="text-xs text-gray-500 flex items-center mt-0.5">
+                            <FaEnvelope className="mr-1 opacity-70" /> {c.email}
+                          </p>
+                        )}
+                      </div>
 
-                <button onClick={() => setReplyTo(c.id)} className="text-blue-700 hover:underline">Répondre</button>
-              </div>
+                      {(showDeleteThis || allowEdit || isModerator || isAdmin) && (
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                          <ActionsMenu>
+                            {allowEdit && !isEditing && (
+                              <MenuItem
+                                onClick={() => { setEditingId(c.id); setEditText(c.content); }}
+                                icon={FaEdit}
+                              >
+                                Modifier
+                              </MenuItem>
+                            )}
+                            {showDeleteThis && (
+                              <MenuItem
+                                onClick={() => handleDeleteComment(c.id, null)}
+                                icon={FaTrash}
+                                danger
+                              >
+                                Supprimer
+                              </MenuItem>
+                            )}
+                            {(isModerator || isAdmin) && !isEditing && (
+                              <>
+                                <MenuItem onClick={() => openApproveModal(c)} icon={FaCheck}>Approuver</MenuItem>
+                                <MenuItem onClick={() => handleReject(c.id)} icon={FaTimes}>Rejeter</MenuItem>
+                                <MenuItem onClick={() => handleSpam(c.id)} icon={FaBan}>Spam</MenuItem>
+                                <MenuItem onClick={() => handleFeature(c.id, !c.featured)} icon={FaStar}>
+                                  {c.featured ? "Retirer de l'avant" : "Mettre en avant"}
+                                </MenuItem>
+                              </>
+                            )}
+                          </ActionsMenu>
+                        </div>
+                      )}
+                    </div>
 
-              {/* Toggle réponses */}
-              {(() => {
-                const r = repliesMap[c.id] || {};
-                const hasReplies = (c.reply_count ?? 0) > 0 || (r.items || []).length > 0;
-                if (!hasReplies && !r.open) return null;
-                return (
-                  <div className="mt-2">
-                    {r.open ? (
-                      <button onClick={() => closeReplies(c.id)} className="text-xs text-gray-600 hover:text-blue-700">
-                        Masquer les réponses
-                      </button>
+                    {c.status !== "approved" && isSelf(c) && (
+                      <div className="mt-1">
+                        <Chip className="bg-gray-100 text-gray-600"><FaEyeSlash className="opacity-70" /> Vous seul(e) voyez ce commentaire</Chip>
+                      </div>
+                    )}
+
+                    {/* Contenu / édition */}
+                    {!isEditing ? (
+                      <p className="text-sm mt-2 whitespace-pre-line break-words text-gray-800">{c.content}</p>
                     ) : (
-                      <button onClick={() => openReplies(c.id)} className="text-xs text-gray-600 hover:text-blue-700">
-                        Afficher les réponses{typeof c.reply_count === "number" ? ` (${c.reply_count})` : ""}
+                      <EditableArea
+                        value={editText}
+                        onChange={setEditText}
+                        saving={editBusy}
+                        placeholder="Modifier votre commentaire…"
+                        onSave={async () => {
+                          if (!editText.trim()) return;
+                          setEditBusy(true);
+                          try {
+                            const updated = await api.update(c.id, { content: editText.trim() });
+                            setComments(prev => prev.map(x => x.id === c.id ? normalizeComment(updated, seed) : x));
+                            setEditingId(null);
+                            setEditText("");
+                          } catch (err) {
+                            setLocalError(extractLaravelError(err));
+                          } finally {
+                            setEditBusy(false);
+                          }
+                        }}
+                        onCancel={() => { setEditingId(null); setEditText(""); }}
+                      />
+                    )}
+
+                    {/* Actions rapides */}
+                    <div className="mt-2 flex items-center gap-3 text-xs">
+                      <button onClick={() => handleLike(c.id)} className="flex items-center gap-1 text-gray-600 hover:text-blue-700">
+                        <FaThumbsUp className={c._liked ? "opacity-100" : "opacity-60"} />
+                        {c.like_count}
                       </button>
-                    )}
-                  </div>
-                );
-              })()}
+                      <button onClick={() => handleDislike(c.id)} className="flex items-center gap-1 text-gray-600 hover:text-blue-700">
+                        <FaThumbsDown className={c._disliked ? "opacity-100" : "opacity-60"} />
+                        {c.dislike_count}
+                      </button>
+                      <button onClick={() => setReplyTo(c.id)} className="text-blue-700 hover:underline">Répondre</button>
+                    </div>
 
-              {/* Bloc réponses */}
-              {(() => {
-                const r = repliesMap[c.id] || {};
-                if (!r.open) return null;
-                const visibleReplies = (r.items || []).filter(isVisible);
-                return (
-                  <div className="mt-3 pl-6 border-l border-gray-200">
-                    {r.error && (
-                      <div className="mb-2 p-2 bg-red-50 text-red-700 text-xs rounded">{r.error}</div>
-                    )}
+                    {/* Toggle réponses */}
+                    {(() => {
+                      const r = repliesMap[c.id] || {};
+                      const has = (c.reply_count ?? 0) > 0 || (r.items || []).length > 0;
+                      if (!has && !r.open) return null;
+                      return (
+                        <div className="mt-2">
+                          {r.open ? (
+                            <button onClick={() => closeReplies(c.id)} className="text-xs text-gray-600 hover:text-blue-700">
+                              Masquer les réponses
+                            </button>
+                          ) : (
+                            <button onClick={() => openReplies(c.id)} className="text-xs text-gray-600 hover:text-blue-700">
+                              Afficher les réponses{typeof c.reply_count === "number" ? ` (${c.reply_count})` : ""}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
 
-                    {visibleReplies.map(rep => {
-                      const showDelReply = canSeeDeleteFor(rep);
-                      const allowEditReply = canEdit(rep);
-                      const isEditingReply = editingId === rep.id;
-                      const showMyReplyBadge = isSelf(rep) && (isAdmin || isModerator);
+                    {/* Bloc réponses (animé) */}
+                    {(() => {
+                      const r = repliesMap[c.id] || {};
+                      const visibleReplies2 = (r.items || []).filter(isVisible);
 
                       return (
-                        <div key={rep.id} className="group/reply relative flex mb-4">
-                          {(showDelReply || isModerator || isAdmin || allowEditReply) && (
-                            <div className="absolute right-0 top-0 flex items-center gap-2 bg-white/90 backdrop-blur px-2 py-0.5 rounded-bl-lg border border-gray-200
-                                            opacity-0 group-hover/reply:opacity-100 transition-opacity duration-150">
-                              {allowEditReply && !isEditingReply && (
-                                <button
-                                  onClick={() => { setEditingId(rep.id); setEditText(rep.content); setTimeout(()=>editRef.current?.focus(),0); }}
-                                  className="text-blue-600 hover:text-blue-800 text-[11px]"
-                                  title="Modifier"
-                                >
-                                  <div className="flex flex-col items-center">
-                                    <FaEdit /> <span>Modifier</span>
+                        <HeightTransition open={!!r.open}>
+                          <div className="mt-3 pl-6 border-l border-gray-200">
+                            {r.error && (
+                              <div className="mb-2 p-2 bg-red-50 text-red-700 text-xs rounded border border-red-200">
+                                {r.error}
+                              </div>
+                            )}
+
+                            {visibleReplies2.map(rep => {
+                              const showDelReply   = canSeeDeleteFor(rep);
+                              const allowEditReply = canEdit(rep);
+                              const isEditingReply = editingId === rep.id;
+                              const showMyReplyBadge = isSelf(rep) && (isAdmin || isModerator);
+
+                              return (
+                                <div key={rep.id} className="group/reply relative flex mb-4">
+                                  {(showDelReply || isModerator || isAdmin || allowEditReply) && (
+                                    <div className="absolute right-0 top-0 opacity-0 group-hover/reply:opacity-100 transition-opacity">
+                                      <ActionsMenu>
+                                        {allowEditReply && !isEditingReply && (
+                                          <MenuItem onClick={() => { setEditingId(rep.id); setEditText(rep.content); }} icon={FaEdit}>
+                                            Modifier
+                                          </MenuItem>
+                                        )}
+                                        {showDelReply && (
+                                          <MenuItem onClick={() => handleDeleteComment(rep.id, c.id)} danger icon={FaTrash}>
+                                            Supprimer
+                                          </MenuItem>
+                                        )}
+                                        {(isModerator || isAdmin) && !isEditingReply && (
+                                          <>
+                                            <MenuItem onClick={() => openApproveModal(rep)} icon={FaCheck}>Approuver</MenuItem>
+                                            <MenuItem onClick={() => handleReject(rep.id)} icon={FaTimes}>Rejeter</MenuItem>
+                                            <MenuItem onClick={() => handleSpam(rep.id)} icon={FaBan}>Spam</MenuItem>
+                                          </>
+                                        )}
+                                      </ActionsMenu>
+                                    </div>
+                                  )}
+
+                                  {/* Avatar réponse */}
+                                  <div className="w-8 h-8 rounded-full mr-3 flex-shrink-0 overflow-hidden border border-blue-200 bg-blue-100 flex items-center justify-center">
+                                    {rep.avatar ? (
+                                      <img
+                                        src={rep.avatar}
+                                        alt="avatar"
+                                        className="w-full h-full object-cover"
+                                        onError={(e)=>{ e.currentTarget.src = PLACEHOLDER_AVATAR; }}
+                                      />
+                                    ) : <FaUser className="text-blue-600 text-xs" />}
                                   </div>
-                                </button>
-                              )}
 
-                              {isEditingReply && (
-                                <>
-                                  <button
-                                    onClick={async () => {
-                                      if (!editText.trim()) return;
-                                      setEditBusy(true);
-                                      try {
-                                        const updated = await api.update(rep.id, { content: editText.trim() });
-                                        setRepliesMap(prev => {
-                                          const r2 = prev[c.id] || {};
-                                          const items = (r2.items || []).map(x => x.id === rep.id ? normalizeComment(updated, seed) : x);
-                                          return { ...prev, [c.id]: { ...r2, items } };
-                                        });
-                                        setEditingId(null);
-                                        setEditText("");
-                                      } catch (err) {
-                                        setLocalError(extractLaravelError(err));
-                                      } finally {
-                                        setEditBusy(false);
-                                      }
-                                    }}
-                                    className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs disabled:opacity-50"
-                                    disabled={editBusy || !editText.trim()}
-                                  >
-                                    <FaSave className="inline mr-2" /> Enregistrer
-                                  </button>
-                                  <button
-                                    onClick={() => { setEditingId(null); setEditText(""); }}
-                                    className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg text-xs"
-                                  >
-                                    <FaUndo className="inline mr-2" /> Annuler
-                                  </button>
-                                </>
-                              )}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between">
+                                      <div className="min-w-0">
+                                        <p className="text-xs font-medium text-gray-900 truncate flex items-center gap-2">
+                                          {rep.author}
+                                          {showMyReplyBadge && <RoleBadge variant={isAdmin ? "admin" : "moderator"} />}
+                                          {rep.status !== "approved" && (
+                                            <Chip className="bg-yellow-100 text-yellow-700">
+                                              {rep.status === "pending" ? "En modération" : rep.status}
+                                            </Chip>
+                                          )}
+                                        </p>
+                                        {rep.email && (
+                                          <p className="text-[11px] text-gray-500 flex items-center mt-0.5">
+                                            <FaEnvelope className="mr-1 opacity-70" /> {rep.email}
+                                          </p>
+                                        )}
+                                      </div>
+                                      <p className="text-[11px] text-gray-500">{rep.date}</p>
+                                    </div>
 
-                              {showDelReply && (
-                                <button
-                                  onClick={() => handleDeleteComment(rep.id, c.id)}
-                                  className="text-red-600 hover:text-red-800 text-[11px]"
-                                  title="Supprimer"
-                                >
-                                  <div className="flex flex-col items-center">
-                                    <FaTrash /> <span>Supprimer</span>
+                                    {!isEditingReply ? (
+                                      <p className="text-[13px] mt-1 whitespace-pre-line break-words">{rep.content}</p>
+                                    ) : (
+                                      <EditableArea
+                                        value={editText}
+                                        onChange={setEditText}
+                                        saving={editBusy}
+                                        placeholder="Modifier votre réponse…"
+                                        onSave={async () => {
+                                          if (!editText.trim()) return;
+                                          setEditBusy(true);
+                                          try {
+                                            const updated = await api.update(rep.id, { content: editText.trim() });
+                                            setRepliesMap(prev => {
+                                              const r2 = prev[c.id] || {};
+                                              const items = (r2.items || []).map(x => x.id === rep.id ? normalizeComment(updated, seed) : x);
+                                              return { ...prev, [c.id]: { ...r2, items } };
+                                            });
+                                            setEditingId(null);
+                                            setEditText("");
+                                          } catch (err) {
+                                            setLocalError(extractLaravelError(err));
+                                          } finally {
+                                            setEditBusy(false);
+                                          }
+                                        }}
+                                        onCancel={() => { setEditingId(null); setEditText(""); }}
+                                      />
+                                    )}
+
+                                    <div className="mt-1.5 flex items-center gap-3 text-[11px]">
+                                      <button onClick={() => handleLike(rep.id)} className="flex items-center gap-1 text-gray-600 hover:text-blue-700">
+                                        <FaThumbsUp className={rep._liked ? "opacity-100" : "opacity-60"} />
+                                        {rep.like_count}
+                                      </button>
+                                      <button onClick={() => handleDislike(rep.id)} className="flex items-center gap-1 text-gray-600 hover:text-blue-700">
+                                        <FaThumbsDown className={rep._disliked ? "opacity-100" : "opacity-60"} />
+                                        {rep.dislike_count}
+                                      </button>
+                                      <button onClick={() => setReplyTo(c.id)} className="text-blue-700 hover:underline">Répondre</button>
+                                    </div>
                                   </div>
+                                </div>
+                              );
+                            })}
+
+                            {r.page < (r.last_page || 1) && !r.loading && (
+                              <div className="mt-1">
+                                <button
+                                  onClick={() => fetchReplies(c.id, (r.page || 0) + 1, r.per_page || 3)}
+                                  className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded"
+                                >
+                                  Charger plus de réponses
                                 </button>
-                              )}
+                              </div>
+                            )}
 
-                              {/* === Boutons MODÉRATION (réponses) === */}
-                              {(isModerator || isAdmin) && !isEditingReply && (
-                                <>
-                                  <button onClick={() => openApproveModal(rep)} className="text-green-600 hover:text-green-800 text-[11px]" title="Approuver">
-                                    <div className="flex flex-col items-center">
-                                      <FaCheck /> <span>Approuver</span>
-                                    </div>
-                                  </button>
-                                  <button onClick={() => handleReject(rep.id)} className="text-orange-600 hover:text-orange-800 text-[11px]" title="Rejeter">
-                                    <div className="flex flex-col items-center">
-                                      <FaTimes /> <span>Rejeter</span>
-                                    </div>
-                                  </button>
-                                  <button onClick={() => handleSpam(rep.id)} className="text-pink-600 hover:text-pink-800 text-[11px]" title="Spam">
-                                    <div className="flex flex-col items-center">
-                                      <FaBan /> <span>Spam</span>
-                                    </div>
-                                  </button>
-                                  {/* Si tu veux “mettre en avant” aussi les réponses, dé-commente : */}
-                                  {/* <button
-                                    onClick={() => handleFeature(rep.id, !rep.featured)}
-                                    className={`${rep.featured ? "text-amber-600 hover:text-amber-700" : "text-yellow-600 hover:text-yellow-800"} text-[11px]`}
-                                    title={rep.featured ? "Retirer de l'avant" : "Mettre en avant"}
-                                  >
-                                    <div className="flex flex-col items-center">
-                                      <FaStar />
-                                      <span>{rep.featured ? "Retirer" : "En avant"}</span>
-                                    </div>
-                                  </button> */}
-                                </>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Avatar réponse */}
-                          <div className="w-8 h-8 rounded-full mr-3 flex-shrink-0 overflow-hidden border border-blue-200 bg-blue-100 flex items-center justify-center">
-                            {rep.avatar ? (
-                              <img
-                                src={rep.avatar}
-                                alt="avatar"
-                                className="w-full h-full object-cover"
-                                onError={(e)=>{ e.currentTarget.src = PLACEHOLDER_AVATAR; }}
-                              />
-                            ) : (
-                              <FaUser className="text-blue-600 text-xs" />
+                            {r.loading && (
+                              <div className="flex items-center justify-start py-2 text-xs text-gray-500">
+                                <FaSpinner className="animate-spin mr-2" />
+                                Chargement des réponses…
+                              </div>
                             )}
                           </div>
+                        </HeightTransition>
+                      );
+                    })()}
 
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between">
-                              <div className="min-w-0">
-                                <p className="text-xs font-medium text-gray-900 truncate flex items-center gap-2">
-                                  {rep.author}
-                                  {showMyReplyBadge && <RoleBadge variant={isAdmin ? "admin" : "moderator"} />}
-                                  {rep.status !== "approved" && (
-                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 align-middle">
-                                      {rep.status === "pending" ? "En modération" : rep.status}
-                                    </span>
-                                  )}
-                                </p>
-                                {rep.email && (
-                                  <p className="text-[11px] text-gray-500 flex items-center mt-0.5">
-                                    <FaEnvelope className="mr-1 opacity-70" /> {rep.email}
-                                  </p>
-                                )}
-                              </div>
-                              <p className="text-[11px] text-gray-500">{rep.date}</p>
-                            </div>
-
-                            {!isEditingReply ? (
-                              <p className="text-[13px] mt-1 whitespace-pre-line break-words">{rep.content}</p>
-                            ) : (
-                              <div className="mt-2">
-                                <textarea
-                                  ref={editRef}
-                                  className="w-full border border-blue-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                  rows={3}
-                                  value={editText}
-                                  onChange={(e)=>setEditText(e.target.value)}
-                                  placeholder="Modifier votre réponse…"
-                                  disabled={editBusy}
+                    {/* zone réponse rapide */}
+                    {replyTo === c.id && (
+                      <div className="mt-3">
+                        <div className="relative" ref={emojiReplyWrapRef}>
+                          <textarea
+                            ref={replyRef}
+                            value={replyText}
+                            onChange={(e) => setReplyText(e.target.value)}
+                            onFocus={() => setShowEmojiReply(false)}
+                            onClick={() => setShowEmojiReply(false)}
+                            className="w-full border border-gray-300 rounded-xl p-2 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                            rows="2"
+                            placeholder="Votre réponse…"
+                          />
+                          <div className="absolute right-3 bottom-3">
+                            <div className="relative select-none">
+                              {showEmojiReply && (
+                                <EmojiPopover
+                                  onSelect={(emo) => {
+                                    insertAtCursor(replyRef.current, replyText, emo, setReplyText);
+                                    setShowEmojiReply(false);
+                                  }}
+                                  onClose={() => setShowEmojiReply(false)}
+                                  title="Emojis de réponse"
                                 />
-                                <div className="mt-2 flex gap-2">
-                                  <button
-                                    onClick={async () => {
-                                      if (!editText.trim()) return;
-                                      setEditBusy(true);
-                                      try {
-                                        const updated = await api.update(rep.id, { content: editText.trim() });
-                                        setRepliesMap(prev => {
-                                          const r2 = prev[c.id] || {};
-                                          const items = (r2.items || []).map(x => x.id === rep.id ? normalizeComment(updated, seed) : x);
-                                          return { ...prev, [c.id]: { ...r2, items } };
-                                        });
-                                        setEditingId(null);
-                                        setEditText("");
-                                      } catch (err) {
-                                        setLocalError(extractLaravelError(err));
-                                      } finally {
-                                        setEditBusy(false);
-                                      }
-                                    }}
-                                    className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs disabled:opacity-50"
-                                    disabled={editBusy || !editText.trim()}
-                                  >
-                                    <FaSave className="inline mr-2" /> Enregistrer
-                                  </button>
-                                  <button
-                                    onClick={() => { setEditingId(null); setEditText(""); }}
-                                    className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg text-xs"
-                                  >
-                                    <FaUndo className="inline mr-2" /> Annuler
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-
-                            <div className="mt-1.5 flex items-center gap-3 text-[11px]">
-                              <button onClick={() => handleLike(rep.id)} className="flex items-center gap-1 text-gray-600 hover:text-blue-700">
-                                <FaThumbsUp className={rep._liked ? "opacity-100" : "opacity-60"} />
-                                {rep.like_count}
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setShowEmojiReply(v => !v); }}
+                                className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600"
+                                title="Insérer un emoji"
+                              >
+                                <FaSmile />
                               </button>
-                              <button onClick={() => handleDislike(rep.id)} className="flex items-center gap-1 text-gray-600 hover:text-blue-700">
-                                <FaThumbsDown className={rep._disliked ? "opacity-100" : "opacity-60"} />
-                                {rep.dislike_count}
-                              </button>
-                              <button onClick={() => setReplyTo(c.id)} className="text-blue-700 hover:underline">Répondre</button>
                             </div>
                           </div>
                         </div>
-                      );
-                    })}
-
-                    {/* Charger plus de réponses */}
-                    {r.page < (r.last_page || 1) && !r.loading && (
-                      <div className="mt-1">
-                        <button
-                          onClick={() => fetchReplies(c.id, (r.page || 0) + 1, r.per_page || 3)}
-                          className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded"
-                        >
-                          Charger plus de réponses
-                        </button>
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            onClick={async () => { await handleReply(c.id, replyText); setReplyText(""); setReplyTo(null); setShowEmojiReply(false); }}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs"
+                          >
+                            Répondre
+                          </button>
+                          <button
+                            onClick={() => { setReplyText(""); setReplyTo(null); setShowEmojiReply(false); }}
+                            className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs"
+                          >
+                            Annuler
+                          </button>
+                        </div>
                       </div>
                     )}
-
-                    {r.loading && (
-                      <div className="flex items-center justify-start py-2 text-xs text-gray-500">
-                        <FaSpinner className="animate-spin mr-2" />
-                        Chargement des réponses…
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* zone réponse rapide */}
-              {replyTo === c.id && (
-                <div className="mt-3">
-                  <div className="relative" ref={emojiReplyWrapRef}>
-                    <textarea
-                      ref={replyRef}
-                      value={replyText}
-                      onChange={(e) => setReplyText(e.target.value)}
-                      onFocus={() => setShowEmojiReply(false)}
-                      onClick={() => setShowEmojiReply(false)}
-                      className="w-full border border-gray-300 rounded-xl p-2 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                      rows="2"
-                      placeholder="Votre réponse…"
-                    />
-                    <div className="absolute right-3 bottom-3">
-                      <div className="relative select-none">
-                        {showEmojiReply && (
-                          <EmojiPopover
-                            onSelect={(emo) => {
-                              insertAtCursor(replyRef.current, replyText, emo, setReplyText);
-                              setShowEmojiReply(false);
-                            }}
-                            onClose={() => setShowEmojiReply(false)}
-                            title="Emojis de réponse"
-                          />
-                        )}
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setShowEmojiReply(v => !v); }}
-                          className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600"
-                          title="Insérer un emoji"
-                        >
-                          <FaSmile />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      onClick={async () => { await handleReply(c.id, replyText); setReplyText(""); setReplyTo(null); setShowEmojiReply(false); }}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs"
-                    >
-                      Répondre
-                    </button>
-                    <button
-                      onClick={() => { setReplyText(""); setReplyTo(null); setShowEmojiReply(false); }}
-                      className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs"
-                    >
-                      Annuler
-                    </button>
                   </div>
                 </div>
-              )}
-            </div>
-          </div>
-        )})}
+              </article>
+            );
+          })}
+        </div>
 
         {/* bouton "Charger plus" OU sentinelle pour infinite scroll */}
         {!infinite && hasMore && !loading && (
-          <div className="mt-3 flex justify-center">
+          <div className="mt-4 flex justify-center">
             <button
               onClick={() => setPage(p => p + 1)}
               className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg"

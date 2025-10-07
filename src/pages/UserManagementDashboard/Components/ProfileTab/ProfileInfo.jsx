@@ -6,6 +6,16 @@ import axios from 'axios';
 import { useSelector } from 'react-redux';
 import LoadingComponent from '../../../../component/loading/LoadingComponent';
 
+const getTokenGuard = () => {
+  try {
+    return (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('tokenGuard')) ||
+           (typeof localStorage !== 'undefined' && localStorage.getItem('tokenGuard')) ||
+           null;
+  } catch {
+    return null;
+  }
+};
+
 const ProfileInfo = () => {
   const { t } = useTranslation();
   const API_BASE_STORAGE = import.meta.env.VITE_API_BASE_STORAGE;
@@ -24,7 +34,7 @@ const ProfileInfo = () => {
     axios.defaults.headers.common['Content-Type'] = 'application/json';
     axios.interceptors.request.use(
       (config) => {
-        const token = localStorage.getItem('auth_token');
+        const token = getTokenGuard(); // ✅ cohérent avec toute l’app
         if (token) config.headers.Authorization = `Bearer ${token}`;
         return config;
       },
@@ -43,7 +53,7 @@ const ProfileInfo = () => {
     email: '',
     phone: '',
     birthdate: '',
-    roles: '', // <— standardisé en string
+    roles: '',
     address: '',
     isActive: false,
     emailVerified: false,
@@ -58,9 +68,8 @@ const ProfileInfo = () => {
     const placeHolder = 'https://randomuser.me/api/portraits/women/44.jpg';
     const url = avatar_url?.toString()?.trim?.();
     if (!url) return placeHolder;
-    // si l'API renvoie déjà une URL absolue
     const abs = /^https?:\/\//i.test(url) ? url : `${cleanBase}/storage/${url.replace(/^\/+/, '')}`;
-    const cacheBust = updatedAt ? `?t=${encodeURIComponent(updatedAt)}` : '';
+    const cacheBust = updatedAt ? `&t=${encodeURIComponent(updatedAt)}` : '';
     return `${abs}${abs.includes('?') ? '&' : '?'}cb=${Date.now()}${cacheBust}`;
   }, [cleanBase]);
 
@@ -152,7 +161,11 @@ const ProfileInfo = () => {
         ? rawUrl
         : `${cleanBase}/storage/${rawUrl.replace(/^\/+/, '')}`;
 
-      const { data } = await axios.get(abs, { responseType: 'blob' });
+      const token = getTokenGuard();
+      const { data } = await axios.get(abs, {
+        responseType: 'blob',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       const blobUrl = URL.createObjectURL(data);
       setAvatarSrc(blobUrl);
     } catch (e) {

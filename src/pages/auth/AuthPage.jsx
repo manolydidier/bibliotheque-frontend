@@ -130,6 +130,16 @@ const AuthPage = () => {
 
   // useEffect(()=>{ if(isAuthenticated) navigate('/'); },[isAuthenticated,navigate]);
 
+  // ✅ Pré-remplir email si mémorisé (remember_email en localStorage)
+  useEffect(() => {
+    try {
+      const remembered = localStorage.getItem('remember_email');
+      if (remembered) {
+        setFormData(p => ({ ...p, email: remembered, rememberMe: true }));
+      }
+    } catch {}
+  }, []);
+
   const progress = useMemo(()=>{
     if(isLoginActive){
       let c = 0;

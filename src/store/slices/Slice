@@ -1,43 +1,22 @@
 // src/store/slices/Slice.js
 import { createSlice } from '@reduxjs/toolkit';
 
-const AUTH_TOKEN_KEY = 'auth_token';
-const AUTH_USER_KEY  = 'user';
+const TOKEN_KEY = 'tokenGuard';
+const USER_KEY  = 'user';
 
-/* Helpers lecture local OU session */
-const getFromAnyStorage = (key) => {
-  try { if (typeof localStorage !== 'undefined') { const v = localStorage.getItem(key); if (v != null) return v; } } catch {}
-  try { if (typeof sessionStorage !== 'undefined') { const v = sessionStorage.getItem(key); if (v != null) return v; } } catch {}
-  return null;
+const readToken = () => { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } };
+const readUser  = () => {
+  try { const raw = localStorage.getItem(USER_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
 };
-
-const getActiveStorage = () => {
-  try {
-    if (typeof localStorage  !== 'undefined' && localStorage.getItem(AUTH_TOKEN_KEY)) return localStorage;
-    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(AUTH_TOKEN_KEY)) return sessionStorage;
-  } catch {}
-  try { return localStorage; } catch { return null; }
-};
-
-const clearAuthBoth = () => {
-  try { localStorage.removeItem(AUTH_TOKEN_KEY); localStorage.removeItem(AUTH_USER_KEY); } catch {}
-  try { sessionStorage.removeItem(AUTH_TOKEN_KEY); sessionStorage.removeItem(AUTH_USER_KEY); } catch {}
-};
-
-/* État initial : lit dans local OU session */
-const initialToken = getFromAnyStorage(AUTH_TOKEN_KEY);
-let initialUser = null;
-const rawUser = getFromAnyStorage(AUTH_USER_KEY);
-try { initialUser = rawUser ? JSON.parse(rawUser) : null; } catch { initialUser = null; }
 
 const initialState = {
   langue: 'fr',
   isReredingListeuser: false,
   auth: {
-    loading: false,
-    isAuthenticated: !!initialToken,
-    token: initialToken || null,
-    user: initialUser,
+    loading: false,             // <-- c’est "loading" (pas isLoading)
+    isAuthenticated: !!readToken(),
+    token: readToken() || null,
+    user: readUser(),
     error: null,
     roles: [],
     permissions: [],
@@ -48,15 +27,9 @@ export const librarySlice = createSlice({
   name: 'library',
   initialState,
   reducers: {
-    // ⚠️ nouveau: setter générique d'erreur UI côté auth / accès
-    setAuthError: (state, action) => {
-      state.auth.error = action.payload || null;
-    },
+    setAuthError: (state, action) => { state.auth.error = action.payload || null; },
+    loginStart: (state) => { state.auth.loading = true; state.auth.error = null; },
 
-    loginStart: (state) => {
-      state.auth.loading = true;
-      state.auth.error = null;
-    },
     loginSuccess: (state, action) => {
       const token = action.payload?.token || null;
       const user  = action.payload?.user  || null;
@@ -69,16 +42,12 @@ export const librarySlice = createSlice({
       state.auth.loading = false;
       state.auth.error = null;
 
-      // -- PERSISTE le TOKEN & USER ------------------------------  <-- IMPORTANT
       try {
-        const storage = getActiveStorage() || (typeof localStorage !== 'undefined' ? localStorage : null);
-        if (storage) {
-          if (token) storage.setItem(AUTH_TOKEN_KEY, token);
-          if (user)  storage.setItem(AUTH_USER_KEY, JSON.stringify(user));
-        }
+        if (token) localStorage.setItem(TOKEN_KEY, token);
+        if (user)  localStorage.setItem(USER_KEY, JSON.stringify(user));
       } catch {}
-      // ----------------------------------------------------------
     },
+
     loginFailure: (state, action) => {
       state.auth.loading = false;
       state.auth.error = action.payload || null;
@@ -87,9 +56,14 @@ export const librarySlice = createSlice({
       state.auth.token = null;
       state.auth.roles = [];
       state.auth.permissions = [];
+      try {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+      } catch {}
     },
+
     logoutUser: (state) => {
-      clearAuthBoth(); // supprime token + user des 2 storages
+      try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY); } catch {}
       state.auth.isAuthenticated = false;
       state.auth.user = null;
       state.auth.token = null;
@@ -98,41 +72,28 @@ export const librarySlice = createSlice({
       state.auth.loading = false;
       state.auth.error = null;
     },
-    language: (state, action) => {
-      state.langue = action.payload.langue;
-    },
+
+    language: (state, action) => { state.langue = action.payload.langue; },
+
     updateUser: (state, action) => {
       state.auth.user = action.payload || null;
       try {
-        const storage = getActiveStorage() || (typeof localStorage !== 'undefined' ? localStorage : null);
-        if (storage && state.auth.user) {
-          storage.setItem(AUTH_USER_KEY, JSON.stringify(state.auth.user));
-        }
+        if (state.auth.user) localStorage.setItem(USER_KEY, JSON.stringify(state.auth.user));
       } catch {}
     },
-    refreshListUser: (state) => {
-      state.isReredingListeuser = !state.isReredingListeuser;
-    },
-    clearAuthError: (state) => {
-      state.auth.error = null;
-    }
+
+    refreshListUser: (state) => { state.isReredingListeuser = !state.isReredingListeuser; },
+    clearAuthError: (state) => { state.auth.error = null; }
   },
 });
 
 export const {
-  setAuthError,
-  loginStart,
-  loginSuccess,
-  loginFailure,
-  logoutUser,
-  language, 
-  updateUser,
-  refreshListUser,
-  clearAuthError
+  setAuthError, loginStart, loginSuccess, loginFailure, logoutUser,
+  language, updateUser, refreshListUser, clearAuthError
 } = librarySlice.actions;
 
 export default librarySlice.reducer;
 
-// Sélecteurs pratiques (ajuste la clé 'library' si ton rootReducer diffère)
+// Sélecteurs pratiques
 export const selectAuthError   = (state) => state?.library?.auth?.error;
 export const selectAuthLoading = (state) => state?.library?.auth?.loading;
