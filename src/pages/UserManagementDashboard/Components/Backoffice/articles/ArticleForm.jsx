@@ -783,59 +783,13 @@ useEffect(() => {
 }, []);
 
 const [editorFullscreen, setEditorFullscreen] = useState(false);
-const editorRef = useRef(null); // CKEditor instance
 
+const [isEditorModalOpen, setIsEditorModalOpen] = useState(false);
 useEffect(() => {
-  // Empêche de scroller la page quand l’éditeur est en plein écran
-  document.body.style.overflow = editorFullscreen ? 'hidden' : '';
+  document.body.style.overflow = isEditorModalOpen ? 'hidden' : '';
   return () => { document.body.style.overflow = ''; };
-}, [editorFullscreen]);
+}, [isEditorModalOpen]);
 
-// utilitaire : ajuste la hauteur de la zone éditable CKEditor en fonction du container
-const applyEditableMinHeight = (h) => {
-  const editor = editorRef.current;
-  if (!editor) return;
-  const editable = editor.ui?.view?.editable?.element;
-  if (editable) {
-    // On soustrait ~80px pour la toolbar CKEditor
-    const minH = Math.max(300, (typeof h === 'number' ? h : parseInt(h,10) || 700) - 80);
-    editable.style.minHeight = `${minH}px`;
-  }
-};
-// --- Raccourcis clavier: F11 (toggle fullscreen), ESC (sortir) ---
-useEffect(() => {
-  const onKey = (e) => {
-    // Toggle fullscreen avec F11 (et on bloque le F11 natif du navigateur)
-    if (e.key === 'F11') {
-      e.preventDefault();
-      setEditorFullscreen((f) => !f);
-      // recalculer la hauteur de la zone éditable après le toggle
-      setTimeout(() => {
-        applyEditableMinHeight(
-          typeof editorSize.height === 'number'
-            ? editorSize.height
-            : parseInt(editorSize.height, 10) || 700
-        );
-      }, 0);
-    }
-
-    // ESC pour sortir du plein écran
-    if (e.key === 'Escape' && editorFullscreen) {
-      e.preventDefault();
-      setEditorFullscreen(false);
-      setTimeout(() => {
-        applyEditableMinHeight(
-          typeof editorSize.height === 'number'
-            ? editorSize.height
-            : parseInt(editorSize.height, 10) || 700
-        );
-      }, 0);
-    }
-  };
-
-  window.addEventListener('keydown', onKey);
-  return () => window.removeEventListener('keydown', onKey);
-}, [editorFullscreen, editorSize.height]);
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 relative overflow-hidden">
@@ -1093,100 +1047,27 @@ useEffect(() => {
               <FieldError name="excerpt" />
             </section>
 
-            <div className={`${card} p-8 space-y-3 w-[200%]`}>
-              <label className={sectionTitle}>Contenu de l'article</label>
+           <div className={`${card} p-8 space-y-3 w-[205%]`}>
+              <div className="flex items-center justify-between">
+                <label className={sectionTitle}>Contenu de l'article</label>
 
-                    {/* wrapper pour mesurer la largeur de la carte */}
-                    <div ref={editorWrapRef}>
-                      <div className="flex items-center justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setEditorFullscreen(f => !f)}
-                        className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white hover:bg-slate-50"
-                        title={editorFullscreen ? 'Quitter le plein écran' : 'Plein écran'}
-                      >
-                        {editorFullscreen ? 'Quitter le plein écran' : 'Plein écran'}
-                      </button>
-                    </div>
+                {/* Bouton plein écran (ouvre un MODAL) */}
+                <button
+                  type="button"
+                  onClick={() => setIsEditorModalOpen(true)}
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white hover:bg-slate-50"
+                  title="Éditer en plein écran"
+                >
+                  ⤢ Plein écran
+                </button>
+              </div>
 
-                      <div
-                      className={editorFullscreen
-                        ? "fixed inset-0 z-[10000] bg-white p-4"
-                        : "relative"}
-                    >
-                      <Resizable
-                        className="w-[200%] lg:w-auto mx-auto h-96"
-                        size={{ width: editorSize.width, height: editorSize.height }}
-                        defaultSize={{ width: editorSize.width, height: editorSize.height }}
-                        minWidth={320}
-                        minHeight={300}
-                        maxWidth="100%"
-                        bounds={editorFullscreen ? "window" : "parent"}
-                        enable={{
-                          top: true, right: true, bottom: true, left: true,
-                          topRight: true, bottomRight: true, bottomLeft: true, topLeft: true
-                        }}
-                        onResize={(e, dir, ref) => {
-                          const next = { width: ref.offsetWidth, height: ref.offsetHeight };
-                          setEditorSize(next);
-                          applyEditableMinHeight(next.height);
-                        }}
-                        onResizeStop={(e, dir, ref) => {
-                          const next = { width: ref.offsetWidth, height: ref.offsetHeight };
-                          setEditorSize(next);
-                          applyEditableMinHeight(next.height);
-                          try { localStorage.setItem('articleEditorSize', JSON.stringify(next)); } catch {}
-                        }}
-
-                        /* IMPORTANT : pas de scroll ici -> on laisse CKEditor gérer l’overflow interne */
-                        style={{
-                          overflow: 'visible',
-                          borderRadius: '1rem',
-                          border: '1px solid rgb(226 232 240)',
-                          background: 'white',
-                          padding: 0
-                        }}
-
-                        /* poignées visibles */
-                        handleWrapperStyle={{ zIndex: 50 }}
-                        handleStyles={{
-                          right:   { width: '10px', cursor: 'ew-resize' },
-                          left:    { width: '10px', cursor: 'ew-resize' },
-                          top:     { height: '10px', cursor: 'ns-resize' },
-                          bottom:  { height: '10px', cursor: 'ns-resize' },
-                          topRight:    { cursor: 'nesw-resize' },
-                          bottomRight: { cursor: 'nwse-resize' },
-                          bottomLeft:  { cursor: 'nesw-resize' },
-                          topLeft:     { cursor: 'nwse-resize' }
-                        }}
-                        handleComponent={{
-                          topLeft:     <div className="w-3 h-3 bg-slate-300 rounded-lg" />,
-                          topRight:    <div className="w-3 h-3 bg-slate-300 rounded-lg" />,
-                          bottomLeft:  <div className="w-3 h-3 bg-slate-300 rounded-lg" />,
-                          bottomRight: <div className="w-3 h-3 bg-slate-300 rounded-lg" />,
-                          left:        <div className="w-1 h-8 bg-slate-200 rounded" />,
-                          right:       <div className="w-1 h-8 bg-slate-200 rounded" />,
-                          top:         <div className="h-1 w-8 bg-slate-200 rounded" />,
-                          bottom:      <div className="h-1 w-8 bg-slate-200 rounded" />
-                        }}
-                      >
-                        <div className="p-2">
-                            <RichTextEditor
-    value={model.content || ""}
-    onChange={(html) => onChange("content", html)}
-    height={
-      editorFullscreen
-        ? Math.max(320, (window.innerHeight || 800) - 160) // marge pour header/footer
-        : (typeof editorSize.height === "number"
-            ? editorSize.height
-            : parseInt(editorSize.height, 10) || 520)
-    }
-  />
-                        </div>
-                      </Resizable>
-                    </div>
-                    </div>
-
+              {/* Éditeur en ligne (taille fixe raisonnable) */}
+              <RichTextEditor
+                value={model.content || ""}
+                onChange={(html) => onChange("content", html)}
+                height={520}
+              />
 
               <p className={hint}>
                 <FiMessageCircle className="w-3.5 h-3.5" />
@@ -1195,6 +1076,34 @@ useEffect(() => {
 
               <FieldError name="content" />
             </div>
+
+{/* MODAL plein écran */}
+{isEditorModalOpen && (
+  <div className="fixed inset-0 z-[10000] bg-slate-900/70 backdrop-blur-sm">
+    <div className="absolute inset-0 p-4 md:p-6 flex flex-col">
+      <div className="flex items-center justify-between px-3 py-2 rounded-2xl bg-white/90 border border-slate-200 shadow">
+        <div className="text-sm font-semibold text-slate-800">Édition en plein écran</div>
+        <button
+          type="button"
+          onClick={() => setIsEditorModalOpen(false)}
+          className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white hover:bg-slate-50"
+          title="Fermer"
+        >
+          ✕ Fermer
+        </button>
+      </div>
+
+      <div className="flex-1 min-h-0 mt-3 rounded-2xl bg-white border border-slate-200 overflow-hidden">
+        <RichTextEditor
+          value={model.content || ""}
+          onChange={(html) => onChange("content", html)}
+          height={Math.max(360, (typeof window !== 'undefined' ? window.innerHeight : 800) - 160)}
+        />
+      </div>
+    </div>
+  </div>
+)}
+
             {/* SEO */}
             <section className={`${card} p-8 lg:col-span-2`}>
               <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-3">
