@@ -1,80 +1,20 @@
 // src/pages/articles/ArticleForm.jsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   FiCalendar, FiEye, FiEyeOff, FiLock, FiUpload, FiUser, FiTag,
   FiFolder, FiSettings, FiEdit3, FiStar, FiMessageCircle,
   FiShare2, FiThumbsUp, FiBarChart2, FiClock, FiUsers, FiShield, FiSave
 } from 'react-icons/fi';
-import axios from 'axios';
-// import { CKEditor } from '@ckeditor/ckeditor5-react';
-// import ClassicEditor from '@ckeditor/ckeditor5-build-classic';
-import RichTextEditor from './RichTextEditor'
-import { Resizable } from 're-resizable';
 
-// ⚠️ ajuste ce chemin si ton alias @ n'est pas configuré
+// ✅ Ton éditeur TinyMCE React
+import RichTextEditor from './RichTextEditor';
+
+// ✅ Upload helper
 import ImageDropPaste from './ImageDropPaste';
 
-// Services API (assure-toi que le chemin correspond à ton projet)
-import {
-  createArticle,
-  updateArticle,
-  listCategories,
-  listTags
-} from './articles';
-
-/* =========================================
-   Axios (auth Guard) + endpoints auxiliaires
-========================================= */
-const api = axios.create({ baseURL: '/api', withCredentials: true });
-api.interceptors.request.use(cfg => {
-  const token = localStorage.getItem('tokenGuard');
-  if (token) cfg.headers.Authorization = `Bearer ${token}`;
-  cfg.headers['X-Requested-With'] = 'XMLHttpRequest';
-  return cfg;
-});
-
-/** GET /user -> profil courant (pour author_id/tenant_id par défaut) */
-async function fetchCurrentUserProfile() {
-  const { data } = await api.get('/user');
-  const u = data?.data || data || {};
-  return {
-    id: u.id ?? u.user_id ?? null,
-    tenant_id: u.tenant_id ?? null,
-    name: u.name || u.username || u.email || (u.id ? `#${u.id}` : ''),
-    avatar: u.avatar || u.photo || u.image || null,
-  };
-}
-
-/** GET /userrole?roles=Admin -> liste des utilisateurs admins (paginée) */
-async function fetchAdminUsersFromRoles(roleNames = ['Admin']) {
-  const params = { page: 1, per_page: 100, roles: roleNames.join(',') };
-  const out = new Map();
-  for (;;) {
-    const res = await api.get('/userrole', { params });
-    const wrapper = res?.data?.data ?? res?.data ?? {};
-    const items = Array.isArray(wrapper?.data) ? wrapper.data : Array.isArray(wrapper) ? wrapper : [];
-    for (const ur of items) {
-      const id = ur?.user?.id ?? ur?.user_id;
-      if (!id) continue;
-      const isAdmin = ur?.role?.is_admin === true || String(ur?.role?.name || '').toLowerCase() === 'admin';
-      if (!isAdmin) continue;
-      const name = ur?.user?.username || ur?.user?.name || ur?.user?.email || `#${id}`;
-      if (!out.has(id)) {
-        out.set(id, {
-          id,
-          name,
-          tenant_id: ur?.user?.tenant_id ?? null,
-          avatar: ur?.user?.avatar || ur?.user?.photo || ur?.user?.image || null,
-        });
-      }
-    }
-    const cur = Number(wrapper?.current_page || params.page);
-    const last = Number(wrapper?.last_page || cur);
-    if (!cur || cur >= last) break;
-    params.page = cur + 1;
-  }
-  return Array.from(out.values());
-}
+// ✅ Client API centralisé (ajuste le chemin selon ton projet)
+import api from '../../../../../services/api';
 
 /* ===============================
    Helpers généraux & formulaires
@@ -100,12 +40,10 @@ const allowedKeys = [
   "reading_time", "word_count", "rating_average", "rating_count",
 ];
 
-// Construit un FormData propre pour Laravel (multipart/form-data)
 const toFormData = (payload, files = {}) => {
   const fd = new FormData();
-
   for (const key of allowedKeys) {
-    if (!(key in payload)) continue; // on n’envoie QUE les champs valides
+    if (!(key in payload)) continue;
     const v = payload[key];
     if (v === undefined || v === null || v === "") continue;
 
@@ -119,26 +57,15 @@ const toFormData = (payload, files = {}) => {
       fd.append(key, v);
     }
   }
-
-  // FICHIERS : noms EXACTS attendus par le backend
-  if (files.featured instanceof File) {
-    fd.append("featured_image_file", files.featured);
-  }
-  if (files.avatar instanceof File) {
-    fd.append("author_avatar_file", files.avatar);
-  }
-
+  if (files.featured instanceof File) fd.append("featured_image_file", files.featured);
+  if (files.avatar instanceof File)   fd.append("author_avatar_file",   files.avatar);
   return fd;
 };
 
 const ensureNumberArray = (arr) => {
   if (!arr) return [];
-  if (Array.isArray(arr)) {
-    return arr.map(n => Number(n)).filter(n => !isNaN(n) && n > 0);
-  }
-  if (typeof arr === 'string') {
-    return arr.split(',').map(n => Number(n.trim())).filter(n => !isNaN(n) && n > 0);
-  }
+  if (Array.isArray(arr))   return arr.map(n => Number(n)).filter(n => !isNaN(n) && n > 0);
+  if (typeof arr === 'string') return arr.split(',').map(n => Number(n.trim())).filter(n => !isNaN(n) && n > 0);
   return [];
 };
 
@@ -171,7 +98,6 @@ function toInputLocal(val) {
   const mm = pad2(d.getMinutes());
   return `${yyyy}-${MM}-${dd}T${hh}:${mm}`;
 }
-
 function toSqlDateTime(inputVal) {
   if (!inputVal) return '';
   if (RE_SQL.test(inputVal)) return inputVal;
@@ -187,7 +113,6 @@ function toSqlDateTime(inputVal) {
   const ss = pad2(d.getSeconds());
   return `${yyyy}-${MM}-${dd} ${hh}:${mm}:${ss}`;
 }
-
 function formatDate(d) {
   try { return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(d); }
   catch { return d?.toLocaleDateString('fr-FR'); }
@@ -216,9 +141,69 @@ function formatRelative(target) {
 }
 
 /* ===============================
-   Composant principal
+   API helpers spécifiques Article
 =============================== */
-const ArticleForm = ({ initial = null, onSaved }) => {
+
+// ⚠️ adapte si tes endpoints diffèrent
+async function listCategories() {
+  const res = await api.get('/categories', { params: { per_page: 1000 } });
+  return res?.data?.data || res?.data || [];
+}
+async function listTags() {
+  const res = await api.get('/tags', { params: { per_page: 1000 } });
+  return res?.data?.data || res?.data || [];
+}
+async function fetchArticleDirect(idOrSlug) {
+  const res = await api.get(`/articles/${encodeURIComponent(idOrSlug)}`, {
+    params: { include: 'categories,tags' },
+    headers: { 'Cache-Control': 'no-store' },
+  });
+  const payload = res?.data?.data ?? res?.data ?? res;
+  if (payload?.categories && Array.isArray(payload.categories)) {
+    payload.categories = ensureNumberArray(payload.categories.map(c => c.id ?? c));
+  }
+  if (payload?.tags && Array.isArray(payload.tags)) {
+    payload.tags = ensureNumberArray(payload.tags.map(t => t.id ?? t));
+  }
+  return payload;
+}
+// ✅ déverrouillage d’un article protégé
+async function unlockArticleDirect(idOrSlug, password) {
+  const res = await api.post(
+    `/articles/${encodeURIComponent(idOrSlug)}/unlock`,
+    { password },
+    { params: { include: 'categories,tags' }, headers: { 'Cache-Control': 'no-store' } }
+  );
+  const payload = res?.data?.data ?? res?.data ?? res;
+  if (payload?.categories && Array.isArray(payload.categories)) {
+    payload.categories = ensureNumberArray(payload.categories.map(c => c.id ?? c));
+  }
+  if (payload?.tags && Array.isArray(payload.tags)) {
+    payload.tags = ensureNumberArray(payload.tags.map(t => t.id ?? t));
+  }
+  return payload;
+}
+async function createArticleJSON(body) {
+  return api.post('/articlesstore', body);
+}
+async function createArticleWithFiles(fd) {
+  return api.post('/articles/with-files', fd);
+}
+async function updateArticleJSON(id, body) {
+  return api.put(`/articles/${id}`, body);
+}
+async function updateArticleWithFiles(id, fd) {
+  return api.post(`/articles/${id}/update-with-files`, fd);
+}
+
+/* ===============================
+   Composant principal (sans props)
+=============================== */
+const ArticleForm = () => {
+  const navigate = useNavigate();
+  const { id: idOrSlug } = useParams(); // p.ex. /articles/:id ou /articles/:slug
+  const isEdit = Boolean(idOrSlug);
+
   // Styles
   const inputBase = [
     'w-full','px-4 py-3','rounded-2xl','border-2 border-slate-200/60',
@@ -226,12 +211,10 @@ const ArticleForm = ({ initial = null, onSaved }) => {
     'placeholder:text-slate-400','focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400',
     'hover:border-slate-300','transition-all duration-200'
   ].join(' ');
-
   const card = [
     'rounded-3xl','bg-white/90','backdrop-blur-xl','border border-slate-200/60',
     'shadow-lg shadow-slate-200/50','hover:shadow-xl hover:shadow-slate-300/50','transition-all duration-300'
   ].join(' ');
-
   const sectionTitle = 'text-sm font-bold text-slate-800 mb-2 block tracking-tight';
   const hint = 'text-xs text-slate-500 mt-1.5 flex items-center gap-1';
 
@@ -239,8 +222,7 @@ const ArticleForm = ({ initial = null, onSaved }) => {
   const [model, setModel] = useState(() => ({
     id: null, uuid: '', tenant_id: '', title: '', slug: '', excerpt: '', content: '',
     featured_image: '', featured_image_alt: '',
-    meta: {},
-    seo_data: {},
+    meta: {}, seo_data: {},
     status: 'draft', visibility: 'public', password: '',
     published_at: '', scheduled_at: '', expires_at: '',
     reading_time: 0, word_count: 0, view_count: 0, share_count: 0,
@@ -258,10 +240,9 @@ const ArticleForm = ({ initial = null, onSaved }) => {
   const [progress, setProgress] = useState(0);
   const progressTimerRef = useRef(null);
   const [activeTab, setActiveTab] = useState('content');
-  const isEdit = !!(initial?.id);
 
   // Fichiers
- const [featFile, setFeatFile] = useState(null);
+  const [featFile, setFeatFile] = useState(null);
   const [avatarFile, setAvatarFile] = useState(null);
 
   // PREVIEWS
@@ -276,7 +257,7 @@ const ArticleForm = ({ initial = null, onSaved }) => {
   const [adminUsers, setAdminUsers] = useState([]);
   const [authorSearch, setAuthorSearch] = useState('');
 
-  // User courant
+  // User courant (optionnel si nécessaire)
   const [currentUser, setCurrentUser] = useState(null);
 
   // Tenant lock
@@ -329,46 +310,109 @@ const ArticleForm = ({ initial = null, onSaved }) => {
     );
   }, [adminUsers, authorSearch]);
 
-  /* ========= Hydratations ========== */
+  /* ========= Hydratations (chargement direct Laravel) ========== */
   useEffect(() => {
-    if (initial) {
-      setModel(m => {
-        const parsedMeta = parseMaybeJSON(initial.meta, m.meta);
-        const parsedSeo  = parseMaybeJSON(initial.seo_data, m.seo_data);
-        return {
-          ...m,
-          ...initial,
-          meta: parsedMeta,
-          seo_data: parsedSeo,
-          categories: ensureNumberArray(initial.categories?.map(c => c.id ?? c)),
-          tags: ensureNumberArray(initial.tags?.map(t => t.id ?? t)),
+    (async () => {
+      try { setCats(await listCategories()); } catch {}
+      try { setTags(await listTags()); } catch {}
+    })();
+  }, []);
+
+  // 🔒 État de verrouillage + déverrouillage
+  const [locked, setLocked] = useState({ required: false, reason: '', error: '' });
+  const [unlockPwd, setUnlockPwd] = useState('');
+  const [unlocking, setUnlocking] = useState(false);
+
+  // Charger l’article si édition
+  useEffect(() => {
+    if (!isEdit) return;
+    (async () => {
+      try {
+        const art = await fetchArticleDirect(idOrSlug);
+        setModel(m => {
+          const meta = parseMaybeJSON(art.meta, {});
+          const seo  = parseMaybeJSON(art.seo_data, {});
+          return { ...m, ...art, meta, seo_data: seo };
+        });
+        // baseline sera positionné un peu plus bas quand model.id sera présent
+      } catch (e) {
+        const status = e?.response?.status;
+        const vis = e?.response?.data?.visibility || '';
+        const code = e?.response?.data?.code || '';
+        if (status === 403 && (vis === 'password_protected' || code === 'password_required')) {
+          setLocked({
+            required: true,
+            reason: e?.response?.data?.message || "Cet article est protégé par mot de passe.",
+            error: ''
+          });
+        } else {
+          console.error('Chargement article échoué:', e?.response?.data || e?.message);
+          // navigate('/articlescontroler'); // (optionnel)
+        }
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit, idOrSlug]);
+
+  // (optionnel) Charger le user courant pour pré-remplir
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await api.get('/user');
+        const u = data?.data || data || {};
+        const me = {
+          id: u.id ?? u.user_id ?? null,
+          tenant_id: u.tenant_id ?? null,
+          name: u.name || u.username || u.email || (u.id ? `#${u.id}` : ''),
+          avatar: u.avatar || u.photo || u.image || null,
         };
-      });
-    }
-  }, [initial]);
+        setCurrentUser(me);
+        setModel(prev => ({
+          ...prev,
+          author_id: prev.author_id || me.id || '',
+          tenant_id: prev.tenant_id || me.tenant_id || '',
+          author_name: prev.author_name || me.name || prev.author_name,
+        }));
+      } catch {}
+    })();
+  }, []);
 
-  useEffect(() => { (async () => {
-    try { const c = await listCategories(); setCats(c || []); } catch {}
-    try { const t = await listTags(); setTags(t || []); } catch {}
-  })(); }, []);
-
-  useEffect(() => { (async () => {
-    try {
-      const me = await fetchCurrentUserProfile();
-      setCurrentUser(me);
-      setModel(prev => ({
-        ...prev,
-        author_id: prev.author_id || me.id || '',
-        tenant_id: prev.tenant_id || me.tenant_id || '',
-        author_name: prev.author_name || me.name || prev.author_name,
-      }));
-    } catch {}
-  })(); }, []);
-
-  useEffect(() => { (async () => {
-    try { setAdminUsers(await fetchAdminUsersFromRoles(['Admin'])); }
-    catch { setAdminUsers([]); }
-  })(); }, []);
+  // (optionnel) Auteurs Admins
+  useEffect(() => {
+    (async () => {
+      try {
+        const params = { page: 1, per_page: 100, roles: 'Admin' };
+        const out = new Map();
+        for (;;) {
+          const res = await api.get('/userrole', { params });
+          const wrapper = res?.data?.data ?? res?.data ?? {};
+          const items = Array.isArray(wrapper?.data) ? wrapper.data : Array.isArray(wrapper) ? wrapper : [];
+          for (const ur of items) {
+            const id = ur?.user?.id ?? ur?.user_id;
+            if (!id) continue;
+            const isAdmin = ur?.role?.is_admin === true || String(ur?.role?.name || '').toLowerCase() === 'admin';
+            if (!isAdmin) continue;
+            const name = ur?.user?.username || ur?.user?.name || ur?.user?.email || `#${id}`;
+            if (!out.has(id)) {
+              out.set(id, {
+                id,
+                name,
+                tenant_id: ur?.user?.tenant_id ?? null,
+                avatar: ur?.user?.avatar || ur?.user?.photo || ur?.user?.image || null,
+              });
+            }
+          }
+          const cur = Number(wrapper?.current_page || params.page);
+          const last = Number(wrapper?.last_page || cur);
+          if (!cur || cur >= last) break;
+          params.page = cur + 1;
+        }
+        setAdminUsers(Array.from(out.values()));
+      } catch {
+        setAdminUsers([]);
+      }
+    })();
+  }, []);
 
   // Preview avatar (object URL)
   const lastAvatarUrl = useRef('');
@@ -449,7 +493,7 @@ const ArticleForm = ({ initial = null, onSaved }) => {
   /* ========= Dialog post-enregistrement ========= */
   const [postSaveDialog, setPostSaveDialog] = useState({ open: false, urls: null, mode: 'update' });
   const buildUrlsFromArticle = (a) => {
-    const id = a?.id ?? model?.id;
+    const id  = a?.id  ?? model?.id;
     const slug = a?.slug ?? model?.slug;
     const viewUrl = slug ? `/articles/${slug}` : (id ? `/articles/${id}` : '#');
     const listUrl = '/articlescontroler';
@@ -457,16 +501,14 @@ const ArticleForm = ({ initial = null, onSaved }) => {
     return { viewUrl, listUrl, editUrl };
   };
 
-  /* ========= Baseline & Dirty Detection (par onglet + global) ========= */
+  /* ========= Baseline & Dirty Detection ========= */
   const [baseline, setBaseline] = useState(null);
   const didSetBaselineRef = useRef(false);
 
   const stableStr = (v) => {
     if (v === undefined || v === null) return '';
     if (v instanceof Date) return v.toISOString();
-    if (typeof v === 'object') {
-      try { return JSON.stringify(v); } catch { return String(v); }
-    }
+    if (typeof v === 'object') { try { return JSON.stringify(v); } catch { return String(v); } }
     return String(v);
   };
   const pickForCompare = (source, fields) => {
@@ -490,8 +532,7 @@ const ArticleForm = ({ initial = null, onSaved }) => {
     const fields = tabFields[tabId] || [];
     if (!baseline) return false;
 
-    // fichiers
-    if (tabId === 'media' && featFile) return true;
+    if (tabId === 'media'  && featFile)   return true;
     if (tabId === 'author' && avatarFile) return true;
 
     const currentPick  = pickForCompare(model, fields);
@@ -499,30 +540,27 @@ const ArticleForm = ({ initial = null, onSaved }) => {
     return !areEqualByFields(currentPick, baselinePick, fields);
   };
 
-  // Dirty global (au moins un onglet modifié)
   const isAnyTabDirty = useMemo(() => {
     if (!isEdit) return false;
     const tabs = Object.keys(tabFields).filter(t => t !== 'preview');
     return tabs.some(t => isTabDirty(t));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model, baseline, featFile, avatarFile, isEdit]);
 
-  // Initialise baseline une fois l'initial chargé & model hydraté
+  // Initialise baseline quand l’article est chargé
   useEffect(() => {
-    if (isEdit && initial && !didSetBaselineRef.current && model?.id) {
+    if (isEdit && !didSetBaselineRef.current && model?.id) {
       didSetBaselineRef.current = true;
       setBaseline(prev => ({ ...(prev || {}), ...model }));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEdit, initial, model.id]);
+  }, [isEdit, model]);
 
   /* ========= Submit global ========= */
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      setErrors({}); // reset erreurs avant soumission
+      setErrors({});
 
-      // Préparer payload
       const payload = {
         ...model,
         is_featured: !!model.is_featured,
@@ -533,24 +571,23 @@ const ArticleForm = ({ initial = null, onSaved }) => {
 
         published_at: model.published_at ? toSqlDateTime(model.published_at) : null,
         scheduled_at: model.scheduled_at ? toSqlDateTime(model.scheduled_at) : null,
-        expires_at: model.expires_at ? toSqlDateTime(model.expires_at) : null,
-        reviewed_at: model.reviewed_at ? toSqlDateTime(model.reviewed_at) : null,
+        expires_at:   model.expires_at   ? toSqlDateTime(model.expires_at)   : null,
+        reviewed_at:  model.reviewed_at  ? toSqlDateTime(model.reviewed_at)  : null,
 
-        author_id: model.author_id ? Number(model.author_id) : null,
-        reviewed_by: model.reviewed_by ? Number(model.reviewed_by) : null,
-        reading_time: Number(model.reading_time || 0),
-        word_count: Number(model.word_count || 0),
-        rating_average: Number(model.rating_average || 0),
-        rating_count: Number(model.rating_count || 0),
+        author_id:     model.author_id     ? Number(model.author_id)     : null,
+        reviewed_by:   model.reviewed_by   ? Number(model.reviewed_by)   : null,
+        reading_time:  Number(model.reading_time || 0),
+        word_count:    Number(model.word_count   || 0),
+        rating_average:Number(model.rating_average || 0),
+        rating_count:  Number(model.rating_count   || 0),
 
         categories: ensureNumberArray(model.categories),
-        tags: ensureNumberArray(model.tags),
+        tags:       ensureNumberArray(model.tags),
 
-        meta: typeof model.meta === 'object' ? model.meta : {},
+        meta:     typeof model.meta     === 'object' ? model.meta     : {},
         seo_data: typeof model.seo_data === 'object' ? model.seo_data : {},
       };
 
-      // Nettoyer clés vides (laisser false/0)
       Object.keys(payload).forEach(key => {
         if (payload[key] === '' || payload[key] === null) delete payload[key];
       });
@@ -558,39 +595,41 @@ const ArticleForm = ({ initial = null, onSaved }) => {
       const withFiles = !!(featFile || avatarFile);
 
       let res;
-      if (withFiles) {
-        // FormData + fichiers
-        const fd = toFormData(payload, {
-          featured: featFile || null,
-          avatar:   avatarFile || null,
-        });
-
-        res = isEdit
-          ? await updateArticle(initial.id, fd, true) // POST /articles/{id}/update-with-files
-          : await createArticle(fd, true);            // POST /articles/with-files
+      if (isEdit) {
+        if (withFiles) {
+          const fd = toFormData(payload, { featured: featFile || null, avatar: avatarFile || null });
+          res = await updateArticleWithFiles(model.id, fd);
+        } else {
+          res = await updateArticleJSON(model.id, payload);
+        }
       } else {
-        // JSON simple
-        res = isEdit
-          ? await updateArticle(initial.id, payload, false) // PUT /articles/{id}
-          : await createArticle(payload, false);            // POST /articlesstore
+        if (withFiles) {
+          const fd = toFormData(payload, { featured: featFile || null, avatar: avatarFile || null });
+          res = await createArticleWithFiles(fd);
+        } else {
+          res = await createArticleJSON(payload);
+        }
       }
 
       setProgress(100);
-      setErrors({}); // succès -> effacer erreurs
+      setErrors({});
       const data = res?.data?.data || res?.data || res;
       setModel(prev => ({ ...prev, ...(data || {}) }));
       if (isEdit) setBaseline(data || {});
-      onSaved?.(data);
+
       showSuccess(isEdit ? 'Article mis à jour ✅' : 'Article créé ✅');
 
-      // Ouvrir la boîte de dialogue post-enregistrement
       setPostSaveDialog({
         open: true,
         urls: buildUrlsFromArticle(data),
         mode: isEdit ? 'update' : 'create'
       });
+
+      if (!isEdit && data?.id) {
+        navigate(`/articles/${data.id}/edit`);
+      }
     } catch (err) {
-      console.error('Erreur de soumission:', err.response?.data || err.message);
+      console.error('Erreur de soumission:', err?.response?.data || err?.message);
       if (err.response?.status === 422 && err.response?.data?.errors) {
         const e = err.response.data.errors || {};
         setErrors(e);
@@ -609,21 +648,19 @@ const ArticleForm = ({ initial = null, onSaved }) => {
     }
   };
 
-  /* ========= Sauvegarde partielle par onglet (généralisée) ========= */
+  /* ========= Sauvegarde partielle par onglet ========= */
   const savePartial = async (tabId) => {
-    if (!isEdit) return; // partial = édition uniquement
+    if (!isEdit || !model.id) return;
     const fields = tabFields[tabId] || [];
     if (fields.length === 0 && tabId !== 'media' && tabId !== 'author') return;
 
     const wantsFiles = (tabId === 'media' && !!featFile) || (tabId === 'author' && !!avatarFile);
 
-    // Build payload avec normalisations ciblées
     const partial = {};
     for (const k of fields) {
       if (k in model) partial[k] = model[k];
     }
 
-    // Normalisations spécifiques
     if (tabId === 'settings') {
       if ('published_at' in partial) partial.published_at = partial.published_at ? toSqlDateTime(partial.published_at) : null;
       if ('scheduled_at' in partial) partial.scheduled_at = partial.scheduled_at ? toSqlDateTime(partial.scheduled_at) : null;
@@ -645,7 +682,6 @@ const ArticleForm = ({ initial = null, onSaved }) => {
       if ('author_id' in partial) partial.author_id = partial.author_id ? Number(partial.author_id) : null;
     }
 
-    // Nettoyage des champs vides (sauf booléens/0)
     Object.keys(partial).forEach(key => {
       const v = partial[key];
       if (v === '' || v === null) delete partial[key];
@@ -662,15 +698,14 @@ const ArticleForm = ({ initial = null, onSaved }) => {
           avatar:   tabId === 'author' ? (avatarFile || null) : null,
         };
         const fd = toFormData(partial, files);
-        res = await updateArticle(initial.id, fd, true); // POST /articles/{id}/update-with-files
+        res = await updateArticleWithFiles(model.id, fd);
       } else {
-        res = await updateArticle(initial.id, partial, false); // PUT /articles/{id}
+        res = await updateArticleJSON(model.id, partial);
       }
 
       const updated = res?.data?.data || res?.data || res;
       setModel(prev => ({ ...prev, ...(updated || {}) }));
 
-      // maj du baseline sur les champs de l’onglet enregistré
       setBaseline(prev => {
         const next = { ...(prev || {}) };
         const src = (updated && typeof updated === 'object') ? updated : model;
@@ -680,13 +715,12 @@ const ArticleForm = ({ initial = null, onSaved }) => {
         return next;
       });
 
-      // reset des fichiers si envoyés
       if (tabId === 'media')  { setFeatFile(null); setFeatPreview(''); }
       if (tabId === 'author') { setAvatarFile(null); setAvatarPreview(''); }
 
       showSuccess('Onglet enregistré ✅');
     } catch (err) {
-      console.error('Erreur de sauvegarde partielle:', err.response?.data || err.message);
+      console.error('Erreur de sauvegarde partielle:', err?.response?.data || err?.message);
       if (err.response?.status === 422 && err.response?.data?.errors) {
         const e = err.response.data.errors || {};
         setErrors(e);
@@ -702,7 +736,6 @@ const ArticleForm = ({ initial = null, onSaved }) => {
     }
   };
 
-  // Libellés pour le bouton générique
   const tabLabelMap = {
     content: 'Contenu',
     settings: 'Paramètres',
@@ -715,13 +748,9 @@ const ArticleForm = ({ initial = null, onSaved }) => {
   };
   const handleSaveActiveTab = () => savePartial(activeTab);
 
-  /* ========= Conditions d’activation / affichage du bouton global ========= */
-  // Création : boutons actifs si title & content non vides
   const isCreateValid = !isEdit && Boolean(String(model.title || '').trim()) && Boolean(String(model.content || '').trim());
-  // Édition : bouton visible uniquement s’il y a un dirty global
-  const canSubmit = isEdit ? isAnyTabDirty : isCreateValid;
+  // const canSubmit = isEdit ? isAnyTabDirty : isCreateValid; // (si besoin de réutiliser)
 
-  /* ========= Décorations ========= */
   const statusConfig = {
     draft: { bg: 'bg-gradient-to-r from-amber-50 to-yellow-50', text: 'text-amber-700', border: 'border-amber-200', icon: '📝' },
     published: { bg: 'bg-gradient-to-r from-emerald-50 to-green-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: '✓' },
@@ -736,60 +765,59 @@ const ArticleForm = ({ initial = null, onSaved }) => {
   };
   const currentVisibility = visibilityConfig[model.visibility] || visibilityConfig.public;
 
-  // SEO header (meta + seo_data normalisés)
   const metaObj = parseMaybeJSON(model?.meta, {});
   const seoObj  = parseMaybeJSON(model?.seo_data, {});
   const seoDesc = (seoObj?.meta_description || metaObj?.meta_description || model.excerpt || '').toString();
   const seoKeywordsRaw = (seoObj?.keywords ?? metaObj?.keywords ?? '');
   const seoKeywords = Array.isArray(seoKeywordsRaw) ? seoKeywordsRaw.join(', ') : String(seoKeywordsRaw || '');
 
-  // Auteur sélectionné
   const selectedAuthor = useMemo(
     () => adminUsers.find(u => Number(u.id) === Number(model.author_id)) || null,
     [adminUsers, model.author_id]
   );
 
-  // Gestion éditeur JSON SEO (brouillon)
+  const [isEditorModalOpen, setIsEditorModalOpen] = useState(false);
   useEffect(() => {
-    setSeoJsonDraft(JSON.stringify(seoObj, null, 2));
-    setSeoJsonError('');
-  }, [model.seo_data]); // eslint-disable-line
+    document.body.style.overflow = isEditorModalOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [isEditorModalOpen]);
 
-  const applySeoJsonDraft = () => {
+  // 🔓 Déverrouillage action
+  const handleUnlock = async (e) => {
+    e?.preventDefault?.();
+    if (!unlockPwd.trim()) {
+      setLocked(l => ({ ...l, error: "Saisissez le mot de passe." }));
+      return;
+    }
     try {
-      const parsed = JSON.parse(seoJsonDraft || '{}');
-      setSeoJsonError('');
-      setModel(prev => ({ ...prev, seo_data: parsed }));
-    } catch {
-      setSeoJsonError('JSON invalide');
+      setUnlocking(true);
+      setLocked(l => ({ ...l, error: '' }));
+
+      const art = await unlockArticleDirect(idOrSlug, unlockPwd);
+
+      setModel(m => {
+        const meta = parseMaybeJSON(art.meta, {});
+        const seo  = parseMaybeJSON(art.seo_data, {});
+        return { ...m, ...art, meta, seo_data: seo };
+      });
+
+      setBaseline(prev => ({ ...(prev || {}), ...art }));
+      setLocked({ required: false, reason: '', error: '' });
+      setUnlockPwd('');
+      showSuccess('Article déverrouillé ✅');
+    } catch (err) {
+      if (err?.response?.status === 403) {
+        setLocked(l => ({
+          ...l,
+          error: err?.response?.data?.message || "Mot de passe incorrect."
+        }));
+      } else {
+        alert(err?.response?.data?.message || err.message || "Échec du déverrouillage");
+      }
+    } finally {
+      setUnlocking(false);
     }
   };
-const editorWrapRef = useRef(null);
-const [editorSize, setEditorSize] = useState(() => {
-  const saved = localStorage.getItem('articleEditorSize');
-  return saved ? JSON.parse(saved) : { width: 800, height: 700 }; // <-- px par défaut
-});
-
-// Caler la largeur initiale sur la largeur réelle du parent
-useEffect(() => {
-  if (!editorWrapRef.current) return;
-  // si l’ancienne valeur était "100%", on remplace par la largeur réelle
-  setEditorSize(s => {
-    if (typeof s.width === 'string') {
-      return { ...s, width: editorWrapRef.current.clientWidth || 800 };
-    }
-    return s;
-  });
-}, []);
-
-const [editorFullscreen, setEditorFullscreen] = useState(false);
-
-const [isEditorModalOpen, setIsEditorModalOpen] = useState(false);
-useEffect(() => {
-  document.body.style.overflow = isEditorModalOpen ? 'hidden' : '';
-  return () => { document.body.style.overflow = ''; };
-}, [isEditorModalOpen]);
-
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 relative overflow-hidden">
@@ -803,72 +831,13 @@ useEffect(() => {
 
       {/* Toast succès */}
       <div
-        className={`fixed right-4 top-4 z-[10000] transition-all duration-300 ${
-          toast.open ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'
-        }`}
+        className={`fixed right-4 top-4 z-[10000] transition-all duration-300 ${toast.open ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'}`}
       >
         <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-emerald-600 text-white shadow-lg">
           <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/20">✓</span>
           <span className="text-sm font-semibold">{toast.msg}</span>
         </div>
       </div>
-
-      {/* Dialog post-save */}
-      {postSaveDialog.open && (
-        <div
-          className="fixed inset-0 z-[10001] flex items-center justify-center p-4"
-          aria-modal="true"
-          role="dialog"
-        >
-          <div
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-            onClick={() => setPostSaveDialog(d => ({ ...d, open: false }))}
-          />
-          <div className="relative w-full max-w-lg rounded-3xl bg-white shadow-2xl border border-slate-200">
-            <div className="p-6 border-b border-slate-200">
-              <h3 className="text-lg font-bold text-slate-900">
-                {postSaveDialog.mode === 'create' ? 'Article créé' : 'Modifications enregistrées'}
-              </h3>
-              <p className="text-sm text-slate-600 mt-1">
-                Que souhaitez-vous faire maintenant&nbsp;?
-              </p>
-            </div>
-            <div className="p-6 space-y-3">
-              <a
-                className="flex items-center justify-between w-full px-4 py-3 rounded-2xl border-2 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold"
-                href={postSaveDialog.urls?.viewUrl || '#'}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <span>👁️ Visualiser l’article (nouvel onglet)</span>
-                <span className="text-xs font-bold">Ouvrir</span>
-              </a>
-              <a
-                className="flex items-center justify-between w-full px-4 py-3 rounded-2xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-800 font-semibold"
-                href={postSaveDialog.urls?.listUrl || '#'}
-              >
-                <span>📚 Revenir à la liste des articles</span>
-                <span className="text-xs font-bold">Aller</span>
-              </a>
-              <a
-                className="flex items-center justify-between w-full px-4 py-3 rounded-2xl border-2 border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 font-semibold"
-                href={postSaveDialog.urls?.editUrl || '#'}
-              >
-                <span>✏️ Rester sur la page de modification</span>
-                <span className="text-xs font-bold">Continuer</span>
-              </a>
-            </div>
-            <div className="p-4 border-t border-slate-200 flex justify-end">
-              <button
-                onClick={() => setPostSaveDialog(d => ({ ...d, open: false }))}
-                className="px-4 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold"
-              >
-                Fermer
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white/70 backdrop-blur-2xl border-b border-slate-200/70 shadow-sm">
@@ -950,7 +919,7 @@ useEffect(() => {
           </nav>
         </div>
 
-        {/* BARRE DE SAUVEGARDE D’ONGLET (générique, en haut) */}
+        {/* BARRE DE SAUVEGARDE D’ONGLET */}
         {isEdit && isTabDirty(activeTab) && (
           <div className="border-t border-slate-200 bg-white/80 backdrop-blur sticky top-[72px] z-40">
             <div className="mx-auto max-w-screen-2xl px-6 lg:px-8 py-3 flex items-center justify-between">
@@ -1047,7 +1016,7 @@ useEffect(() => {
               <FieldError name="excerpt" />
             </section>
 
-           <div className={`${card} p-8 space-y-3 w-[205%]`}>
+            <div className={`${card} p-8 space-y-3 w-[205%]`}>
               <div className="flex items-center justify-between">
                 <label className={sectionTitle}>Contenu de l'article</label>
 
@@ -1062,7 +1031,7 @@ useEffect(() => {
                 </button>
               </div>
 
-              {/* Éditeur en ligne (taille fixe raisonnable) */}
+              {/* Éditeur en ligne */}
               <RichTextEditor
                 value={model.content || ""}
                 onChange={(html) => onChange("content", html)}
@@ -1077,32 +1046,32 @@ useEffect(() => {
               <FieldError name="content" />
             </div>
 
-{/* MODAL plein écran */}
-{isEditorModalOpen && (
-  <div className="fixed inset-0 z-[10000] bg-slate-900/70 backdrop-blur-sm">
-    <div className="absolute inset-0 p-4 md:p-6 flex flex-col">
-      <div className="flex items-center justify-between px-3 py-2 rounded-2xl bg-white/90 border border-slate-200 shadow">
-        <div className="text-sm font-semibold text-slate-800">Édition en plein écran</div>
-        <button
-          type="button"
-          onClick={() => setIsEditorModalOpen(false)}
-          className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white hover:bg-slate-50"
-          title="Fermer"
-        >
-          ✕ Fermer
-        </button>
-      </div>
+            {/* MODAL plein écran */}
+            {isEditorModalOpen && (
+              <div className="fixed inset-0 z-[10000] bg-slate-900/70 backdrop-blur-sm">
+                <div className="absolute inset-0 p-4 md:p-6 flex flex-col">
+                  <div className="flex items-center justify-between px-3 py-2 rounded-2xl bg-white/90 border border-slate-200 shadow">
+                    <div className="text-sm font-semibold text-slate-800">Édition en plein écran</div>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditorModalOpen(false)}
+                      className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white hover:bg-slate-50"
+                      title="Fermer"
+                    >
+                      ✕ Fermer
+                    </button>
+                  </div>
 
-      <div className="flex-1 min-h-0 mt-3 rounded-2xl bg-white border border-slate-200 overflow-hidden">
-        <RichTextEditor
-          value={model.content || ""}
-          onChange={(html) => onChange("content", html)}
-          height={Math.max(360, (typeof window !== 'undefined' ? window.innerHeight : 800) - 160)}
-        />
-      </div>
-    </div>
-  </div>
-)}
+                  <div className="flex-1 min-h-0 mt-3 rounded-2xl bg-white border border-slate-200 overflow-hidden">
+                    <RichTextEditor
+                      value={model.content || ""}
+                      onChange={(html) => onChange("content", html)}
+                      height={Math.max(360, (typeof window !== 'undefined' ? window.innerHeight : 800) - 160)}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* SEO */}
             <section className={`${card} p-8 lg:col-span-2`}>
@@ -1160,7 +1129,15 @@ useEffect(() => {
                       <div className="mt-2 flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={applySeoJsonDraft}
+                          onClick={() => {
+                            try {
+                              const parsed = JSON.parse(seoJsonDraft || '{}');
+                              setSeoJsonError('');
+                              setModel(prev => ({ ...prev, seo_data: parsed }));
+                            } catch {
+                              setSeoJsonError('JSON invalide');
+                            }
+                          }}
                           className="px-3 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700"
                         >
                           Appliquer le JSON
@@ -1519,9 +1496,7 @@ useEffect(() => {
                 alt={model.featured_image_alt || ''}
                 showAlt
                 inputClass={inputClass('featured_image_alt')}
-                onPickFile={(f) => {
-                  setFeatFile(f);
-                }}
+                onPickFile={(f) => setFeatFile(f)}
                 onChangeAlt={(val) => onChange('featured_image_alt', val)}
                 helperNode={<p className={hint}>Important pour le SEO et l'accessibilité</p>}
                 errorNode={
@@ -1553,7 +1528,14 @@ useEffect(() => {
                       <FiClock className="w-4 h-4 text-blue-600" />
                       Temps de lecture
                     </label>
-                    <input type="number" min={0} className={`${inputClass('reading_time')} text-center text-lg font-bold`} value={model.reading_time || 0} onChange={e => onChange('reading_time', parseInt(e.target.value, 10) || 0)} placeholder="5" />
+                    <input
+                      type="number"
+                      min={0}
+                      className={`${inputClass('reading_time')} text-center text-lg font-bold`}
+                      value={model.reading_time || 0}
+                      onChange={e => onChange('reading_time', parseInt(e.target.value, 10) || 0)}
+                      placeholder="5"
+                    />
                     <p className="text-xs text-slate-500 text-center">minutes</p>
                     <FieldError name="reading_time" />
                   </div>
@@ -1565,7 +1547,14 @@ useEffect(() => {
                       <FiEdit3 className="w-4 h-4 text-purple-600" />
                       Nombre de mots
                     </label>
-                    <input type="number" min={0} className={`${inputClass('word_count')} text-center text-lg font-bold`} value={model.word_count || 0} onChange={e => onChange('word_count', parseInt(e.target.value, 10) || 0)} placeholder="1500" />
+                    <input
+                      type="number"
+                      min={0}
+                      className={`${inputClass('word_count')} text-center text-lg font-bold`}
+                      value={model.word_count || 0}
+                      onChange={e => onChange('word_count', parseInt(e.target.value, 10) || 0)}
+                      placeholder="1500"
+                    />
                     <p className="text-xs text-slate-500 text-center">mots</p>
                     <FieldError name="word_count" />
                   </div>
@@ -1668,7 +1657,7 @@ useEffect(() => {
                   https://map.tld/{model.slug || 'slug-de-article'}
                 </div>
                 <div className="text-[#545454] text-sm line-clamp-2">
-                  {seoDesc || model.excerpt || 'La description s’affichera ici.'}
+                  {(seoObj?.meta_description || model.excerpt) || 'La description s’affichera ici.'}
                 </div>
               </div>
             </div>
@@ -1676,16 +1665,13 @@ useEffect(() => {
         )}
       </main>
 
-      {/* Footer actions (bouton global à sa place d’origine) */}
+      {/* Footer actions */}
       <footer className="sticky bottom-0 z-40 bg-white/80 backdrop-blur-xl border-t border-slate-200">
         <div className="mx-auto max-w-screen-2xl px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="text-xs text-slate-500">
             {isEdit ? `Édition de l’article #${model.id ?? ''}` : 'Création d’un nouvel article'}
           </div>
 
-          {/* Règle d’affichage :
-              - ÉDITION : afficher le bouton seulement s'il y a des changements (isAnyTabDirty)
-              - CRÉATION : afficher le bouton toujours mais désactivé tant que title/content sont vides */}
           <div className="flex items-center gap-3">
             {isEdit ? (
               isAnyTabDirty ? (
@@ -1716,6 +1702,110 @@ useEffect(() => {
           </div>
         </div>
       </footer>
+
+      {/* Dialog post-save */}
+      {postSaveDialog.open && (
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4" aria-modal="true" role="dialog">
+          <div
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => setPostSaveDialog(d => ({ ...d, open: false }))}
+          />
+          <div className="relative w-full max-w-lg rounded-3xl bg-white shadow-2xl border border-slate-200">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-bold text-slate-900">
+                {postSaveDialog.mode === 'create' ? 'Article créé' : 'Modifications enregistrées'}
+              </h3>
+              <p className="text-sm text-slate-600 mt-1">Que souhaitez-vous faire maintenant&nbsp;?</p>
+            </div>
+            <div className="p-6 space-y-3">
+              <a
+                className="flex items-center justify-between w-full px-4 py-3 rounded-2xl border-2 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold"
+                href={postSaveDialog.urls?.viewUrl || '#'}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span>👁️ Visualiser l’article (nouvel onglet)</span>
+                <span className="text-xs font-bold">Ouvrir</span>
+              </a>
+              <a
+                className="flex items-center justify-between w-full px-4 py-3 rounded-2xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-800 font-semibold"
+                href={postSaveDialog.urls?.listUrl || '#'}
+              >
+                <span>📚 Revenir à la liste des articles</span>
+                <span className="text-xs font-bold">Aller</span>
+              </a>
+              <a
+                className="flex items-center justify-between w-full px-4 py-3 rounded-2xl border-2 border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 font-semibold"
+                href={postSaveDialog.urls?.editUrl || '#'}
+              >
+                <span>✏️ Rester sur la page de modification</span>
+                <span className="text-xs font-bold">Continuer</span>
+              </a>
+            </div>
+            <div className="p-4 border-t border-slate-200 flex justify-end">
+              <button
+                onClick={() => setPostSaveDialog(d => ({ ...d, open: false }))}
+                className="px-4 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔒 Modal de mot de passe pour article protégé */}
+      {locked.required && (
+        <div className="fixed inset-0 z-[10050] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <form
+            onSubmit={handleUnlock}
+            className="w-full max-w-md rounded-3xl bg-white border border-slate-200 shadow-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center gap-3">
+              <span className="p-2 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow">
+                <FiLock className="w-4 h-4" />
+              </span>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Article protégé</h3>
+                <p className="text-sm text-slate-600">
+                  {locked.reason || "Saisissez le mot de passe pour éditer cet article."}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-700">Mot de passe</label>
+              <input
+                type="password"
+                className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400"
+                value={unlockPwd}
+                onChange={(e) => setUnlockPwd(e.target.value)}
+                placeholder="••••••••"
+                autoFocus
+              />
+              {locked.error && <p className="text-xs text-red-600">{locked.error}</p>}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/articlescontroler'))}
+                className="px-4 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={unlocking}
+                className={`px-4 py-2 rounded-xl text-white font-semibold shadow
+                  ${unlocking ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+              >
+                {unlocking ? 'Déverrouillage…' : 'Déverrouiller'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 };
