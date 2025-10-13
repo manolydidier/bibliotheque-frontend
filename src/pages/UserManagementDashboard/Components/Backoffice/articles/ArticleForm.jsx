@@ -6,8 +6,9 @@ import {
   FiShare2, FiThumbsUp, FiBarChart2, FiClock, FiUsers, FiShield, FiSave
 } from 'react-icons/fi';
 import axios from 'axios';
-import { CKEditor } from '@ckeditor/ckeditor5-react';
-import ClassicEditor from '@ckeditor/ckeditor5-build-classic';
+// import { CKEditor } from '@ckeditor/ckeditor5-react';
+// import ClassicEditor from '@ckeditor/ckeditor5-build-classic';
+import RichTextEditor from './RichTextEditor'
 import { Resizable } from 're-resizable';
 
 // ⚠️ ajuste ce chemin si ton alias @ n'est pas configuré
@@ -1170,49 +1171,17 @@ useEffect(() => {
                         }}
                       >
                         <div className="p-2">
-                          <CKEditor
-                            editor={ClassicEditor}
-                            data={model.content || ''}
-                            onReady={(editor) => {
-                              editorRef.current = editor;
-                              applyEditableMinHeight(
-                                typeof editorSize.height === 'number'
-                                  ? editorSize.height
-                                  : parseInt(editorSize.height, 10) || 700
-                              );
-                            }}
-                            onChange={(event, editor) => {
-                              const html = editor.getData();
-                              onChange('content', html);
-                            }}
-                            config={{
-                              language: 'fr',
-                              toolbar: {
-                                items: [
-                                  'undo', 'redo', '|',
-                                  'heading', '|',
-                                  'bold', 'italic', 'underline', 'strikethrough', 'link', 'blockQuote', 'code',
-                                  '|',
-                                  'bulletedList', 'numberedList', 'outdent', 'indent',
-                                  '|',
-                                  'alignment', 'insertTable', 'imageUpload', 'mediaEmbed',
-                                  '|',
-                                  'removeFormat'
-                                ],
-                                shouldNotGroupWhenFull: true
-                              },
-                              heading: {
-                                options: [
-                                  { model: 'paragraph', title: 'Paragraphe', class: 'ck-heading_paragraph' },
-                                  { model: 'heading2', view: 'h2', title: 'Titre 2', class: 'ck-heading_heading2' },
-                                  { model: 'heading3', view: 'h3', title: 'Titre 3', class: 'ck-heading_heading3' },
-                                  { model: 'heading4', view: 'h4', title: 'Titre 4', class: 'ck-heading_heading4' }
-                                ]
-                              },
-                              link: { decorators: { addTargetToExternalLinks: true } },
-                              table: { contentToolbar: ['tableColumn', 'tableRow', 'mergeTableCells'] }
-                            }}
-                          />
+                            <RichTextEditor
+    value={model.content || ""}
+    onChange={(html) => onChange("content", html)}
+    height={
+      editorFullscreen
+        ? Math.max(320, (window.innerHeight || 800) - 160) // marge pour header/footer
+        : (typeof editorSize.height === "number"
+            ? editorSize.height
+            : parseInt(editorSize.height, 10) || 520)
+    }
+  />
                         </div>
                       </Resizable>
                     </div>
