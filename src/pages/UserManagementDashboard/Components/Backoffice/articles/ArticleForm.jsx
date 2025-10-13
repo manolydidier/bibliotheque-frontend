@@ -6,6 +6,9 @@ import {
   FiShare2, FiThumbsUp, FiBarChart2, FiClock, FiUsers, FiShield, FiSave
 } from 'react-icons/fi';
 import axios from 'axios';
+import { CKEditor } from '@ckeditor/ckeditor5-react';
+import ClassicEditor from '@ckeditor/ckeditor5-build-classic';
+import { Resizable } from 're-resizable';
 
 // ⚠️ ajuste ce chemin si ton alias @ n'est pas configuré
 import ImageDropPaste from './ImageDropPaste';
@@ -257,7 +260,7 @@ const ArticleForm = ({ initial = null, onSaved }) => {
   const isEdit = !!(initial?.id);
 
   // Fichiers
-  const [featFile, setFeatFile] = useState(null);
+ const [featFile, setFeatFile] = useState(null);
   const [avatarFile, setAvatarFile] = useState(null);
 
   // PREVIEWS
@@ -291,9 +294,9 @@ const ArticleForm = ({ initial = null, onSaved }) => {
   const tabFields = {
     content:     ['title','slug','excerpt','content'],
     settings:    ['status','visibility','password','published_at','scheduled_at','expires_at'],
-    author:      ['author_name','author_bio','author_id','author_avatar_file'],
+    author:      ['author_name','author_bio','author_id','author_avatar_file','author_avatar'],
     taxonomy:    ['categories','tags'],
-    media:       ['featured_image_file','featured_image_alt'],
+    media:       ['featured_image_file','featured_image_alt','featured_image'],
     analytics:   ['reading_time','word_count'],
     management:  ['reviewed_by','reviewed_at','review_notes'],
     preview:     []
@@ -432,7 +435,87 @@ const ArticleForm = ({ initial = null, onSaved }) => {
 
   const onChange = (k, v) => setModel(prev => ({ ...prev, [k]: v }));
 
-  /* ========= Submit ========= */
+  /* ========= Toast de succès ========= */
+  const [toast, setToast] = useState({ open: false, msg: '' });
+  const toastTimerRef = useRef(null);
+  const showSuccess = (msg = 'Enregistré avec succès') => {
+    setToast({ open: true, msg });
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast({ open: false, msg: '' }), 2600);
+  };
+  useEffect(() => () => toastTimerRef.current && clearTimeout(toastTimerRef.current), []);
+
+  /* ========= Dialog post-enregistrement ========= */
+  const [postSaveDialog, setPostSaveDialog] = useState({ open: false, urls: null, mode: 'update' });
+  const buildUrlsFromArticle = (a) => {
+    const id = a?.id ?? model?.id;
+    const slug = a?.slug ?? model?.slug;
+    const viewUrl = slug ? `/articles/${slug}` : (id ? `/articles/${id}` : '#');
+    const listUrl = '/articlescontroler';
+    const editUrl = id ? `/articles/${id}/edit` : '#';
+    return { viewUrl, listUrl, editUrl };
+  };
+
+  /* ========= Baseline & Dirty Detection (par onglet + global) ========= */
+  const [baseline, setBaseline] = useState(null);
+  const didSetBaselineRef = useRef(false);
+
+  const stableStr = (v) => {
+    if (v === undefined || v === null) return '';
+    if (v instanceof Date) return v.toISOString();
+    if (typeof v === 'object') {
+      try { return JSON.stringify(v); } catch { return String(v); }
+    }
+    return String(v);
+  };
+  const pickForCompare = (source, fields) => {
+    const out = {};
+    for (const k of fields) {
+      if (k in source) out[k] = source[k];
+    }
+    return out;
+  };
+  const areEqualByFields = (a, b, fields) => {
+    for (const k of fields) {
+      const av = a?.[k];
+      const bv = b?.[k];
+      if (stableStr(av) !== stableStr(bv)) return false;
+    }
+    return true;
+  };
+
+  const isTabDirty = (tabId) => {
+    if (!isEdit) return false;
+    const fields = tabFields[tabId] || [];
+    if (!baseline) return false;
+
+    // fichiers
+    if (tabId === 'media' && featFile) return true;
+    if (tabId === 'author' && avatarFile) return true;
+
+    const currentPick  = pickForCompare(model, fields);
+    const baselinePick = pickForCompare(baseline, fields);
+    return !areEqualByFields(currentPick, baselinePick, fields);
+  };
+
+  // Dirty global (au moins un onglet modifié)
+  const isAnyTabDirty = useMemo(() => {
+    if (!isEdit) return false;
+    const tabs = Object.keys(tabFields).filter(t => t !== 'preview');
+    return tabs.some(t => isTabDirty(t));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model, baseline, featFile, avatarFile, isEdit]);
+
+  // Initialise baseline une fois l'initial chargé & model hydraté
+  useEffect(() => {
+    if (isEdit && initial && !didSetBaselineRef.current && model?.id) {
+      didSetBaselineRef.current = true;
+      setBaseline(prev => ({ ...(prev || {}), ...model }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit, initial, model.id]);
+
+  /* ========= Submit global ========= */
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
@@ -493,17 +576,26 @@ const ArticleForm = ({ initial = null, onSaved }) => {
 
       setProgress(100);
       setErrors({}); // succès -> effacer erreurs
-      onSaved?.(res?.data || res);
+      const data = res?.data?.data || res?.data || res;
+      setModel(prev => ({ ...prev, ...(data || {}) }));
+      if (isEdit) setBaseline(data || {});
+      onSaved?.(data);
+      showSuccess(isEdit ? 'Article mis à jour ✅' : 'Article créé ✅');
+
+      // Ouvrir la boîte de dialogue post-enregistrement
+      setPostSaveDialog({
+        open: true,
+        urls: buildUrlsFromArticle(data),
+        mode: isEdit ? 'update' : 'create'
+      });
     } catch (err) {
       console.error('Erreur de soumission:', err.response?.data || err.message);
       if (err.response?.status === 422 && err.response?.data?.errors) {
         const e = err.response.data.errors || {};
         setErrors(e);
-        // Aller automatiquement sur le premier onglet qui contient des erreurs
         const firstTabWithErrors = Object.entries(tabFields)
           .find(([, fields]) => fields.some((f) => Array.isArray(e[f]) && e[f].length > 0));
         if (firstTabWithErrors) setActiveTab(firstTabWithErrors[0]);
-        // Popup optionnelle récap
         const errorMessages = Object.entries(e)
           .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
           .join('\n');
@@ -515,6 +607,118 @@ const ArticleForm = ({ initial = null, onSaved }) => {
       setIsSubmitting(false);
     }
   };
+
+  /* ========= Sauvegarde partielle par onglet (généralisée) ========= */
+  const savePartial = async (tabId) => {
+    if (!isEdit) return; // partial = édition uniquement
+    const fields = tabFields[tabId] || [];
+    if (fields.length === 0 && tabId !== 'media' && tabId !== 'author') return;
+
+    const wantsFiles = (tabId === 'media' && !!featFile) || (tabId === 'author' && !!avatarFile);
+
+    // Build payload avec normalisations ciblées
+    const partial = {};
+    for (const k of fields) {
+      if (k in model) partial[k] = model[k];
+    }
+
+    // Normalisations spécifiques
+    if (tabId === 'settings') {
+      if ('published_at' in partial) partial.published_at = partial.published_at ? toSqlDateTime(partial.published_at) : null;
+      if ('scheduled_at' in partial) partial.scheduled_at = partial.scheduled_at ? toSqlDateTime(partial.scheduled_at) : null;
+      if ('expires_at'   in partial) partial.expires_at   = partial.expires_at   ? toSqlDateTime(partial.expires_at)   : null;
+    }
+    if (tabId === 'management') {
+      if ('reviewed_at' in partial) partial.reviewed_at = partial.reviewed_at ? toSqlDateTime(partial.reviewed_at) : null;
+      if ('reviewed_by' in partial) partial.reviewed_by = partial.reviewed_by ? Number(partial.reviewed_by) : null;
+    }
+    if (tabId === 'analytics') {
+      if ('reading_time' in partial) partial.reading_time = Number(partial.reading_time || 0);
+      if ('word_count'   in partial) partial.word_count   = Number(partial.word_count || 0);
+    }
+    if (tabId === 'taxonomy') {
+      if ('categories' in partial) partial.categories = ensureNumberArray(partial.categories);
+      if ('tags'       in partial) partial.tags       = ensureNumberArray(partial.tags);
+    }
+    if (tabId === 'author') {
+      if ('author_id' in partial) partial.author_id = partial.author_id ? Number(partial.author_id) : null;
+    }
+
+    // Nettoyage des champs vides (sauf booléens/0)
+    Object.keys(partial).forEach(key => {
+      const v = partial[key];
+      if (v === '' || v === null) delete partial[key];
+    });
+
+    try {
+      setIsSubmitting(true);
+      setErrors({});
+
+      let res;
+      if (wantsFiles) {
+        const files = {
+          featured: tabId === 'media'  ? (featFile || null)   : null,
+          avatar:   tabId === 'author' ? (avatarFile || null) : null,
+        };
+        const fd = toFormData(partial, files);
+        res = await updateArticle(initial.id, fd, true); // POST /articles/{id}/update-with-files
+      } else {
+        res = await updateArticle(initial.id, partial, false); // PUT /articles/{id}
+      }
+
+      const updated = res?.data?.data || res?.data || res;
+      setModel(prev => ({ ...prev, ...(updated || {}) }));
+
+      // maj du baseline sur les champs de l’onglet enregistré
+      setBaseline(prev => {
+        const next = { ...(prev || {}) };
+        const src = (updated && typeof updated === 'object') ? updated : model;
+        for (const k of fields) {
+          if (k in src) next[k] = src[k];
+        }
+        return next;
+      });
+
+      // reset des fichiers si envoyés
+      if (tabId === 'media')  { setFeatFile(null); setFeatPreview(''); }
+      if (tabId === 'author') { setAvatarFile(null); setAvatarPreview(''); }
+
+      showSuccess('Onglet enregistré ✅');
+    } catch (err) {
+      console.error('Erreur de sauvegarde partielle:', err.response?.data || err.message);
+      if (err.response?.status === 422 && err.response?.data?.errors) {
+        const e = err.response.data.errors || {};
+        setErrors(e);
+        const errorMessages = Object.entries(e)
+          .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+          .join('\n');
+        alert(`Erreurs de validation:\n${errorMessages}`);
+      } else {
+        alert(err?.response?.data?.message || err.message || 'Erreur lors de l\'enregistrement de l’onglet');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Libellés pour le bouton générique
+  const tabLabelMap = {
+    content: 'Contenu',
+    settings: 'Paramètres',
+    author: 'Auteur',
+    taxonomy: 'Taxonomie',
+    media: 'Médias',
+    analytics: 'Stats',
+    management: 'Gestion',
+    preview: 'Aperçu'
+  };
+  const handleSaveActiveTab = () => savePartial(activeTab);
+
+  /* ========= Conditions d’activation / affichage du bouton global ========= */
+  // Création : boutons actifs si title & content non vides
+  const isCreateValid = !isEdit && Boolean(String(model.title || '').trim()) && Boolean(String(model.content || '').trim());
+  // Édition : bouton visible uniquement s’il y a un dirty global
+  const canSubmit = isEdit ? isAnyTabDirty : isCreateValid;
 
   /* ========= Décorations ========= */
   const statusConfig = {
@@ -534,12 +738,9 @@ const ArticleForm = ({ initial = null, onSaved }) => {
   // SEO header (meta + seo_data normalisés)
   const metaObj = parseMaybeJSON(model?.meta, {});
   const seoObj  = parseMaybeJSON(model?.seo_data, {});
-  const seoDesc =
-    (seoObj?.meta_description || metaObj?.meta_description || model.excerpt || '').toString();
+  const seoDesc = (seoObj?.meta_description || metaObj?.meta_description || model.excerpt || '').toString();
   const seoKeywordsRaw = (seoObj?.keywords ?? metaObj?.keywords ?? '');
-  const seoKeywords = Array.isArray(seoKeywordsRaw)
-    ? seoKeywordsRaw.join(', ')
-    : String(seoKeywordsRaw || '');
+  const seoKeywords = Array.isArray(seoKeywordsRaw) ? seoKeywordsRaw.join(', ') : String(seoKeywordsRaw || '');
 
   // Auteur sélectionné
   const selectedAuthor = useMemo(
@@ -562,6 +763,78 @@ const ArticleForm = ({ initial = null, onSaved }) => {
       setSeoJsonError('JSON invalide');
     }
   };
+const editorWrapRef = useRef(null);
+const [editorSize, setEditorSize] = useState(() => {
+  const saved = localStorage.getItem('articleEditorSize');
+  return saved ? JSON.parse(saved) : { width: 800, height: 700 }; // <-- px par défaut
+});
+
+// Caler la largeur initiale sur la largeur réelle du parent
+useEffect(() => {
+  if (!editorWrapRef.current) return;
+  // si l’ancienne valeur était "100%", on remplace par la largeur réelle
+  setEditorSize(s => {
+    if (typeof s.width === 'string') {
+      return { ...s, width: editorWrapRef.current.clientWidth || 800 };
+    }
+    return s;
+  });
+}, []);
+
+const [editorFullscreen, setEditorFullscreen] = useState(false);
+const editorRef = useRef(null); // CKEditor instance
+
+useEffect(() => {
+  // Empêche de scroller la page quand l’éditeur est en plein écran
+  document.body.style.overflow = editorFullscreen ? 'hidden' : '';
+  return () => { document.body.style.overflow = ''; };
+}, [editorFullscreen]);
+
+// utilitaire : ajuste la hauteur de la zone éditable CKEditor en fonction du container
+const applyEditableMinHeight = (h) => {
+  const editor = editorRef.current;
+  if (!editor) return;
+  const editable = editor.ui?.view?.editable?.element;
+  if (editable) {
+    // On soustrait ~80px pour la toolbar CKEditor
+    const minH = Math.max(300, (typeof h === 'number' ? h : parseInt(h,10) || 700) - 80);
+    editable.style.minHeight = `${minH}px`;
+  }
+};
+// --- Raccourcis clavier: F11 (toggle fullscreen), ESC (sortir) ---
+useEffect(() => {
+  const onKey = (e) => {
+    // Toggle fullscreen avec F11 (et on bloque le F11 natif du navigateur)
+    if (e.key === 'F11') {
+      e.preventDefault();
+      setEditorFullscreen((f) => !f);
+      // recalculer la hauteur de la zone éditable après le toggle
+      setTimeout(() => {
+        applyEditableMinHeight(
+          typeof editorSize.height === 'number'
+            ? editorSize.height
+            : parseInt(editorSize.height, 10) || 700
+        );
+      }, 0);
+    }
+
+    // ESC pour sortir du plein écran
+    if (e.key === 'Escape' && editorFullscreen) {
+      e.preventDefault();
+      setEditorFullscreen(false);
+      setTimeout(() => {
+        applyEditableMinHeight(
+          typeof editorSize.height === 'number'
+            ? editorSize.height
+            : parseInt(editorSize.height, 10) || 700
+        );
+      }, 0);
+    }
+  };
+
+  window.addEventListener('keydown', onKey);
+  return () => window.removeEventListener('keydown', onKey);
+}, [editorFullscreen, editorSize.height]);
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 relative overflow-hidden">
@@ -572,6 +845,75 @@ const ArticleForm = ({ initial = null, onSaved }) => {
           style={{ width: `${progress}%` }}
         />
       </div>
+
+      {/* Toast succès */}
+      <div
+        className={`fixed right-4 top-4 z-[10000] transition-all duration-300 ${
+          toast.open ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'
+        }`}
+      >
+        <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-emerald-600 text-white shadow-lg">
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/20">✓</span>
+          <span className="text-sm font-semibold">{toast.msg}</span>
+        </div>
+      </div>
+
+      {/* Dialog post-save */}
+      {postSaveDialog.open && (
+        <div
+          className="fixed inset-0 z-[10001] flex items-center justify-center p-4"
+          aria-modal="true"
+          role="dialog"
+        >
+          <div
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => setPostSaveDialog(d => ({ ...d, open: false }))}
+          />
+          <div className="relative w-full max-w-lg rounded-3xl bg-white shadow-2xl border border-slate-200">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-bold text-slate-900">
+                {postSaveDialog.mode === 'create' ? 'Article créé' : 'Modifications enregistrées'}
+              </h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Que souhaitez-vous faire maintenant&nbsp;?
+              </p>
+            </div>
+            <div className="p-6 space-y-3">
+              <a
+                className="flex items-center justify-between w-full px-4 py-3 rounded-2xl border-2 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold"
+                href={postSaveDialog.urls?.viewUrl || '#'}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span>👁️ Visualiser l’article (nouvel onglet)</span>
+                <span className="text-xs font-bold">Ouvrir</span>
+              </a>
+              <a
+                className="flex items-center justify-between w-full px-4 py-3 rounded-2xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-800 font-semibold"
+                href={postSaveDialog.urls?.listUrl || '#'}
+              >
+                <span>📚 Revenir à la liste des articles</span>
+                <span className="text-xs font-bold">Aller</span>
+              </a>
+              <a
+                className="flex items-center justify-between w-full px-4 py-3 rounded-2xl border-2 border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 font-semibold"
+                href={postSaveDialog.urls?.editUrl || '#'}
+              >
+                <span>✏️ Rester sur la page de modification</span>
+                <span className="text-xs font-bold">Continuer</span>
+              </a>
+            </div>
+            <div className="p-4 border-t border-slate-200 flex justify-end">
+              <button
+                onClick={() => setPostSaveDialog(d => ({ ...d, open: false }))}
+                className="px-4 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white/70 backdrop-blur-2xl border-b border-slate-200/70 shadow-sm">
@@ -652,6 +994,25 @@ const ArticleForm = ({ initial = null, onSaved }) => {
             </ul>
           </nav>
         </div>
+
+        {/* BARRE DE SAUVEGARDE D’ONGLET (générique, en haut) */}
+        {isEdit && isTabDirty(activeTab) && (
+          <div className="border-t border-slate-200 bg-white/80 backdrop-blur sticky top-[72px] z-40">
+            <div className="mx-auto max-w-screen-2xl px-6 lg:px-8 py-3 flex items-center justify-between">
+              <div className="text-sm text-slate-700">
+                Des modifications non enregistrées dans <span className="font-semibold">« {tabLabelMap[activeTab] || 'Onglet'} »</span>.
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveActiveTab}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow bg-emerald-600 hover:bg-emerald-700"
+              >
+                <FiSave className="w-4 h-4" />
+                Enregistrer cet onglet
+              </button>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Main */}
@@ -731,26 +1092,144 @@ const ArticleForm = ({ initial = null, onSaved }) => {
               <FieldError name="excerpt" />
             </section>
 
-            <div className={`${card} p-8 space-y-3`}>
+            <div className={`${card} p-8 space-y-3 w-[200%]`}>
               <label className={sectionTitle}>Contenu de l'article</label>
-              <textarea
-                rows={10}
-                className={`${inputClass('content')} resize-none`}
-                value={model.content || ''}
-                onChange={e => onChange('content', e.target.value)}
-                placeholder="Rédigez le contenu de votre article ici..."
-              />
+
+                    {/* wrapper pour mesurer la largeur de la carte */}
+                    <div ref={editorWrapRef}>
+                      <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditorFullscreen(f => !f)}
+                        className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white hover:bg-slate-50"
+                        title={editorFullscreen ? 'Quitter le plein écran' : 'Plein écran'}
+                      >
+                        {editorFullscreen ? 'Quitter le plein écran' : 'Plein écran'}
+                      </button>
+                    </div>
+
+                      <div
+                      className={editorFullscreen
+                        ? "fixed inset-0 z-[10000] bg-white p-4"
+                        : "relative"}
+                    >
+                      <Resizable
+                        className="w-[200%] lg:w-auto mx-auto h-96"
+                        size={{ width: editorSize.width, height: editorSize.height }}
+                        defaultSize={{ width: editorSize.width, height: editorSize.height }}
+                        minWidth={320}
+                        minHeight={300}
+                        maxWidth="100%"
+                        bounds={editorFullscreen ? "window" : "parent"}
+                        enable={{
+                          top: true, right: true, bottom: true, left: true,
+                          topRight: true, bottomRight: true, bottomLeft: true, topLeft: true
+                        }}
+                        onResize={(e, dir, ref) => {
+                          const next = { width: ref.offsetWidth, height: ref.offsetHeight };
+                          setEditorSize(next);
+                          applyEditableMinHeight(next.height);
+                        }}
+                        onResizeStop={(e, dir, ref) => {
+                          const next = { width: ref.offsetWidth, height: ref.offsetHeight };
+                          setEditorSize(next);
+                          applyEditableMinHeight(next.height);
+                          try { localStorage.setItem('articleEditorSize', JSON.stringify(next)); } catch {}
+                        }}
+
+                        /* IMPORTANT : pas de scroll ici -> on laisse CKEditor gérer l’overflow interne */
+                        style={{
+                          overflow: 'visible',
+                          borderRadius: '1rem',
+                          border: '1px solid rgb(226 232 240)',
+                          background: 'white',
+                          padding: 0
+                        }}
+
+                        /* poignées visibles */
+                        handleWrapperStyle={{ zIndex: 50 }}
+                        handleStyles={{
+                          right:   { width: '10px', cursor: 'ew-resize' },
+                          left:    { width: '10px', cursor: 'ew-resize' },
+                          top:     { height: '10px', cursor: 'ns-resize' },
+                          bottom:  { height: '10px', cursor: 'ns-resize' },
+                          topRight:    { cursor: 'nesw-resize' },
+                          bottomRight: { cursor: 'nwse-resize' },
+                          bottomLeft:  { cursor: 'nesw-resize' },
+                          topLeft:     { cursor: 'nwse-resize' }
+                        }}
+                        handleComponent={{
+                          topLeft:     <div className="w-3 h-3 bg-slate-300 rounded-lg" />,
+                          topRight:    <div className="w-3 h-3 bg-slate-300 rounded-lg" />,
+                          bottomLeft:  <div className="w-3 h-3 bg-slate-300 rounded-lg" />,
+                          bottomRight: <div className="w-3 h-3 bg-slate-300 rounded-lg" />,
+                          left:        <div className="w-1 h-8 bg-slate-200 rounded" />,
+                          right:       <div className="w-1 h-8 bg-slate-200 rounded" />,
+                          top:         <div className="h-1 w-8 bg-slate-200 rounded" />,
+                          bottom:      <div className="h-1 w-8 bg-slate-200 rounded" />
+                        }}
+                      >
+                        <div className="p-2">
+                          <CKEditor
+                            editor={ClassicEditor}
+                            data={model.content || ''}
+                            onReady={(editor) => {
+                              editorRef.current = editor;
+                              applyEditableMinHeight(
+                                typeof editorSize.height === 'number'
+                                  ? editorSize.height
+                                  : parseInt(editorSize.height, 10) || 700
+                              );
+                            }}
+                            onChange={(event, editor) => {
+                              const html = editor.getData();
+                              onChange('content', html);
+                            }}
+                            config={{
+                              language: 'fr',
+                              toolbar: {
+                                items: [
+                                  'undo', 'redo', '|',
+                                  'heading', '|',
+                                  'bold', 'italic', 'underline', 'strikethrough', 'link', 'blockQuote', 'code',
+                                  '|',
+                                  'bulletedList', 'numberedList', 'outdent', 'indent',
+                                  '|',
+                                  'alignment', 'insertTable', 'imageUpload', 'mediaEmbed',
+                                  '|',
+                                  'removeFormat'
+                                ],
+                                shouldNotGroupWhenFull: true
+                              },
+                              heading: {
+                                options: [
+                                  { model: 'paragraph', title: 'Paragraphe', class: 'ck-heading_paragraph' },
+                                  { model: 'heading2', view: 'h2', title: 'Titre 2', class: 'ck-heading_heading2' },
+                                  { model: 'heading3', view: 'h3', title: 'Titre 3', class: 'ck-heading_heading3' },
+                                  { model: 'heading4', view: 'h4', title: 'Titre 4', class: 'ck-heading_heading4' }
+                                ]
+                              },
+                              link: { decorators: { addTargetToExternalLinks: true } },
+                              table: { contentToolbar: ['tableColumn', 'tableRow', 'mergeTableCells'] }
+                            }}
+                          />
+                        </div>
+                      </Resizable>
+                    </div>
+                    </div>
+
+
               <p className={hint}>
                 <FiMessageCircle className="w-3.5 h-3.5" />
-                Ajoutez du texte, des images, et plus encore
+                Vous pouvez coller depuis Microsoft Word — la mise en forme utile est conservée.
               </p>
+
               <FieldError name="content" />
             </div>
-
             {/* SEO */}
             <section className={`${card} p-8 lg:col-span-2`}>
               <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-3">
-                <span className="p-2 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-lg">
+                <span className="p-2 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-lg">
                   <FiBarChart2 className="w-4 h-4" />
                 </span>
                 Optimisation SEO
@@ -1036,7 +1515,7 @@ const ArticleForm = ({ initial = null, onSaved }) => {
                   </div>
                 </div>
 
-                {/* Avatar auteur : upload + preview (clic + DnD + collage) */}
+                {/* Avatar auteur : upload + preview */}
                 <div className="space-y-3 lg:col-span-1">
                   <label className={sectionTitle}>Avatar de l'auteur</label>
 
@@ -1049,12 +1528,6 @@ const ArticleForm = ({ initial = null, onSaved }) => {
                     existingUrl={model.author_avatar || ''}  // si édition, on l’affiche
                     onPickFile={(f) => {
                       setAvatarFile(f);
-                      // Option: si on remplace par un fichier, enlever l'URL stockée
-                      // if (f) onChange('author_avatar', '');
-                      if (!f) {
-                        // Retrait -> on garde l’URL si tu veux conserver l'ancien, sinon vide :
-                        // onChange('author_avatar', '');
-                      }
                     }}
                     alt=""
                     showAlt={false}
@@ -1071,7 +1544,7 @@ const ArticleForm = ({ initial = null, onSaved }) => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <section className={`${card} p-8 space-y-4`}>
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-3">
-                <span className="p-2 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 text-white shadow-lg">
+                <span className="p-2 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-500 text-white shadow-lg">
                   <FiFolder className="w-4 h-4" />
                 </span>
                 Catégories
@@ -1150,7 +1623,7 @@ const ArticleForm = ({ initial = null, onSaved }) => {
         {/* MEDIA */}
         {activeTab === 'media' && (
           <div className="flex gap-6 w-full flex-col lg:flex-row items-center justify-center">
-            <section className={`${card} p-8 space-y-4`}>
+            <section className={`${card} p-8 space-y-4 w-full`}>
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-3">
                 <span className="p-2 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-lg">
                   <FiUpload className="w-4 h-4" />
@@ -1170,12 +1643,6 @@ const ArticleForm = ({ initial = null, onSaved }) => {
                 inputClass={inputClass('featured_image_alt')}
                 onPickFile={(f) => {
                   setFeatFile(f);
-                  // Option: si on remplace par un fichier, effacer l'URL backend
-                  // if (f) onChange('featured_image', '');
-                  if (!f) {
-                    // Retrait -> soit on laisse l'URL backend, soit on la vide :
-                    // onChange('featured_image', '');
-                  }
                 }}
                 onChangeAlt={(val) => onChange('featured_image_alt', val)}
                 helperNode={<p className={hint}>Important pour le SEO et l'accessibilité</p>}
@@ -1307,7 +1774,7 @@ const ArticleForm = ({ initial = null, onSaved }) => {
         {activeTab === 'preview' && (
           <section className={`${card} p-8`}>
             <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-3">
-              <span className="p-2 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-lg">
+              <span className="p-2 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-lg">
                 <FiEye className="w-4 h-4" />
               </span>
               Aperçu de la saisie
@@ -1320,7 +1787,7 @@ const ArticleForm = ({ initial = null, onSaved }) => {
                   {model.title || 'Titre de l’article'}
                 </div>
                 <div className="text-[#006621] text-sm truncate">
-                  https://votre-site.tld/{model.slug || 'slug-de-article'}
+                  https://map.tld/{model.slug || 'slug-de-article'}
                 </div>
                 <div className="text-[#545454] text-sm line-clamp-2">
                   {seoDesc || model.excerpt || 'La description s’affichera ici.'}
@@ -1331,23 +1798,43 @@ const ArticleForm = ({ initial = null, onSaved }) => {
         )}
       </main>
 
-      {/* Footer actions */}
+      {/* Footer actions (bouton global à sa place d’origine) */}
       <footer className="sticky bottom-0 z-40 bg-white/80 backdrop-blur-xl border-t border-slate-200">
         <div className="mx-auto max-w-screen-2xl px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="text-xs text-slate-500">
             {isEdit ? `Édition de l’article #${model.id ?? ''}` : 'Création d’un nouvel article'}
           </div>
+
+          {/* Règle d’affichage :
+              - ÉDITION : afficher le bouton seulement s'il y a des changements (isAnyTabDirty)
+              - CRÉATION : afficher le bouton toujours mais désactivé tant que title/content sont vides */}
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow
-                ${isSubmitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
-            >
-              <FiSave className="w-4 h-4" />
-              {isSubmitting ? 'Enregistrement…' : (isEdit ? 'Mettre à jour' : 'Enregistrer')}
-            </button>
+            {isEdit ? (
+              isAnyTabDirty ? (
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow
+                    ${isSubmitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                >
+                  <FiSave className="w-4 h-4" />
+                  {isSubmitting ? 'Enregistrement…' : 'Mettre à jour'}
+                </button>
+              ) : null
+            ) : (
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={isSubmitting || !isCreateValid}
+                title={!isCreateValid ? 'Renseignez au moins le titre et le contenu' : undefined}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow
+                  ${(!isCreateValid || isSubmitting) ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+              >
+                <FiSave className="w-4 h-4" />
+                {isSubmitting ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+            )}
           </div>
         </div>
       </footer>

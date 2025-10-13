@@ -17,14 +17,38 @@ import { getStoredPassword, setStoredPassword } from "../utils/passwordGate";
 /* =========================
    Utils
 ========================= */
+// ✅ utils chemin image — place ce bloc au-dessus de toAbsolute
+const fixFeaturedPath = (u) => {
+  if (!u) return u;
+  let s = String(u).trim();
 
+  // déjà absolu -> laisser tel quel
+  if (/^https?:\/\//i.test(s)) return s;
+
+  // nettoyer les slashs de tête
+  s = s.replace(/^\/+/, "");
+
+  // si déjà sous /storage, ok
+  if (s.startsWith("storage/")) return s;
+
+  // 🔧 correctif : nos featured vivent sous storage/articles/featured/...
+  if (s.startsWith("articles/featured/")) return `storage/${s}`;
+
+  return s;
+};
+
+// ⬇️ remplace ton toAbsolute par celui-ci
 const toAbsolute = (u) => {
   if (!u) return null;
-  const s = String(u);
-  if (/^https?:\/\//i.test(s)) return s;
+  const fixed = fixFeaturedPath(u);
+  if (/^https?:\/\//i.test(fixed)) return fixed;
+
   const base = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/api\/?$/i, "");
-  return base ? `${base}/${s.replace(/^\/+/, "")}` : s;
+  // si base existe (ex: http://127.0.0.1:8000), on compose une URL absolue
+  return base ? `${base}/${fixed.replace(/^\/+/, "")}` : `/${fixed.replace(/^\/+/, "")}`;
 };
+
+
 
 function getCategoryFromTitle(title) {
   const s = String(title || "").toLowerCase();
@@ -186,12 +210,25 @@ export default function GridCard({ item, routeBase, onOpen }) {
   }, [item.reading_time, item.word_count, item.content]);
 
   const imgUrl = useMemo(() => {
-    if (item.featured_image_url) return toAbsolute(item.featured_image_url);
-    if (typeof item.featured_image === "string") return toAbsolute(item.featured_image);
-    if (item.featured_image?.url) return toAbsolute(item.featured_image.url);
-    if (Array.isArray(item.media) && item.media[0]?.url) return toAbsolute(item.media[0].url);
-    return null;
-  }, [item.featured_image_url, item.featured_image, item.media]);
+  // on passe toutes les variantes par fixFeaturedPath + toAbsolute
+  if (item.featured_image_url) return toAbsolute(item.featured_image_url);
+
+  if (typeof item.featured_image === "string")
+    return toAbsolute(item.featured_image);
+
+  if (item.featured_image?.url)
+    return toAbsolute(item.featured_image.url);
+
+  // 🆕 si l’API renvoie `path` plutôt que `url`
+  if (item.featured_image?.path)
+    return toAbsolute(item.featured_image.path);
+
+  if (Array.isArray(item.media) && item.media[0]?.url)
+    return toAbsolute(item.media[0].url);
+
+  return null;
+}, [item.featured_image_url, item.featured_image, item.media]);
+
 
   const formattedViewCount = useMemo(() => nf.format(Number(item.view_count || 0)), [nf, item.view_count]);
   const formattedRating    = useMemo(() => (item.rating_average ? Number(item.rating_average).toFixed(1) : "0,0"), [item.rating_average]);
@@ -317,6 +354,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
                 src={imgUrl}
                 alt={item.title}
                 ratio="100%"
+                modern="off" 
                 className="transition-all duration-700 group-hover:scale-110 group-hover:brightness-110 group-hover:saturate-110"
               />
 

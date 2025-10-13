@@ -1,48 +1,73 @@
-// ------------------------------
-// File: media-library/parts/SmartImage.jsx
-// Image "smart" : LQIP (squelette), AVIF/WebP fallback, gestion d'erreur
-// ------------------------------
-import { useState } from "react";
+// SmartImage.jsx
+import { useState, useMemo } from "react";
 
 export default function SmartImage({
   src,
   alt = "",
   className = "",
-  ratio = "56.25%", // 16:9
+  ratio = "56.25%",
   eager = false,
   rounding = "rounded-2xl",
+  // 🔧 OFF par défaut pour éviter les NS_BINDING_ABORTED
+  modern = "off", // "off" | "on" | "auto"
 }) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError]   = useState(false);
 
-  // Utilitaire simple pour proposer AVIF/WEBP si l'URL est un .jpg/.jpeg/.png
-  const toModern = (url, ext) =>
+  const canModern = useMemo(() => {
+    if (modern === "off") return false;
+    // "auto" n’active que si on a explicitement une config d’environnement
+    if (modern === "auto" && import.meta.env.VITE_SERVE_AVIF_WEBP !== "1") return false;
+    return /\.(jpe?g|png)$/i.test(String(src || ""));
+  }, [modern, src]);
+
+  const toVariant = (url, ext) =>
     typeof url === "string" ? url.replace(/\.(jpg|jpeg|png)$/i, `.${ext}`) : url;
+
+  const avif = canModern ? toVariant(src, "avif") : null;
+  const webp = canModern ? toVariant(src, "webp") : null;
 
   return (
     <div className={`relative w-full overflow-hidden ${rounding}`} style={{ paddingTop: ratio }}>
-      {/* Squelette LQIP */}
-      <div className={`absolute inset-0 transition-opacity duration-500 ${loaded ? "opacity-0" : "opacity-100"}`}>
-        <div className="w-full h-full bg-slate-200 dark:bg-slate-700 animate-pulse" />
-      </div>
+      {!loaded && !error && <div className="absolute inset-0 bg-slate-200 dark:bg-slate-700 animate-pulse" />}
 
-      {!error ? (
+      {canModern ? (
         <picture>
-          <source srcSet={toModern(src, "avif")} type="image/avif" />
-          <source srcSet={toModern(src, "webp")} type="image/webp" />
+          <source srcSet={avif} type="image/avif" />
+          <source srcSet={webp} type="image/webp" />
           <img
             src={src}
             alt={alt}
             loading={eager ? "eager" : "lazy"}
             decoding="async"
             onLoad={() => setLoaded(true)}
-            onError={() => setError(true)}
-            className={`absolute inset-0 w-full h-full object-cover ${className}`}
+            onError={() => {
+              // Si une source échoue, on laissera <img src={src}> charger
+              setError(true);
+            }}
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${
+              loaded ? "opacity-100" : "opacity-0"
+            } ${className}`}
           />
         </picture>
       ) : (
-        <div className="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-400 text-3xl">
-          🖼️
+        <img
+          src={src}
+          alt={alt}
+          loading={eager ? "eager" : "lazy"}
+          decoding="async"
+          onLoad={() => setLoaded(true)}
+          onError={() => setError(true)}
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${
+            loaded ? "opacity-100" : "opacity-0"
+          } ${className}`}
+        />
+      )}
+
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center text-slate-400 text-center px-4">
+          <span className="text-3xl" role="img" aria-label="Image non disponible">🖼️</span>
+          <p className="ml-2 text-sm">Image non disponible</p>
         </div>
       )}
     </div>

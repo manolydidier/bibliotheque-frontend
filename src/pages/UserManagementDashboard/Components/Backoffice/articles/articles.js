@@ -6,6 +6,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
 /**
  * Instance axios centralisée.
  * IMPORTANT : on NE fixe PAS "Content-Type" quand on envoie un FormData.
+ * 🔎 Aucune navigation ici : pas de useNavigate, navigate, window.location, etc.
  */
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -79,6 +80,7 @@ export const getArticle = (id) =>
 // CREATE
 // - JSON  -> POST /articlesstore
 // - FILES -> POST /articles/with-files
+// ⚠️ Pas de navigation ici : on renvoie juste la réponse
 export const createArticle = (payload, withFiles = false, onUploadProgress) => {
   if (withFiles) {
     return api
@@ -97,6 +99,7 @@ export const createArticle = (payload, withFiles = false, onUploadProgress) => {
 // UPDATE
 // - JSON  -> PUT  /articles/{id}
 // - FILES -> POST /articles/{id}/update-with-files
+// ⚠️ Pas de navigation ici : on renvoie juste la réponse
 export const updateArticle = (id, payload, withFiles = false, onUploadProgress) => {
   if (withFiles) {
     return api
@@ -114,10 +117,10 @@ export const updateArticle = (id, payload, withFiles = false, onUploadProgress) 
 
 // DELETE (force) / SOFT DELETE / RESTORE / TRASH
 export const destroyArticle = (id) =>
-  api.delete(`/articles/${id}`).then((r) => r.data);
+  api.delete(`/articles/${id}/hard-delete`).then((r) => r.data);
 
 export const softDeleteArticle = (id) =>
-  api.delete(`/articles/${id}/soft-delete`).then((r) => r.data);
+  api.post(`/articles/${id}/soft-delete`).then((r) => r.data);
 
 export const restoreArticle = (id) =>
   api.post(`/articles/${id}/restore`).then((r) => r.data);

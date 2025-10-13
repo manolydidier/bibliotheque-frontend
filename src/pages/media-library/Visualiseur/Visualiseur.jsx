@@ -2,6 +2,8 @@
 import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
+import SmartImage from "../parts/SmartImage"; // ✅ affichage image robuste
+
 import {
   setAuthError,
   clearAuthError,
@@ -56,11 +58,43 @@ const firstCategory = (art) => {
   return (cats.find((c) => c?.pivot?.is_primary) || cats[0])?.name || "—";
 };
 
+// === Helpers URL (mêmes règles que GridCard) =========================
+const fixFeaturedPath = (u) => {
+  if (!u) return u;
+  let s = String(u).trim();
+
+  // déjà absolu
+  if (/^https?:\/\//i.test(s)) return s;
+
+  // remove leading slashes
+  s = s.replace(/^\/+/, "");
+
+  // ok si commence par storage/
+  if (s.startsWith("storage/")) return s;
+
+  // correctif: nos featured vivent sous storage/articles/featured/...
+  if (s.startsWith("articles/featured/")) return `storage/${s}`;
+
+  return s;
+};
+
+const toAbsolute = (u) => {
+  if (!u) return null;
+  const fixed = fixFeaturedPath(u);
+  if (/^https?:\/\//i.test(fixed)) return fixed;
+
+  const base = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/api\/?$/i, "");
+  return base ? `${base}/${fixed.replace(/^\/+/, "")}` : `/${fixed.replace(/^\/+/, "")}`;
+};
+
 const primaryMediaUrl = (art) => {
   if (!art) return null;
-  if (typeof art.featured_image === "string") return art.featured_image;
-  if (art.featured_image?.url) return art.featured_image.url;
-  return art.media?.[0]?.url || null;
+  const raw =
+    (typeof art.featured_image === "string" && art.featured_image) ||
+    art.featured_image?.url ||
+    art.media?.[0]?.url ||
+    null;
+  return raw ? toAbsolute(raw) : null;
 };
 
 const inferTypeFromUrl = (url) => {
@@ -69,8 +103,8 @@ const inferTypeFromUrl = (url) => {
   if (s.endsWith(".pdf")) return "pdf";
   if (/\.(xlsx?|csv)$/.test(s)) return "excel";
   if (/\.(docx?|rtf)$/.test(s)) return "word";
-  if (/\.(png|jpe?g|gif|webp|svg)$/.test(s)) return "image";
-  if (/\.(mp4|webm|ogg|mov)$/.test(s)) return "video";
+  if (/\.(png|jpe?g|gif|webp|svg|avif)$/.test(s)) return "image";
+  if (/\.(mp4|webm|ogg|mov)$/i.test(s)) return "video";
   return "other";
 };
 
@@ -269,7 +303,7 @@ function useMeFromLaravel() {
   return { me, loading, token };
 }
 
-// ✅ Helper d’accès privé (côté front) — version stricte + logs utiles
+// ✅ Helper d’accès privé (côté front)
 function hasPrivateAccess(me) {
   const roles = (me?.roles || []).map(r =>
     (r?.name ?? r?.slug ?? r?.title ?? r)?.toString().toLowerCase()
@@ -282,12 +316,12 @@ function hasPrivateAccess(me) {
 
   const perms = Array.isArray(me?.permissions) ? me.permissions : [];
   const permMatch = perms.find(p => {
-    const name = String(p?.name ?? "").toLowerCase();        // ex: "lire articles privés"
-    const action = String(p?.action ?? "").toLowerCase();    // ex: "articles.read_private"
-    const resource = String(p?.resource ?? "").toLowerCase();// ex: "articles"
+    const name = String(p?.name ?? "").toLowerCase();
+    const action = String(p?.action ?? "").toLowerCase();
+    const resource = String(p?.resource ?? "").toLowerCase();
     const isArticles = resource === "articles";
     const hasAction = action === "articles.read_private" || action === "articles.view_private";
-    const hasLabel  = /priv(e|é)s?/i.test(name);             // "privé", "privés"
+    const hasLabel  = /priv(e|é)s?/i.test(name);
     return isArticles && (hasAction || hasLabel);
   });
 
@@ -532,8 +566,6 @@ export default function Visualiseur() {
     if (!article || meLoading) return;
     const isPrivate = String(article.visibility || "").toLowerCase() === "private";
 
-    // 🚫 Toujours masquer un article privé si l'utilisateur n'a PAS la permission,
-    // token ou pas. On ne “fait plus confiance” à un back qui renverrait par erreur un privé.
     if (isPrivate && !hasPrivateAccess(me)) {
       setArticle(null);
       setLockedKind("private");
@@ -592,17 +624,20 @@ export default function Visualiseur() {
     if (medias.length) {
       return medias
         .filter((m) => !!m?.url)
-        .map((m, idx) => ({
-          id: m.id || idx + 1,
-          title: m.title || article?.title || "Pièce jointe",
-          type: inferTypeFromUrl(m.url),
-          size: m.size_readable || "—",
-          date: formatDate(article?.published_at),
-          category: firstCategory(article),
-          thumbnail: m.url,
-          fileUrl: m.url,
-          favorite: m.is_favorite || false,
-        }));
+        .map((m, idx) => {
+          const abs = toAbsolute(m.url);
+          return {
+            id: m.id || idx + 1,
+            title: m.title || article?.title || "Pièce jointe",
+            type: inferTypeFromUrl(abs),
+            size: m.size_readable || "—",
+            date: formatDate(article?.published_at),
+            category: firstCategory(article),
+            thumbnail: abs,
+            fileUrl: abs,
+            favorite: m.is_favorite || false,
+          };
+        });
     }
 
     const src = primaryMediaUrl(article);
@@ -631,6 +666,12 @@ export default function Visualiseur() {
   useEffect(() => {
     if (mediaList.length && !selectedFile) setSelectedFile(mediaList[0]);
   }, [mediaList, selectedFile]);
+
+  // Debug URL preview (optionnel)
+  useEffect(() => {
+    const u = selectedFile?.fileUrl || primaryMediaUrl(article);
+    if (u) console.debug("[Preview] image URL:", u);
+  }, [selectedFile, article]);
 
   /* ------- Similar articles ------- */
   useEffect(() => {
@@ -681,7 +722,7 @@ export default function Visualiseur() {
     );
   }
 
-  // 🔒 Tous les cas d'accès restreint (privé / protégé / inconnu) : page neutre
+  // 🔒 Tous les cas d'accès restreint
   if (!article && (lockedKind === "private" || lockedKind === "password" || lockedKind === "unknown")) {
     const isPrivateLock = lockedKind === "private";
     return (
@@ -1071,16 +1112,17 @@ function SimilarList({ similar, loading, onOpenSimilar }) {
         )}
 
         {!loading && (similar.length ? similar.map((it, index) => {
-          const cover =
+          const coverRaw =
             (typeof it.featured_image === "string" && it.featured_image) ||
             it.featured_image?.url ||
             it.media?.[0]?.url ||
             null;
+          const cover = coverRaw ? toAbsolute(coverRaw) : null;
           return (
             <button
               key={it.id ?? `${it.slug}-${index}`}
               onClick={() => onOpenSimilar(it.slug || it.id)}
-              className="w-full text-left p-5 rounded-2xl cursor-pointer flex items-center border border-slate-200/60 bg-white/80 backdrop-blur-sm hover:border-blue-300/70 hover:shadow-lg hover:shadow-blue-100/40 hover:scale-[1.02] transform transition-all duration-300 group"
+              className="w-full text-left p-5 rounded-2xl cursor-pointer flex items-center transition-all duration-300 border border-slate-200/60 bg-white/80 backdrop-blur-sm hover:border-blue-300/70 hover:shadow-lg hover:shadow-blue-100/40 hover:scale-[1.02] transform transition-all duration-300 group"
               style={{ animationDelay: `${index * 80}ms`, animation: 'slideInUp 0.5s ease-out forwards' }}
             >
               <div className="relative w-14 h-14 bg-gradient-to-br from-slate-100 to-slate-200 rounded-xl flex items-center justify-center mr-4 overflow-hidden shadow-sm group-hover:shadow-md transition-all duration-300">
@@ -1257,7 +1299,7 @@ function Medias({ mediaList }) {
           </div>
           {m.type === "image" && (
             <div className="p-5">
-              <img src={m.thumbnail} alt={m.title} className="w-full h-48 object-cover rounded-xl shadow-md group-hover:shadow-xl transition-all duration-500" />
+              <img src={toAbsolute(m.thumbnail)} alt={m.title} className="w-full h-48 object-cover rounded-xl shadow-md group-hover:shadow-xl transition-all duration-500" />
             </div>
           )}
         </div>
@@ -1268,10 +1310,20 @@ function Medias({ mediaList }) {
 
 function PreviewByType({ type, url, title, onOpen, onDownload }) {
   if (type === "image") {
+    const abs = toAbsolute(url);
     return (
       <div className="w-full flex flex-col">
         <div className="flex-1 flex items-center justify-center bg-slate-50/60 rounded-2xl border border-slate-200/40 p-6 sm:p-8 backdrop-blur-sm">
-          <img src={url} alt={title} className="max-w-full max-h-[62vh] lg:max-h-[65vh] rounded-2xl object-contain shadow-2xl" />
+          <div className="w-full max-w-full max-h-[62vh] lg:max-h-[65vh]">
+            <SmartImage
+              src={abs}
+              alt={title}
+              modern="off"          // évite NS_BINDING_ABORTED
+              ratio="56.25%"        // 16:9
+              rounding="rounded-2xl"
+              className="object-contain"
+            />
+          </div>
         </div>
         <div className="mt-6 sm:mt-8 flex flex-wrap justify-center gap-3 sm:gap-4">
           <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl flex items-center shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
@@ -1508,7 +1560,7 @@ function StatsCharts({ article }) {
 
       {/* Header */}
       <div className="mb-8 lg:mb-10">
-        <h1 className="text-2xl lg:text-3xl font-light text-slate-800 mb-2 leading-tight">
+        <h1 className="text-2xl lg:3xl font-light text-slate-800 mb-2 leading-tight">
           Statistiques de l'article
         </h1>
         <div className="h-[3px] w-16 lg:w-20 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full" />

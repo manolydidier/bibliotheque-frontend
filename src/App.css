@@ -337,3 +337,17 @@
   background-color: #eff6ff;
   border-left: 3px solid #3b82f6;
 }
+/* Fait grandir la zone éditable à la hauteur du conteneur */
+.ck-editor,
+.ck-editor__main {
+  min-height: 100%;
+}
+.ck-editor__editable_inline {
+  min-height: 100%;
+}
+
+/* Rendez les poignées bien visibles (optionnel) */
+.resizable-grip {
+  background: rgba(59,130,246,.15); /* bleu clair */
+  border-radius: 6px;
+}

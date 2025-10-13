@@ -13,7 +13,7 @@ const ArticleEditCreate = () => {
 
   const onSaved = (art) => {
     setToast({ type:'success', message: id ? 'Article mis à jour' : 'Article créé' });
-    setTimeout(()=> navigate('/articles'), 700);
+    // setTimeout(()=> navigate(`/articles/${id}`), 700);
   };
 
   return (
@@ -21,7 +21,7 @@ const ArticleEditCreate = () => {
       {toast && <Toast {...toast} onClose={()=>setToast(null)} />}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">{id ? 'Éditer article' : 'Créer un article'}</h2>
-        <button onClick={()=>navigate('/articles')} className="px-3 py-2 border rounded">Retour</button>
+        <button onClick={()=>navigate('/articlescontroler')} className="px-3 py-2 border rounded">Retour</button>
       </div>
       <ArticleForm initial={initial} onSaved={onSaved} />
     </div>
