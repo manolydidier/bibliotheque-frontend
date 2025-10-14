@@ -263,18 +263,16 @@ const ArticleForm = () => {
   // Tenant lock
   const [tenantLocked, setTenantLocked] = useState(true);
 
-  // SEO JSON
-  const [seoJsonDraft, setSeoJsonDraft] = useState('');
-  const [seoJsonError, setSeoJsonError] = useState('');
-
   /* ---------- ERREURS LARAVEL (422) ---------- */
   const [errors, setErrors] = useState({});
   const totalErrors = useMemo(
     () => Object.values(errors).reduce((acc, arr) => acc + (Array.isArray(arr) ? arr.length : 0), 0),
     [errors]
   );
+
+  // ⚠️ Ajout de seo_data dans la détection de salissure pour le tab "content"
   const tabFields = {
-    content:     ['title','slug','excerpt','content'],
+    content:     ['title','slug','excerpt','content','seo_data'],
     settings:    ['status','visibility','password','published_at','scheduled_at','expires_at'],
     author:      ['author_name','author_bio','author_id','author_avatar_file','author_avatar'],
     taxonomy:    ['categories','tags'],
@@ -334,7 +332,6 @@ const ArticleForm = () => {
           const seo  = parseMaybeJSON(art.seo_data, {});
           return { ...m, ...art, meta, seo_data: seo };
         });
-        // baseline sera positionné un peu plus bas quand model.id sera présent
       } catch (e) {
         const status = e?.response?.status;
         const vis = e?.response?.data?.visibility || '';
@@ -347,7 +344,6 @@ const ArticleForm = () => {
           });
         } else {
           console.error('Chargement article échoué:', e?.response?.data || e?.message);
-          // navigate('/articlescontroler'); // (optionnel)
         }
       }
     })();
@@ -749,7 +745,6 @@ const ArticleForm = () => {
   const handleSaveActiveTab = () => savePartial(activeTab);
 
   const isCreateValid = !isEdit && Boolean(String(model.title || '').trim()) && Boolean(String(model.content || '').trim());
-  // const canSubmit = isEdit ? isAnyTabDirty : isCreateValid; // (si besoin de réutiliser)
 
   const statusConfig = {
     draft: { bg: 'bg-gradient-to-r from-amber-50 to-yellow-50', text: 'text-amber-700', border: 'border-amber-200', icon: '📝' },
@@ -765,11 +760,39 @@ const ArticleForm = () => {
   };
   const currentVisibility = visibilityConfig[model.visibility] || visibilityConfig.public;
 
-  const metaObj = parseMaybeJSON(model?.meta, {});
-  const seoObj  = parseMaybeJSON(model?.seo_data, {});
-  const seoDesc = (seoObj?.meta_description || metaObj?.meta_description || model.excerpt || '').toString();
-  const seoKeywordsRaw = (seoObj?.keywords ?? metaObj?.keywords ?? '');
-  const seoKeywords = Array.isArray(seoKeywordsRaw) ? seoKeywordsRaw.join(', ') : String(seoKeywordsRaw || '');
+  // ======== SEO clean (sans keywords, sans JSON) ========
+  const seoObj = parseMaybeJSON(model?.seo_data, {});
+  const metaTitle = (seoObj?.meta_title ?? model.title ?? '').toString();
+  const metaDescription = (seoObj?.meta_description ?? model.excerpt ?? '').toString();
+  const canonicalUrl = (seoObj?.canonical_url ?? '').toString();
+  const robotsIndex = typeof seoObj?.robots?.index === 'boolean' ? seoObj.robots.index
+                     : (typeof seoObj?.robots_index === 'boolean' ? seoObj.robots_index : true);
+  const robotsFollow = typeof seoObj?.robots?.follow === 'boolean' ? seoObj.robots.follow
+                      : (typeof seoObj?.robots_follow === 'boolean' ? seoObj.robots_follow : true);
+
+  const setSeo = (patch) =>
+    setModel(prev => {
+      const cur = parseMaybeJSON(prev.seo_data, {});
+      const next = { ...cur, ...patch };
+      // normaliser robots en objet {index, follow}
+      if ('robots_index' in next || 'robots_follow' in next) {
+        next.robots = {
+          index: ('robots_index' in next) ? !!next.robots_index : (cur?.robots?.index ?? true),
+          follow: ('robots_follow' in next) ? !!next.robots_follow : (cur?.robots?.follow ?? true),
+        };
+        delete next.robots_index;
+        delete next.robots_follow;
+      }
+      return { ...prev, seo_data: next };
+    });
+
+  const titleMax = 60;
+  const descMax = 160;
+  const titleCount = metaTitle.length;
+  const descCount = metaDescription.length;
+
+  const robotsLabel = `${robotsIndex ? 'index' : 'noindex'}, ${robotsFollow ? 'follow' : 'nofollow'}`;
+  const previewUrl = canonicalUrl || `https://map.tld/${model.slug || 'slug-de-article'}`;
 
   const selectedAuthor = useMemo(
     () => adminUsers.find(u => Number(u.id) === Number(model.author_id)) || null,
@@ -1073,84 +1096,116 @@ const ArticleForm = () => {
               </div>
             )}
 
-            {/* SEO */}
+            {/* SEO — version propre et minimale */}
             <section className={`${card} p-8 lg:col-span-2`}>
               <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-3">
                 <span className="p-2 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-lg">
                   <FiBarChart2 className="w-4 h-4" />
                 </span>
-                Optimisation SEO
+                Optimisation SEO (propre)
               </h3>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-3">
-                    <label className="text-sm font-semibold text-slate-700">Meta Description</label>
+                <div className="lg:col-span-2 grid grid-cols-1 gap-6">
+                  {/* Meta Title */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-700">Meta title</label>
+                    <input
+                      className={inputBase}
+                      value={metaTitle}
+                      onChange={(e) => setSeo({ meta_title: e.target.value })}
+                      placeholder="Titre SEO (≈ 50–60 caractères)"
+                    />
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Affiché comme balise &lt;title&gt;</span>
+                      <span className={`text-xs font-semibold ${titleCount > titleMax ? 'text-red-600' : (titleCount >= 50 ? 'text-emerald-600' : 'text-slate-500')}`}>
+                        {titleCount}/{titleMax}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Meta Description */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-700">Meta description</label>
                     <textarea
                       rows={5}
                       className={inputBase}
-                      value={seoDesc}
-                      onChange={e => onChange('seo_data', { ...seoObj, meta_description: e.target.value })}
-                      placeholder="Description concise (150-160 caractères)"
+                      value={metaDescription}
+                      onChange={(e) => setSeo({ meta_description: e.target.value })}
+                      placeholder="Description concise (≈ 150–160 caractères)"
                     />
-                  </div>
-                  <div className="space-y-3">
-                    <label className="text-sm font-semibold text-slate-700">Mots-clés SEO</label>
-                    <input
-                      className={inputBase}
-                      value={seoKeywords}
-                      onChange={e => onChange('seo_data', { ...seoObj, keywords: e.target.value })}
-                      placeholder="mot-clé1, mot-clé2, mot-clé3"
-                    />
-                    <p className={hint}>
-                      <FiTag className="w-3.5 h-3.5" />
-                      Séparez les mots-clés par des virgules
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Résumé pour les moteurs de recherche</span>
+                      <span className={`text-xs font-semibold ${descCount > descMax ? 'text-red-600' : (descCount >= 140 ? 'text-emerald-600' : 'text-slate-500')}`}>
+                        {descCount}/{descMax}
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Avancé JSON */}
-                  <div className="md:col-span-2">
-                    <button
-                      type="button"
-                      onClick={() => setSeoJsonError('') || setSeoJsonDraft(JSON.stringify(seoObj, null, 2))}
-                      className="px-3 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold"
-                    >
-                      Éditer SEO (JSON)
-                    </button>
-                    <div className="mt-3">
-                      <textarea
-                        rows={8}
-                        className={`${inputBase} font-mono text-xs`}
-                        value={seoJsonDraft}
-                        onChange={e => setSeoJsonDraft(e.target.value)}
-                        spellCheck={false}
-                        placeholder='{"og_title":"..."}'
+                  {/* Canonical + Robots */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="md:col-span-2 space-y-2">
+                      <label className="text-sm font-semibold text-slate-700">Canonical URL (optionnel)</label>
+                      <input
+                        className={inputBase}
+                        value={canonicalUrl}
+                        onChange={(e) => setSeo({ canonical_url: e.target.value })}
+                        placeholder="https://exemple.com/chemin-canonique"
                       />
-                      <div className="mt-2 flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            try {
-                              const parsed = JSON.parse(seoJsonDraft || '{}');
-                              setSeoJsonError('');
-                              setModel(prev => ({ ...prev, seo_data: parsed }));
-                            } catch {
-                              setSeoJsonError('JSON invalide');
-                            }
-                          }}
-                          className="px-3 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700"
-                        >
-                          Appliquer le JSON
-                        </button>
-                        {seoJsonError && <span className="text-xs text-red-600">{seoJsonError}</span>}
+                      <span className="text-xs text-slate-500">Évite le contenu dupliqué</span>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-slate-700">Robots</label>
+                      <div className="flex gap-2">
+                        <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-xs font-semibold">
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={robotsIndex}
+                            onChange={(e) => setSeo({ robots_index: e.target.checked })}
+                          />
+                          <span className={`relative inline-flex h-5 w-9 items-center rounded-full ${robotsIndex ? 'bg-blue-600' : 'bg-slate-300'}`}>
+                            <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${robotsIndex ? 'translate-x-4' : 'translate-x-0'}`} />
+                          </span>
+                          index
+                        </label>
+                        <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-xs font-semibold">
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={robotsFollow}
+                            onChange={(e) => setSeo({ robots_follow: e.target.checked })}
+                          />
+                          <span className={`relative inline-flex h-5 w-9 items-center rounded-full ${robotsFollow ? 'bg-blue-600' : 'bg-slate-300'}`}>
+                            <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${robotsFollow ? 'translate-x-4' : 'translate-x-0'}`} />
+                          </span>
+                          follow
+                        </label>
                       </div>
+                      <span className="text-xs text-slate-500">Balise <code>robots</code> : {robotsLabel}</span>
                     </div>
                   </div>
                 </div>
 
-                <aside className="lg:col-span-1">
+                {/* Aside tips + mini aperçu */}
+                <aside className="lg:col-span-1 space-y-4">
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-                    Conseils SEO : gardez un titre clair, une meta-description précise (150-160 car.), et des mots-clés pertinents.
+                    Conseils : concentre le *meta title* (≤60) sur l’intention de recherche, garde une *meta description* claire (≤160), et définis une URL canonique si nécessaire.
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-xs text-slate-400 mb-2">Aperçu Google (mini)</div>
+                    <div className="max-w-xs">
+                      <div className="text-[#1a0dab] text-sm leading-5 truncate">
+                        {metaTitle || model.title || 'Titre de l’article'}
+                      </div>
+                      <div className="text-[#006621] text-xs truncate">
+                        {previewUrl}
+                      </div>
+                      <div className="text-[#545454] text-xs line-clamp-2">
+                        {metaDescription || model.excerpt || 'La description s’affichera ici.'}
+                      </div>
+                    </div>
                   </div>
                 </aside>
               </div>
@@ -1651,13 +1706,13 @@ const ArticleForm = () => {
               <div className="text-xs text-slate-400 mb-2">Aperçu Google</div>
               <div className="max-w-2xl">
                 <div className="text-[#1a0dab] text-lg leading-6 truncate">
-                  {model.title || 'Titre de l’article'}
+                  {metaTitle || model.title || 'Titre de l’article'}
                 </div>
                 <div className="text-[#006621] text-sm truncate">
-                  https://map.tld/{model.slug || 'slug-de-article'}
+                  {previewUrl}
                 </div>
                 <div className="text-[#545454] text-sm line-clamp-2">
-                  {(seoObj?.meta_description || model.excerpt) || 'La description s’affichera ici.'}
+                  {metaDescription || model.excerpt || 'La description s’affichera ici.'}
                 </div>
               </div>
             </div>
