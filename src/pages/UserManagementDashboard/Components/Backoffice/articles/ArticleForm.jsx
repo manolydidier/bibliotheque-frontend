@@ -1,10 +1,10 @@
 // src/pages/articles/ArticleForm.jsx
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   FiCalendar, FiEye, FiEyeOff, FiLock, FiUpload, FiUser, FiTag,
   FiFolder, FiSettings, FiEdit3, FiStar, FiMessageCircle,
-  FiShare2, FiThumbsUp, FiBarChart2, FiClock, FiUsers, FiShield, FiSave
+  FiShare2, FiThumbsUp, FiBarChart2, FiClock, FiUsers, FiShield, FiSave, FiPlay, FiRefreshCw, FiMaximize2, FiX
 } from 'react-icons/fi';
 
 // ✅ Ton éditeur TinyMCE React
@@ -13,8 +13,13 @@ import RichTextEditor from './RichTextEditor';
 // ✅ Upload helper
 import ImageDropPaste from './ImageDropPaste';
 
-// ✅ Client API centralisé (ajuste le chemin selon ton projet)
+// ✅ Client API centralisé
 import api from '../../../../../services/api';
+
+/* ===============================
+   Constantes
+=============================== */
+const AUTOSAVE_PERIOD_MS = 20000; // 20s par défaut
 
 /* ===============================
    Helpers généraux & formulaires
@@ -40,8 +45,11 @@ const allowedKeys = [
   "reading_time", "word_count", "rating_average", "rating_count",
 ];
 
+// ⚠️ NE PAS envoyer de fichier sur `featured_image`/`author_avatar`.
+// On n’envoie que *_file.
 const toFormData = (payload, files = {}) => {
   const fd = new FormData();
+
   for (const key of allowedKeys) {
     if (!(key in payload)) continue;
     const v = payload[key];
@@ -57,9 +65,22 @@ const toFormData = (payload, files = {}) => {
       fd.append(key, v);
     }
   }
-  if (files.featured instanceof File) fd.append("featured_image_file", files.featured);
-  if (files.avatar instanceof File)   fd.append("author_avatar_file",   files.avatar);
+
+  if (files.featured instanceof File) {
+    fd.append("featured_image_file", files.featured, files.featured.name);
+  }
+  if (files.avatar instanceof File) {
+    fd.append("author_avatar_file", files.avatar, files.avatar.name);
+  }
   return fd;
+};
+
+// Pour l’endpoint JSON: stringifier meta/seo_data
+const normalizeForJSON = (body) => {
+  const out = { ...body };
+  if (out.meta && typeof out.meta === 'object') out.meta = JSON.stringify(out.meta);
+  if (out.seo_data && typeof out.seo_data === 'object') out.seo_data = JSON.stringify(out.seo_data);
+  return out;
 };
 
 const ensureNumberArray = (arr) => {
@@ -73,6 +94,38 @@ const parseMaybeJSON = (val, fallback = {}) => {
   if (val == null) return fallback;
   if (typeof val === 'string') { try { return JSON.parse(val); } catch { return fallback; } }
   return typeof val === 'object' ? val : fallback;
+};
+
+/* ===============================
+   Helpers d’images (mêmes règles que Visualiseur)
+=============================== */
+const fixFeaturedPath = (u) => {
+  if (!u) return u;
+  let s = String(u).trim();
+  if (/^https?:\/\//i.test(s)) return s;
+  s = s.replace(/^\/+/, "");
+  if (s.startsWith("storage/")) return s;
+  if (s.startsWith("articles/featured/")) return `storage/${s}`;
+  return s;
+};
+
+const toAbsolute = (u) => {
+  if (!u) return null;
+  const fixed = fixFeaturedPath(u);
+  if (/^https?:\/\//i.test(fixed)) return fixed;
+  const base = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/api\/?$/i, "");
+  return base ? `${base}/${fixed.replace(/^\/+/, "")}` : `/${fixed.replace(/^\/+/, "")}`;
+};
+
+// Image principale (priorités identiques au Visualiseur)
+const primaryMediaUrl = (obj) => {
+  if (!obj) return null;
+  const raw =
+    (typeof obj.featured_image === "string" && obj.featured_image) ||
+    obj.featured_image?.url ||
+    obj.media?.[0]?.url ||
+    null;
+  return raw ? toAbsolute(raw) : null;
 };
 
 /* ===============================
@@ -143,8 +196,6 @@ function formatRelative(target) {
 /* ===============================
    API helpers spécifiques Article
 =============================== */
-
-// ⚠️ adapte si tes endpoints diffèrent
 async function listCategories() {
   const res = await api.get('/categories', { params: { per_page: 1000 } });
   return res?.data?.data || res?.data || [];
@@ -167,7 +218,6 @@ async function fetchArticleDirect(idOrSlug) {
   }
   return payload;
 }
-// ✅ déverrouillage d’un article protégé
 async function unlockArticleDirect(idOrSlug, password) {
   const res = await api.post(
     `/articles/${encodeURIComponent(idOrSlug)}/unlock`,
@@ -184,24 +234,28 @@ async function unlockArticleDirect(idOrSlug, password) {
   return payload;
 }
 async function createArticleJSON(body) {
-  return api.post('/articlesstore', body);
+  return api.post('/articlesstore', normalizeForJSON(body));
 }
 async function createArticleWithFiles(fd) {
-  return api.post('/articles/with-files', fd);
+  return api.post('/articles/with-files', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
 }
 async function updateArticleJSON(id, body) {
-  return api.put(`/articles/${id}`, body);
+  return api.put(`/articles/${id}`, normalizeForJSON(body));
 }
 async function updateArticleWithFiles(id, fd) {
-  return api.post(`/articles/${id}/update-with-files`, fd);
+  return api.post(`/articles/${id}/update-with-files`, fd, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
 }
 
 /* ===============================
-   Composant principal (sans props)
+   Composant principal
 =============================== */
 const ArticleForm = () => {
   const navigate = useNavigate();
-  const { id: idOrSlug } = useParams(); // p.ex. /articles/:id ou /articles/:slug
+  const { id: idOrSlug } = useParams();
   const isEdit = Boolean(idOrSlug);
 
   // Styles
@@ -245,9 +299,15 @@ const ArticleForm = () => {
   const [featFile, setFeatFile] = useState(null);
   const [avatarFile, setAvatarFile] = useState(null);
 
-  // PREVIEWS
+  // PREVIEWS (uploads en cours)
   const [avatarPreview, setAvatarPreview] = useState('');
   const [featPreview, setFeatPreview] = useState('');
+
+  // ➜ URL calculée exactement comme le Visualiseur
+  const viewerFeaturedUrl = useMemo(() => primaryMediaUrl(model) || '', [model]);
+
+  // Lightbox image à la une
+  const [lightbox, setLightbox] = useState({ open: false, url: '' });
 
   // Taxonomies
   const [cats, setCats] = useState([]);
@@ -263,6 +323,10 @@ const ArticleForm = () => {
   // Tenant lock
   const [tenantLocked, setTenantLocked] = useState(true);
 
+  // Autosave
+  const [autosaveEnabled, setAutosaveEnabled] = useState(true);
+  const autosaveLockRef = useRef(false);
+
   /* ---------- ERREURS LARAVEL (422) ---------- */
   const [errors, setErrors] = useState({});
   const totalErrors = useMemo(
@@ -270,7 +334,7 @@ const ArticleForm = () => {
     [errors]
   );
 
-  // ⚠️ Ajout de seo_data dans la détection de salissure pour le tab "content"
+  // Champs par onglet (pour dirty + save partiel)
   const tabFields = {
     content:     ['title','slug','excerpt','content','seo_data'],
     settings:    ['status','visibility','password','published_at','scheduled_at','expires_at'],
@@ -288,6 +352,7 @@ const ArticleForm = () => {
     }
     return out;
   }, [errors]);
+
   const fieldErrors = (name) => Array.isArray(errors?.[name]) ? errors[name] : [];
   const hasError = (name) => fieldErrors(name).length > 0;
   const inputClass = (name) =>
@@ -301,14 +366,16 @@ const ArticleForm = () => {
   );
 
   const filteredAdmins = useMemo(() => {
-    if (!authorSearch.trim()) return adminUsers;
-    const s = authorSearch.toLowerCase();
-    return adminUsers.filter(u =>
-      String(u.id).includes(s) || (u.name || '').toLowerCase().includes(s)
+    const s = authorSearch.trim().toLowerCase();
+    const list = adminUsers;
+    if (!s) return list;
+    return list.filter(u =>
+      String(u.id).includes(s) ||
+      (u.name || '').toLowerCase().includes(s)
     );
   }, [adminUsers, authorSearch]);
 
-  /* ========= Hydratations (chargement direct Laravel) ========== */
+  /* ========= Hydratations ========= */
   useEffect(() => {
     (async () => {
       try { setCats(await listCategories()); } catch {}
@@ -347,7 +414,7 @@ const ArticleForm = () => {
         }
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit, idOrSlug]);
 
   // (optionnel) Charger le user courant pour pré-remplir
@@ -373,7 +440,7 @@ const ArticleForm = () => {
     })();
   }, []);
 
-  // (optionnel) Auteurs Admins
+  // (optionnel) Auteurs Admins (liste paginée)
   useEffect(() => {
     (async () => {
       try {
@@ -523,7 +590,7 @@ const ArticleForm = () => {
     return true;
   };
 
-  const isTabDirty = (tabId) => {
+  const isTabDirty = useCallback((tabId) => {
     if (!isEdit) return false;
     const fields = tabFields[tabId] || [];
     if (!baseline) return false;
@@ -534,14 +601,13 @@ const ArticleForm = () => {
     const currentPick  = pickForCompare(model, fields);
     const baselinePick = pickForCompare(baseline, fields);
     return !areEqualByFields(currentPick, baselinePick, fields);
-  };
+  }, [isEdit, baseline, featFile, avatarFile, model]);
 
   const isAnyTabDirty = useMemo(() => {
     if (!isEdit) return false;
     const tabs = Object.keys(tabFields).filter(t => t !== 'preview');
     return tabs.some(t => isTabDirty(t));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model, baseline, featFile, avatarFile, isEdit]);
+  }, [isEdit, tabFields, isTabDirty]);
 
   // Initialise baseline quand l’article est chargé
   useEffect(() => {
@@ -584,6 +650,7 @@ const ArticleForm = () => {
         seo_data: typeof model.seo_data === 'object' ? model.seo_data : {},
       };
 
+      // Nettoyage
       Object.keys(payload).forEach(key => {
         if (payload[key] === '' || payload[key] === null) delete payload[key];
       });
@@ -645,7 +712,7 @@ const ArticleForm = () => {
   };
 
   /* ========= Sauvegarde partielle par onglet ========= */
-  const savePartial = async (tabId) => {
+  const savePartial = useCallback(async (tabId) => {
     if (!isEdit || !model.id) return;
     const fields = tabFields[tabId] || [];
     if (fields.length === 0 && tabId !== 'media' && tabId !== 'author') return;
@@ -725,23 +792,13 @@ const ArticleForm = () => {
           .join('\n');
         alert(`Erreurs de validation:\n${errorMessages}`);
       } else {
-        alert(err?.response?.data?.message || err.message || 'Erreur lors de l\'enregistrement de l’onglet');
+        alert(err?.response?.data?.message || err.message || 'Erreur lors de l’enregistrement de l’onglet');
       }
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [isEdit, model, tabFields, featFile, avatarFile]);
 
-  const tabLabelMap = {
-    content: 'Contenu',
-    settings: 'Paramètres',
-    author: 'Auteur',
-    taxonomy: 'Taxonomie',
-    media: 'Médias',
-    analytics: 'Stats',
-    management: 'Gestion',
-    preview: 'Aperçu'
-  };
   const handleSaveActiveTab = () => savePartial(activeTab);
 
   const isCreateValid = !isEdit && Boolean(String(model.title || '').trim()) && Boolean(String(model.content || '').trim());
@@ -760,7 +817,7 @@ const ArticleForm = () => {
   };
   const currentVisibility = visibilityConfig[model.visibility] || visibilityConfig.public;
 
-  // ======== SEO clean (sans keywords, sans JSON) ========
+  // ======== SEO clean ========
   const seoObj = parseMaybeJSON(model?.seo_data, {});
   const metaTitle = (seoObj?.meta_title ?? model.title ?? '').toString();
   const metaDescription = (seoObj?.meta_description ?? model.excerpt ?? '').toString();
@@ -774,7 +831,6 @@ const ArticleForm = () => {
     setModel(prev => {
       const cur = parseMaybeJSON(prev.seo_data, {});
       const next = { ...cur, ...patch };
-      // normaliser robots en objet {index, follow}
       if ('robots_index' in next || 'robots_follow' in next) {
         next.robots = {
           index: ('robots_index' in next) ? !!next.robots_index : (cur?.robots?.index ?? true),
@@ -801,9 +857,9 @@ const ArticleForm = () => {
 
   const [isEditorModalOpen, setIsEditorModalOpen] = useState(false);
   useEffect(() => {
-    document.body.style.overflow = isEditorModalOpen ? 'hidden' : '';
+    document.body.style.overflow = isEditorModalOpen || lightbox.open ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
-  }, [isEditorModalOpen]);
+  }, [isEditorModalOpen, lightbox.open]);
 
   // 🔓 Déverrouillage action
   const handleUnlock = async (e) => {
@@ -842,6 +898,61 @@ const ArticleForm = () => {
     }
   };
 
+  /* ========= Bouton Publier maintenant ========= */
+  const handlePublishNow = async () => {
+    const nowSql = toSqlDateTime(new Date());
+    if (isEdit && model.id) {
+      try {
+        setIsSubmitting(true);
+        const res = await updateArticleJSON(model.id, {
+          status: 'published',
+          published_at: nowSql
+        });
+        const updated = res?.data?.data || res?.data || {};
+        setModel(prev => ({ ...prev, ...updated, status: 'published', published_at: nowSql }));
+        setBaseline(prev => ({ ...(prev || {}), status: 'published', published_at: nowSql }));
+        showSuccess('Publié immédiatement ✅');
+      } catch (e) {
+        alert(e?.response?.data?.message || e.message || 'Échec de la publication');
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
+      // En création: on force l’état puis on soumet
+      setModel(prev => ({ ...prev, status: 'published', published_at: nowSql }));
+      handleSubmit();
+    }
+  };
+
+  /* ========= Autosave (onglet actif) ========= */
+  useEffect(() => {
+    if (!isEdit || !autosaveEnabled) return;
+    const timer = setInterval(async () => {
+      if (autosaveLockRef.current) return;
+      if (!isTabDirty(activeTab)) return;
+      autosaveLockRef.current = true;
+      try {
+        await savePartial(activeTab);
+      } finally {
+        autosaveLockRef.current = false;
+      }
+    }, AUTOSAVE_PERIOD_MS);
+    return () => clearInterval(timer);
+  }, [isEdit, autosaveEnabled, activeTab, isTabDirty, savePartial]);
+
+  /* ========= Badge calculé (Brouillon/Programmé/Publié/Expiré) ========= */
+  const computedBadge = useMemo(() => {
+    const now = new Date();
+    const p = toDate(model.published_at);
+    const s = toDate(model.scheduled_at);
+    const e = toDate(model.expires_at);
+
+    if (e && e < now) return { label: 'Expiré', cls: 'bg-rose-50 text-rose-700 border-rose-200', icon: '⛔' };
+    if (s && s > now) return { label: 'Programmé', cls: 'bg-indigo-50 text-indigo-700 border-indigo-200', icon: '⏳' };
+    if ((model.status === 'published') && (!p || p <= now)) return { label: 'Publié', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: '✓' };
+    return { label: 'Brouillon', cls: 'bg-amber-50 text-amber-700 border-amber-200', icon: '📝' };
+  }, [model.status, model.published_at, model.scheduled_at, model.expires_at]);
+
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 relative overflow-hidden">
       {/* Barre de progression */}
@@ -877,19 +988,50 @@ const ArticleForm = () => {
                 <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
                   {isEdit ? "Modifier l'article" : 'Nouvel article'}
                 </h1>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${computedBadge.cls} flex items-center gap-2`}>
+                    <span>{computedBadge.icon}</span>{computedBadge.label}
+                  </span>
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold border-2 ${currentStatus.bg} ${currentStatus.text} ${currentStatus.border} hidden sm:flex items-center gap-2`}>
+                    <span>{currentStatus.icon}</span>
+                    {model.status === 'draft' && 'Brouillon'}
+                    {model.status === 'published' && 'Publié'}
+                    {model.status === 'archived' && 'Archivé'}
+                  </span>
+                  <span className={`hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-white/80 border-2 border-slate-200 text-xs font-medium ${currentVisibility.color}`}>
+                    {currentVisibility.icon}
+                    <span>{currentVisibility.label}</span>
+                  </span>
+                </div>
               </div>
             </div>
-            <div className="hidden xl:flex items-center gap-3">
-              <span className={`px-4 py-2 rounded-full text-sm font-semibold border-2 ${currentStatus.bg} ${currentStatus.text} ${currentStatus.border} flex items-center gap-2 shadow-sm`}>
-                <span>{currentStatus.icon}</span>
-                {model.status === 'draft' && 'Brouillon'}
-                {model.status === 'published' && 'Publié'}
-                {model.status === 'archived' && 'Archivé'}
-              </span>
-              <span className={`flex items-center gap-2 px-4 py-2 rounded-full bg-white/80 border-2 border-slate-200 text-sm font-medium ${currentVisibility.color} shadow-sm`}>
-                {currentVisibility.icon}
-                <span>{currentVisibility.label}</span>
-              </span>
+
+            {/* Actions header */}
+            <div className="flex items-center gap-3">
+              <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only"
+                  checked={autosaveEnabled}
+                  onChange={(e) => setAutosaveEnabled(e.target.checked)}
+                />
+                <span className={`relative inline-flex h-5 w-9 items-center rounded-full ${autosaveEnabled ? 'bg-blue-600' : 'bg-slate-300'}`}>
+                  <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${autosaveEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                </span>
+                Autosave {AUTOSAVE_PERIOD_MS/1000}s
+              </label>
+
+              <button
+                type="button"
+                onClick={handlePublishNow}
+                disabled={isSubmitting}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow
+                  ${isSubmitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                title="Publier immédiatement"
+              >
+                <FiPlay className="w-4 h-4" />
+                Publier maintenant
+              </button>
             </div>
           </div>
 
@@ -947,16 +1089,26 @@ const ArticleForm = () => {
           <div className="border-t border-slate-200 bg-white/80 backdrop-blur sticky top-[72px] z-40">
             <div className="mx-auto max-w-screen-2xl px-6 lg:px-8 py-3 flex items-center justify-between">
               <div className="text-sm text-slate-700">
-                Des modifications non enregistrées dans <span className="font-semibold">« {tabLabelMap[activeTab] || 'Onglet'} »</span>.
+                Des modifications non enregistrées dans <span className="font-semibold">« {({content:'Contenu',settings:'Paramètres',author:'Auteur',taxonomy:'Taxonomie',media:'Médias',analytics:'Stats',management:'Gestion',preview:'Aperçu'})[activeTab]} »</span>.
               </div>
-              <button
-                type="button"
-                onClick={handleSaveActiveTab}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow bg-emerald-600 hover:bg-emerald-700"
-              >
-                <FiSave className="w-4 h-4" />
-                Enregistrer cet onglet
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveActiveTab}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow bg-blue-600 hover:bg-blue-700"
+                >
+                  <FiSave className="w-4 h-4" />
+                  Enregistrer cet onglet
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePublishNow}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow bg-emerald-600 hover:bg-emerald-700"
+                >
+                  <FiPlay className="w-4 h-4" />
+                  Publier maintenant
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -1050,7 +1202,7 @@ const ArticleForm = () => {
                   className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white hover:bg-slate-50"
                   title="Éditer en plein écran"
                 >
-                  ⤢ Plein écran
+                  <FiMaximize2 className="inline-block mr-1" /> Plein écran
                 </button>
               </div>
 
@@ -1081,7 +1233,7 @@ const ArticleForm = () => {
                       className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white hover:bg-slate-50"
                       title="Fermer"
                     >
-                      ✕ Fermer
+                      <FiX className="inline-block mr-1" /> Fermer
                     </button>
                   </div>
 
@@ -1190,7 +1342,7 @@ const ArticleForm = () => {
                 {/* Aside tips + mini aperçu */}
                 <aside className="lg:col-span-1 space-y-4">
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-                    Conseils : concentre le *meta title* (≤60) sur l’intention de recherche, garde une *meta description* claire (≤160), et définis une URL canonique si nécessaire.
+                    Conseils : concentre le *meta title* (≤60), garde une *meta description* claire (≤160), et définis une URL canonique si nécessaire.
                   </div>
 
                   <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -1353,7 +1505,7 @@ const ArticleForm = () => {
           </div>
         )}
 
-        {/* AUTHOR */}
+        {/* AUTHOR — liste avatars + nom/bio */}
         {activeTab === 'author' && (
           <div className="grid grid-cols-1 gap-6">
             <section className={`${card} p-8`}>
@@ -1361,17 +1513,19 @@ const ArticleForm = () => {
                 <span className="p-2 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-500 text-white shadow-lg">
                   <FiUser className="w-4 h-4" />
                 </span>
-                Informations de l'auteur (admins uniquement)
+                Auteur & profil public
               </h3>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Colonne gauche : liste admins + nom & bio */}
                 <div className="space-y-6 lg:col-span-2">
-                  <div className="space-y-3">
-                    <label className={sectionTitle}>Recherche d'un auteur admin</label>
-                    <div className="relative">
+                  {/* Recherche */}
+                  <div className="rounded-2xl border border-slate-200 bg-white/70 p-4">
+                    <label className={sectionTitle}>Rechercher un auteur admin</label>
+                    <div className="relative mb-4">
                       <input
                         className={`${inputBase} pl-9`}
-                        placeholder="Rechercher un auteur admin…"
+                        placeholder="Rechercher par nom ou ID…"
                         value={authorSearch}
                         onChange={(e) => setAuthorSearch(e.target.value)}
                       />
@@ -1379,70 +1533,143 @@ const ArticleForm = () => {
                         <path d="M21 21l-4.3-4.3m1.6-5.3a7 7 0 11-14 0 7 7 0 0114 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                       </svg>
                     </div>
+
+                    {/* Liste avatars + choisir */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 max-h-64 overflow-auto pr-1">
+                      {filteredAdmins.map(u => (
+                        <button
+                          type="button"
+                          key={u.id}
+                          onClick={() => setModel(prev => ({
+                            ...prev,
+                            author_id: Number(u.id),
+                            author_name: u.name || prev.author_name,
+                            tenant_id: tenantLocked ? (u.tenant_id ?? prev.tenant_id) : prev.tenant_id,
+                            author_avatar: u.avatar || prev.author_avatar,
+                          }))}
+                          className={`flex items-center gap-3 p-3 rounded-2xl border text-left ${
+                            Number(model.author_id) === Number(u.id) ? 'border-blue-300 bg-blue-50' : 'border-slate-200 bg-white hover:bg-slate-50'
+                          }`}
+                          title={`Choisir ${u.name}`}
+                        >
+                          <div className="w-9 h-9 rounded-full overflow-hidden bg-slate-200 flex items-center justify-center text-slate-600 font-semibold">
+                            {u.avatar ? <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" /> : (u.name||'#').split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold text-slate-800 truncate">{u.name}</div>
+                            <div className="text-[11px] text-slate-500 truncate">ID {u.id}{u.tenant_id ? ` • T${u.tenant_id}` : ''}</div>
+                          </div>
+                        </button>
+                      ))}
+                      {filteredAdmins.length === 0 && (
+                        <div className="text-sm text-slate-500 p-2">Aucun admin trouvé…</div>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="space-y-3">
-                    <label className={sectionTitle}>Auteur (admin)</label>
-                    <select
-                      className={inputClass('author_id')}
-                      value={model.author_id || ''}
-                      onChange={(e) => {
-                        const id = e.target.value ? Number(e.target.value) : '';
-                        const picked = adminUsers.find(u => Number(u.id) === Number(id));
-                        setModel(prev => ({
-                          ...prev,
-                          author_id: id,
-                          author_name: picked?.name || prev.author_name,
-                          tenant_id: tenantLocked ? (picked?.tenant_id ?? prev.tenant_id) : prev.tenant_id,
-                          author_avatar: picked?.avatar || prev.author_avatar,
-                        }));
-                      }}
-                    >
-                      <option value="">— Sélectionner —</option>
-                      {filteredAdmins.map(u => (
-                        <option key={u.id} value={u.id}>
-                          {u.name} {u.tenant_id ? `• T#${u.tenant_id}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                    <FieldError name="author_id" />
+                  {/* Nom affiché & Bio */}
+                  <div className="grid grid-cols-1 gap-6">
+                    <div className="space-y-2">
+                      <label className={sectionTitle}>Nom affiché</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                          <FiUser className="w-4 h-4" />
+                        </span>
+                        <input
+                          className={`${inputClass('author_name')} pl-9`}
+                          value={model.author_name || ''}
+                          onChange={e => onChange('author_name', e.target.value)}
+                          placeholder="Nom public de l'auteur"
+                        />
+                      </div>
+                      <p className={hint}>Affiché sur la page article (carte auteur) et dans le balisage SEO.</p>
+                      <FieldError name="author_name" />
+                    </div>
 
-                    {selectedAuthor && (
-                      <div className="mt-3 flex items-center gap-3 p-3 rounded-2xl border border-slate-200 bg-white/70">
-                        <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center text-slate-500 font-bold">
-                          {model.author_avatar || selectedAuthor.avatar ? (
-                            <img src={model.author_avatar || selectedAuthor.avatar} alt={selectedAuthor.name} className="w-full h-full object-cover" />
-                          ) : (
-                            (selectedAuthor.name || '#').split(' ').map(p => p[0]).join('').slice(0,2)
-                          )}
-                        </div>
-                        <div className="text-sm">
-                          <div className="font-semibold text-slate-800">{selectedAuthor.name}</div>
-                          <div className="text-slate-500">ID: {selectedAuthor.id}{selectedAuthor.tenant_id ? ` • Tenant: ${selectedAuthor.tenant_id}` : ''}</div>
+                    <div className="space-y-2">
+                      <label className={sectionTitle}>Bio de l’auteur</label>
+                      <div className="relative">
+                        <textarea
+                          rows={5}
+                          className={inputClass('author_bio')}
+                          value={model.author_bio || ''}
+                          onChange={e => onChange('author_bio', e.target.value)}
+                          placeholder="Quelques lignes sur l’auteur…"
+                        />
+                        <div className="absolute right-3 bottom-2 text-[11px] text-slate-400">
+                          {(model.author_bio || '').length}/280
                         </div>
                       </div>
-                    )}
+                      <p className={hint}>
+                        <FiUsers className="w-3.5 h-3.5" />
+                        Idéal : 2–3 phrases claires (max ~280 caractères).
+                      </p>
+                      <FieldError name="author_bio" />
+                    </div>
                   </div>
                 </div>
 
-                {/* Avatar auteur : upload + preview */}
-                <div className="space-y-3 lg:col-span-1">
-                  <label className={sectionTitle}>Avatar de l'auteur</label>
+                {/* Colonne droite : avatar + aperçu */}
+                <div className="space-y-6 lg:col-span-1">
+                  {/* Avatar */}
+                  <div className="rounded-2xl border border-slate-200 bg-white/70 p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className={sectionTitle}>Avatar de l’auteur</label>
+                      {model.author_id && (
+                        <button
+                          type="button"
+                          onClick={() => setModel(prev => ({ ...prev, author_id: '', author_avatar: prev.author_avatar }))}
+                          className="px-3 py-1.5 rounded-lg border-2 border-slate-200 bg-white text-xs hover:bg-slate-50"
+                          title="Effacer la sélection admin"
+                        >
+                          Effacer admin
+                        </button>
+                      )}
+                    </div>
+                    <ImageDropPaste
+                      id="author-avatar"
+                      label="Choisir / déposer / coller un avatar"
+                      accept="image/jpeg, image/png, image/jpg, image/gif, image/webp"
+                      file={avatarFile}
+                      previewUrl={avatarPreview}
+                      existingUrl={model.author_avatar || ''}  // si édition, on l’affiche
+                      onPickFile={(f) => setAvatarFile(f)}
+                      alt=""
+                      showAlt={false}
+                      errorNode={<FieldError name="author_avatar_file" />}
+                    />
+                  </div>
 
-                  <ImageDropPaste
-                    id="author-avatar"
-                    label="Choisir / déposer / coller un avatar"
-                    accept="image/png, image/jpeg, image/webp, image/gif"
-                    file={avatarFile}
-                    previewUrl={avatarPreview}
-                    existingUrl={model.author_avatar || ''}  // si édition, on l’affiche
-                    onPickFile={(f) => {
-                      setAvatarFile(f);
-                    }}
-                    alt=""
-                    showAlt={false}
-                    errorNode={<FieldError name="author_avatar_file" />}
-                  />
+                  {/* Aperçu carte auteur */}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-200 flex items-center justify-center text-slate-600 font-semibold">
+                        {(avatarPreview || model.author_avatar || selectedAuthor?.avatar) ? (
+                          <img
+                            src={avatarPreview || model.author_avatar || selectedAuthor?.avatar}
+                            alt={model.author_name || selectedAuthor?.name || 'Auteur'}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          (model.author_name || selectedAuthor?.name || 'AU')
+                            .split(' ').map(p => p[0]).join('').slice(0,2).toUpperCase()
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-slate-900 truncate">
+                          {model.author_name || selectedAuthor?.name || 'Nom de l’auteur'}
+                        </div>
+                        <div className="text-xs text-slate-500 truncate">
+                          {model.author_id ? `Admin #${model.author_id}` : 'Auteur manuel'}
+                        </div>
+                      </div>
+                    </div>
+                    {Boolean(model.author_bio) && (
+                      <p className="mt-3 text-sm text-slate-700 line-clamp-3">
+                        {model.author_bio}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </section>
@@ -1530,7 +1757,7 @@ const ArticleForm = () => {
           </div>
         )}
 
-        {/* MEDIA */}
+        {/* MEDIA (+ lightbox) */}
         {activeTab === 'media' && (
           <div className="flex gap-6 w-full flex-col lg:flex-row items-center justify-center">
             <section className={`${card} p-8 space-y-4 w-full`}>
@@ -1544,10 +1771,10 @@ const ArticleForm = () => {
               <ImageDropPaste
                 id="featured-image"
                 label="Télécharger / déposer / coller l'image principale"
-                accept="image/png, image/jpeg, image/webp, image/gif"
+                accept="image/jpeg, image/png, image/jpg, image/gif, image/webp"
                 file={featFile}
                 previewUrl={featPreview}
-                existingUrl={model.featured_image || ''} // URL backend si édition
+                existingUrl={viewerFeaturedUrl || ''} // ✅ même URL résolue que le Visualiseur
                 alt={model.featured_image_alt || ''}
                 showAlt
                 inputClass={inputClass('featured_image_alt')}
@@ -1561,6 +1788,18 @@ const ArticleForm = () => {
                   </>
                 }
               />
+
+              {(featPreview || viewerFeaturedUrl) && (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setLightbox({ open: true, url: featPreview || viewerFeaturedUrl })}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-sm"
+                  >
+                    <FiMaximize2 className="w-4 h-4" /> Agrandir
+                  </button>
+                </div>
+              )}
             </section>
           </div>
         )}
@@ -1716,6 +1955,26 @@ const ArticleForm = () => {
                 </div>
               </div>
             </div>
+
+            {/* ✅ Aperçu de l’image calculée comme le Visualiseur */}
+            {viewerFeaturedUrl ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="text-xs text-slate-400 mb-2">Aperçu de l’image (Visualiseur)</div>
+                <div className="w-full max-w-2xl">
+                  <img
+                    src={viewerFeaturedUrl}
+                    alt={model.featured_image_alt || model.title || 'Image'}
+                    className="w-full h-auto max-h-[380px] object-contain rounded-xl cursor-zoom-in"
+                    onClick={() => setLightbox({ open: true, url: viewerFeaturedUrl })}
+                    title="Agrandir"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-300 p-6 text-slate-500 text-sm">
+                Aucune image détectée (ajoute une image dans l’onglet « Médias »).
+              </div>
+            )}
           </section>
         )}
       </main>
@@ -1728,6 +1987,20 @@ const ArticleForm = () => {
           </div>
 
           <div className="flex items-center gap-3">
+            {!isEdit && (
+              <button
+                type="button"
+                onClick={handlePublishNow}
+                disabled={isSubmitting || !isCreateValid}
+                className={`inline-flex md:hidden items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow
+                ${(!isCreateValid || isSubmitting) ? 'bg-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                title={!isCreateValid ? 'Renseignez au moins le titre et le contenu' : undefined}
+              >
+                <FiPlay className="w-4 h-4" />
+                Publier
+              </button>
+            )}
+
             {isEdit ? (
               isAnyTabDirty ? (
                 <button
@@ -1747,7 +2020,7 @@ const ArticleForm = () => {
                 onClick={handleSubmit}
                 disabled={isSubmitting || !isCreateValid}
                 title={!isCreateValid ? 'Renseignez au moins le titre et le contenu' : undefined}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow
+                className={`hidden md:inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow
                   ${(!isCreateValid || isSubmitting) ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
               >
                 <FiSave className="w-4 h-4" />
@@ -1859,6 +2132,27 @@ const ArticleForm = () => {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* 🔍 Lightbox image */}
+      {lightbox.open && (
+        <div className="fixed inset-0 z-[10060] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setLightbox({ open: false, url: '' })}>
+          <div className="relative max-w-5xl w-full">
+            <button
+              className="absolute -top-3 -right-3 bg-white text-slate-800 rounded-full p-2 shadow"
+              onClick={() => setLightbox({ open: false, url: '' })}
+              title="Fermer"
+            >
+              <FiX />
+            </button>
+            <img
+              src={lightbox.url}
+              alt={model.featured_image_alt || model.title || 'Image'}
+              className="w-full h-auto max-h-[85vh] object-contain rounded-xl border border-white/10"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
         </div>
       )}
     </div>

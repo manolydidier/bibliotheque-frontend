@@ -16,7 +16,7 @@ function useFlash() {
   const push = useCallback((type, message, ttl = 3000) => {
     (async () => {
       try {
-        const mod = await import("../../../component/toast/toast");
+        const mod = await import("../../../../component/toast/toast");
         const toast = mod?.toast || mod?.default || null;
         if (toast?.[type]) toast[type](message);
         else if (toast) toast(message);

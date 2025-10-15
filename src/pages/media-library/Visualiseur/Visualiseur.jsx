@@ -1,20 +1,23 @@
 // src/media-library/Visualiseur.jsx
 import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import SmartImage from "../parts/SmartImage"; // ✅ affichage image robuste
-
+import SmartImage from "../parts/SmartImage";
+import SeoPanel from "./components/SeoPanel";
+import Sidebar from "./components/Sidebar";
+import Toolbar from "./components/Toolbar";
+import Tabs from "./components/Tabs";
+import TagList, { TagPill } from "./components/TagList";
+import { KpiCard, ChartCard, EmptyChart } from "./components/Cards";
 import {
   setAuthError,
   clearAuthError,
   selectAuthError
-} from "../../../store/slices/Slice"; // ⚠️ ajuste le chemin si besoin
-
+} from "../../../store/slices/Slice";
 import {
-  FaFolderOpen,
-  FaArrowLeft, FaArrowRight, FaRedo, FaExpand, FaDownload,
+  FaDownload,
   FaExternalLinkAlt, FaChevronLeft, FaChevronRight, FaSearchPlus, FaSearchMinus,
-  FaFilePdf, FaFileExcel, FaFileWord, FaImage, FaFileVideo, FaFile, FaTag, FaStar, FaClock, FaEye, FaComment, FaChartBar, FaHistory, FaInfoCircle, FaSearch, FaPlus, FaPlay, FaTimes, FaShareAlt,
+  FaFilePdf, FaFileExcel, FaFileWord, FaImage, FaFileVideo, FaFile, FaTag, FaStar, FaClock, FaEye, FaComment, FaChartBar, FaHistory, FaInfoCircle, FaPlay, FaTimes, FaShareAlt,
   FaLock
 } from "react-icons/fa";
 import {
@@ -25,27 +28,24 @@ import {
 } from "recharts";
 import axios from "axios";
 import {
-  fetchSimilarArticles,
   buildArticleShowUrl,
   DEBUG_HTTP,
   fetchArticle,
   unlockArticle,
   fetchRatingsSummary,
+  fetchSimilarArticles
 } from "../api/articles";
 import { formatDate } from "../shared/utils/format";
 import Comments from "./Comments";
-import TagManagerModal from "./TagManagerModal";
+import TagManagerModal from "./components/TagManagerModal";
 import Toaster from "../../../component/toast/Toaster";
-import ShareButton from "../Visualiseur/share/ShareButton";
 import RatingModal, { RateButton } from "../RatingModal";
-
-// ✅ Modale factorisée + util pwd (mémoire session)
 import PasswordModal from "../components/PasswordModal";
 import { getStoredPassword, setStoredPassword } from "../utils/passwordGate";
 import { FiCalendar, FiClock, FiTag } from "react-icons/fi";
+import SeoHead from "../../../services/SeoHead";
 
 /* ---------------- Helpers ---------------- */
-
 const sanitizeParam = (x) => {
   const raw = (x ?? "").toString().trim();
   if (!raw || raw === "undefined" || raw === "null") return null;
@@ -62,19 +62,10 @@ const firstCategory = (art) => {
 const fixFeaturedPath = (u) => {
   if (!u) return u;
   let s = String(u).trim();
-
-  // déjà absolu
   if (/^https?:\/\//i.test(s)) return s;
-
-  // remove leading slashes
   s = s.replace(/^\/+/, "");
-
-  // ok si commence par storage/
   if (s.startsWith("storage/")) return s;
-
-  // correctif: nos featured vivent sous storage/articles/featured/...
   if (s.startsWith("articles/featured/")) return `storage/${s}`;
-
   return s;
 };
 
@@ -82,7 +73,6 @@ const toAbsolute = (u) => {
   if (!u) return null;
   const fixed = fixFeaturedPath(u);
   if (/^https?:\/\//i.test(fixed)) return fixed;
-
   const base = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/api\/?$/i, "");
   return base ? `${base}/${fixed.replace(/^\/+/, "")}` : `/${fixed.replace(/^\/+/, "")}`;
 };
@@ -95,6 +85,53 @@ const primaryMediaUrl = (art) => {
     art.media?.[0]?.url ||
     null;
   return raw ? toAbsolute(raw) : null;
+};
+
+// Image de fond “édition” (plusieurs conventions supportées côté Laravel)
+const backgroundMediaUrl = (art) => {
+  if (!art) return null;
+  const cand =
+    art.background_image ||
+    art.background_image_url ||
+    art.meta?.background ||
+    art.meta?.background_image ||
+    art.meta?.editor_background ||
+    art.meta?.editor_background_url ||
+    art.seo_data?.open_graph_image ||
+    art.seo_data?.og_image ||
+    null;
+  const raw = (typeof cand === "string" ? cand : cand?.url) || null;
+  return raw ? toAbsolute(raw) : null;
+};
+
+// Avatar auteur
+const authorAvatarUrl = (art) => {
+  const a = art?.author || null;
+  const cand =
+    a?.avatar ||
+    a?.avatar_url ||
+    a?.photo ||
+    a?.photo_url ||
+    art?.author_avatar ||
+    art?.author_avatar_url ||
+    null;
+  const raw = (typeof cand === "string" ? cand : cand?.url) || null;
+  return raw ? toAbsolute(raw) : null;
+};
+
+const authorNameOf = (art) =>
+  art?.author_name ||
+  art?.author?.name ||
+  art?.author?.full_name ||
+  art?.author?.username ||
+  (art?.author_id ? `Auteur #${art.author_id}` : null) ||
+  "Auteur inconnu";
+
+const initialsOf = (name) => {
+  const s = (name || "").trim();
+  if (!s) return "??";
+  const parts = s.split(/\s+/).slice(0, 2);
+  return parts.map(p => p[0]?.toUpperCase?.() || "").join("") || s[0]?.toUpperCase?.() || "??";
 };
 
 const inferTypeFromUrl = (url) => {
@@ -187,61 +224,6 @@ const sortTags = (tags) => {
   });
 };
 
-/* ---------- Tag UI ---------- */
-function TagPill({ tag, className = "", onClick }) {
-  const pal = makeTagPalette(tag?.color);
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={tag?.name}
-      className={`group inline-flex max-w-full items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border
-                  bg-white/70 backdrop-blur-sm shadow-sm border-slate-200/60 hover:shadow-md hover:bg-white/90 
-                  transition-all duration-300 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-1 ${className}`}
-    >
-      <span aria-hidden className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: pal.dot }} />
-      <span className="truncate" style={{ color: pal.text }}>{tag?.name}</span>
-    </button>
-  );
-}
-
-function TagList({ tags, onAddClick, onTagClick, max = 10 }) {
-  const [expanded, setExpanded] = useState(false);
-  const sorted = useMemo(() => sortTags(tags), [tags]);
-  const visible = expanded ? sorted : sorted.slice(0, max);
-
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      {visible.map((t, i) => (
-        <TagPill key={t.id ?? `${t.name}-${i}`} tag={t} onClick={() => onTagClick?.(t)} />
-      ))}
-
-      {sorted.length > max && (
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="text-xs px-3 py-1.5 rounded-full border border-slate-200 bg-white/70 text-slate-600 hover:bg-white/90 transition-all duration-300"
-        >
-          {expanded ? "Voir moins" : `+${sorted.length - max} autres`}
-        </button>
-      )}
-
-      {onAddClick && (
-        <button
-          type="button"
-          onClick={onAddClick}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium
-                     border border-slate-300/60 text-slate-600 bg-white/70 hover:bg-slate-50 transition-all duration-300"
-          title="Gérer les tags"
-        >
-          <FaPlus className="text-slate-500" />
-          Ajouter
-        </button>
-      )}
-    </div>
-  );
-}
-
 /* Palette charts */
 const CHART_COLORS = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ef4444", "#06b6d4", "#64748b"];
 
@@ -250,7 +232,6 @@ function useMeFromLaravel() {
   const [me, setMe] = useState({ user: null, roles: [], permissions: [] });
   const [loading, setLoading] = useState(false);
 
-  // ✅ lire depuis sessionStorage ou localStorage
   const token = useMemo(() => {
     try {
       return (
@@ -263,7 +244,6 @@ function useMeFromLaravel() {
     }
   }, []);
 
-  // ✅ propager le token à axios (utile si l’instance axios de l’API n’est pas isolée)
   useEffect(() => {
     try {
       if (token) {
@@ -287,11 +267,8 @@ function useMeFromLaravel() {
         const user = data?.user || data || null;
         const roles = data?.roles || user?.roles || [];
         const permissions = data?.permissions || user?.permissions || [];
-        console.log("[/user] payload:", data);
-
         if (!cancelled) setMe({ user, roles, permissions });
-      } catch (e) {
-        console.warn("[/user] échec:", e?.message || e);
+      } catch {
         if (!cancelled) setMe({ user: null, roles: [], permissions: [] });
       } finally {
         if (!cancelled) setLoading(false);
@@ -303,16 +280,12 @@ function useMeFromLaravel() {
   return { me, loading, token };
 }
 
-// ✅ Helper d’accès privé (côté front)
 function hasPrivateAccess(me) {
   const roles = (me?.roles || []).map(r =>
     (r?.name ?? r?.slug ?? r?.title ?? r)?.toString().toLowerCase()
   );
   const roleMatch = roles.find(r => /(admin|owner|super-?admin|manager)/.test(r));
-  if (roleMatch) {
-    console.debug("[auth] accès privé via rôle:", roleMatch);
-    return true;
-  }
+  if (roleMatch) return true;
 
   const perms = Array.isArray(me?.permissions) ? me.permissions : [];
   const permMatch = perms.find(p => {
@@ -325,16 +298,7 @@ function hasPrivateAccess(me) {
     return isArticles && (hasAction || hasLabel);
   });
 
-  if (permMatch) {
-    console.debug("[auth] accès privé via permission:", {
-      id: permMatch.id,
-      name: permMatch.name,
-      action: permMatch.action,
-      resource: permMatch.resource,
-    });
-    return true;
-  }
-
+  if (permMatch) return true;
   return false;
 }
 
@@ -362,13 +326,14 @@ export default function Visualiseur() {
 
   const params = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
   const idOrSlug = useMemo(() => {
     const fallback = Object.values(params ?? {})[0];
     const candidate = params?.slug ?? params?.show ?? params?.photoName ?? params?.id ?? fallback ?? "";
     return sanitizeParam(candidate);
   }, [params]);
 
-  // AUTH
   const { me, loading: meLoading, token } = useMeFromLaravel();
   const rights = useMemo(() => computeRights(me?.permissions), [me?.permissions]);
 
@@ -376,7 +341,6 @@ export default function Visualiseur() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  // 🔐 États verrouillage
   const [lockedKind, setLockedKind] = useState(null); // 'password' | 'private' | 'unknown' | null
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [unlockBusy, setUnlockBusy] = useState(false);
@@ -405,7 +369,7 @@ export default function Visualiseur() {
     document.body.appendChild(a); a.click(); a.remove();
   };
 
-  // 🔑 Soumission du mot de passe (utilisée par PasswordModal)
+  /* ------- Unlock ------- */
   async function handleUnlock(password) {
     if (!password) {
       dispatch(setAuthError("Merci de saisir un mot de passe."));
@@ -426,7 +390,6 @@ export default function Visualiseur() {
 
     try {
       const art = await unlockArticle(idOrSlug, password, { include, fields });
-
       setStoredPassword(idOrSlug, password);
       setArticle(art || null);
       setLockedKind(null);
@@ -451,36 +414,30 @@ export default function Visualiseur() {
       setUnlockBusy(false);
     }
   }
-  // ✅ helper pour rouvrir la modale depuis partout (clavier, API globale, évènement custom)
+
   const requestOpenModal = useCallback(() => {
     dispatch(clearAuthError());
     setUnlockOpen(true);
   }, [dispatch, setUnlockOpen]);
 
-  // ✅ Raccourcis clavier + API globale + event custom
+  /* ------- Shortcuts ------- */
   useEffect(() => {
     function onKeyDown(e) {
       if (!((lockedKind === "password" || lockedKind === "unknown") && !article)) return;
-
       const key = (e.key || "").toLowerCase();
       const ctrlK = e.ctrlKey && key === "k";
       const enter = key === "enter";
       const pKey  = key === "p";
-
       if (ctrlK || enter || pKey) {
         e.preventDefault();
         requestOpenModal();
       }
     }
-
     const openEvtHandler = () => requestOpenModal();
-
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("visualiseur:openPassword", openEvtHandler);
-
     window.visualiseur = window.visualiseur || {};
     window.visualiseur.openPassword = openEvtHandler;
-
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("visualiseur:openPassword", openEvtHandler);
@@ -500,7 +457,6 @@ export default function Visualiseur() {
     if (!idOrSlug) {
       setLoading(false);
       setErr("Identifiant/slug manquant dans l'URL.");
-      if (DEBUG_HTTP) console.warn("[UI] idOrSlug manquant -> rien à fetch");
       return;
     }
 
@@ -516,23 +472,19 @@ export default function Visualiseur() {
 
     (async () => {
       try {
-        // 1er essai avec mdp stocké s'il existe
         const savedPwd = getStoredPassword(idOrSlug);
-        const art = await fetchArticle(idOrSlug, { 
-          include, 
-          fields, 
-          password: savedPwd || undefined 
+        const art = await fetchArticle(idOrSlug, {
+          include,
+          fields,
+          password: savedPwd || undefined
         });
-        
         if (!mounted) return;
         setArticle(art);
         document.title = art?.title || "Visualiseur";
       } catch (e) {
         if (!mounted) return;
-        
         if (e.locked) {
           const code = (e.code || "").toString().toLowerCase();
-
           if (/private/.test(code)) {
             setLockedKind("private");
             setUnlockOpen(false);
@@ -561,11 +513,10 @@ export default function Visualiseur() {
     return () => { mounted = false; };
   }, [idOrSlug, dispatch]);
 
-  /* ------- Garde-fou UI pour les articles privés (STRICT) ------- */
+  /* ------- Private guard ------- */
   useEffect(() => {
     if (!article || meLoading) return;
     const isPrivate = String(article.visibility || "").toLowerCase() === "private";
-
     if (isPrivate && !hasPrivateAccess(me)) {
       setArticle(null);
       setLockedKind("private");
@@ -573,89 +524,117 @@ export default function Visualiseur() {
     }
   }, [article, me, meLoading]);
 
-  /* ------- Logs de debug permissions/visibilité ------- */
   useEffect(() => {
     if (meLoading) return;
-    const rolesDbg = (me?.roles || []).map(r => r?.name ?? r?.slug ?? r?.title ?? r).join(", ");
-    const permsDbg = (me?.permissions || []).map(p => p?.action ?? p?.name ?? p?.code ?? p).join(", ");
-    console.debug("[auth] token present:", !!token);
-    console.debug("[auth] roles:", rolesDbg || "(aucun)");
-    console.debug("[auth] perms:", permsDbg || "(aucune)");
-    console.debug("[auth] hasPrivateAccess:", hasPrivateAccess(me));
+    // debug logs if needed
   }, [me, meLoading, token]);
 
-  useEffect(() => {
-    console.debug("[article] visibility:", article?.visibility);
-  }, [article?.visibility]);
+  useEffect(() => {}, [article?.visibility]);
 
-  /* ------- Charger récap des notes (dont ma note) ------- */
+  /* ------- Ratings summary ------- */
   useEffect(() => {
     if (!article?.id) return;
     let cancelled = false;
     setRatingLoaded(false);
-    
     (async () => {
       try {
         const data = await fetchRatingsSummary(article.id);
         if (cancelled) return;
-        
         if (Number.isFinite(Number(data?.rating_average)) && Number.isFinite(Number(data?.rating_count))) {
-          setArticle(a => ({ 
-            ...(a || {}), 
-            rating_average: Number(data.rating_average), 
-            rating_count: Number(data.rating_count) 
+          setArticle(a => ({
+            ...(a || {}),
+            rating_average: Number(data.rating_average),
+            rating_count: Number(data.rating_count)
           }));
         }
         setMyRating(typeof data?.my_rating === "number" ? data.my_rating : null);
         setMyReview(typeof data?.my_review === "string" ? data.my_review : "");
-      } catch (error) {
-        console.error("Erreur lors du chargement des notes:", error);
+      } catch {
       } finally {
         if (!cancelled) setRatingLoaded(true);
       }
     })();
-    
     return () => { cancelled = true; };
+  }, [article?.id]);
+
+  /* ------- Similar ------- */
+  useEffect(() => {
+    let mounted = true;
+    if (!article?.id) return;
+    const catIds = (article.categories || []).map(c => c.id).filter(Boolean);
+    const tagIds = (article.tags || []).map(t => t.id).filter(Boolean);
+    setSimilarLoading(true);
+    fetchSimilarArticles({ categoryIds: catIds, tagIds, excludeId: article.id, limit: 8 })
+      .then(list => mounted && setSimilar(Array.isArray(list) ? list : []))
+      .catch(() => mounted && setSimilar([]))
+      .finally(() => mounted && setSimilarLoading(false));
+    return () => { mounted = false; };
   }, [article?.id]);
 
   /* ------- Media list ------- */
   const mediaList = useMemo(() => {
     const medias = Array.isArray(article?.media) ? article.media : [];
+    const bgEdit = backgroundMediaUrl(article);
+    const seen = new Set();
+    const list = [];
+
+    if (bgEdit) {
+      list.push({
+        id: "bg-edit",
+        title: "Image de fond (édition)",
+        type: "image",
+        size: "—",
+        date: formatDate(article?.published_at),
+        category: firstCategory(article),
+        thumbnail: bgEdit,
+        fileUrl: bgEdit,
+        favorite: false,
+      });
+      seen.add(bgEdit);
+    }
+
     if (medias.length) {
-      return medias
-        .filter((m) => !!m?.url)
-        .map((m, idx) => {
-          const abs = toAbsolute(m.url);
-          return {
-            id: m.id || idx + 1,
-            title: m.title || article?.title || "Pièce jointe",
-            type: inferTypeFromUrl(abs),
-            size: m.size_readable || "—",
-            date: formatDate(article?.published_at),
-            category: firstCategory(article),
-            thumbnail: abs,
-            fileUrl: abs,
-            favorite: m.is_favorite || false,
-          };
-        });
+      list.push(
+        ...medias
+          .filter((m) => !!m?.url)
+          .map((m, idx) => {
+            const abs = toAbsolute(m.url);
+            return !abs || seen.has(abs) ? null : {
+              id: m.id || idx + 1,
+              title: m.title || article?.title || "Pièce jointe",
+              type: inferTypeFromUrl(abs),
+              size: m.size_readable || "—",
+              date: formatDate(article?.published_at),
+              category: firstCategory(article),
+              thumbnail: abs,
+              fileUrl: abs,
+              favorite: m.is_favorite || false,
+            };
+          })
+          .filter(Boolean)
+      );
+      if (list.length) return list;
     }
 
     const src = primaryMediaUrl(article);
     if (src) {
-      return [{
-        id: 1,
-        title: article?.title || "Pièce jointe",
-        type: inferTypeFromUrl(src),
-        size: "—",
-        date: formatDate(article?.published_at),
-        category: firstCategory(article),
-        thumbnail: src,
-        fileUrl: src,
-        favorite: article?.is_featured || false,
-      }];
+      return [
+        ...list,
+        {
+          id: 1,
+          title: article?.title || "Pièce jointe",
+          type: inferTypeFromUrl(src),
+          size: "—",
+          date: formatDate(article?.published_at),
+          category: firstCategory(article),
+          thumbnail: src,
+          fileUrl: src,
+          favorite: article?.is_featured || false,
+        }
+      ];
     }
 
-    return [];
+    return list;
   }, [article]);
 
   /* ------- Default selected media ------- */
@@ -664,37 +643,24 @@ export default function Visualiseur() {
   const currentTitle = selectedFile?.title || article?.title || "Sélectionnez un fichier";
 
   useEffect(() => {
-    if (mediaList.length && !selectedFile) setSelectedFile(mediaList[0]);
+    if (!mediaList.length) { setSelectedFile(null); return; }
+    if (!selectedFile || !mediaList.some(m => m.fileUrl === selectedFile.fileUrl)) {
+      setSelectedFile(mediaList[0]);
+    }
   }, [mediaList, selectedFile]);
 
-  // Debug URL preview (optionnel)
   useEffect(() => {
-    const u = selectedFile?.fileUrl || primaryMediaUrl(article);
-    if (u) console.debug("[Preview] image URL:", u);
-  }, [selectedFile, article]);
-
-  /* ------- Similar articles ------- */
-  useEffect(() => {
-    let mounted = true;
     if (!article?.id) return;
-    const catIds = (article.categories || []).map((c) => c.id).filter(Boolean);
-    const tagIds = (article.tags || []).map((t) => t.id).filter(Boolean);
-
-    setSimilarLoading(true);
-    fetchSimilarArticles({
-      categoryIds: catIds,
-      tagIds,
-      excludeId: article.id,
-      limit: 8,
-    })
-      .then((list) => mounted && setSimilar(Array.isArray(list) ? list : []))
-      .catch(() => mounted && setSimilar([]))
-      .finally(() => mounted && setSimilarLoading(false));
-
-    return () => { mounted = false; };
+    setSelectedFile(null);
+    setActiveTab("Aperçu");
+    try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch {}
   }, [article?.id]);
 
-  // ✅ Données de partage (toolbar)
+  useEffect(() => {
+    const u = selectedFile?.fileUrl || primaryMediaUrl(article);
+    if (u) {} // debug if needed
+  }, [selectedFile, article]);
+
   const shareData = useMemo(() => ({
     title: article?.title || "",
     excerpt: article?.excerpt || article?.title || "",
@@ -722,7 +688,6 @@ export default function Visualiseur() {
     );
   }
 
-  // 🔒 Tous les cas d'accès restreint
   if (!article && (lockedKind === "private" || lockedKind === "password" || lockedKind === "unknown")) {
     const isPrivateLock = lockedKind === "private";
     return (
@@ -801,438 +766,237 @@ export default function Visualiseur() {
   const hasHistory = Array.isArray(article.history) && article.history.length > 0;
   const tabs = ["Aperçu", "Médias", "Métadonnées", ...(hasHistory ? ["Versions"] : []), "Statistiques", "SEO"];
 
+  /* ---------- SEO ---------- */
+  const SITE_URL =
+    import.meta.env.VITE_SITE_URL ||
+    (typeof window !== "undefined" ? window.location.origin : "");
+  const canonical = article?.slug
+    ? `${SITE_URL.replace(/\/$/, "")}/articles/${encodeURIComponent(article.slug)}`
+    : (typeof window !== "undefined" ? window.location.href : undefined);
+  const imageUrl = primaryMediaUrl(article);
+  const visibility = String(article?.visibility || "").toLowerCase();
+  const isProtected = visibility === "private" || visibility.includes("password");
+  const robots = isProtected ? "noindex,nofollow,noarchive" : "index,follow";
+
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 font-sans px-3 sm:px-4 lg:px-6 2xl:px-10 py-4">
-      {/* Bannière d’erreur globale si nécessaire */}
-      {unlockError && (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {unlockError}
-        </div>
-      )}
-
-      {/* Layout horizontal */}
-      <div className="flex gap-4 lg:gap-6 xl:gap-8">
-        {/* Sidebar */}
-        <Sidebar
-          open={sidebarOpen}
-          toggle={() => setSidebarOpen((s) => !s)}
-          mediaCount={mediaList.length}
-          tags={article?.tags || []}
-          mediaList={mediaList}
-          selectedFile={selectedFile}
-          onSelectFile={setSelectedFile}
-          similar={similar}
-          similarLoading={similarLoading}
-          onOpenSimilar={(slugOrId) => navigate(`/articles/${slugOrId}`)}
-          onOpenTagManager={() => setTagModalOpen(true)}
-        />
-
-        {/* Main */}
-        <div className="flex-1 min-w-0 flex flex-col">
-          {/* Card centrale */}
-          <div className="bg-white/60 backdrop-blur-xl rounded-2xl shadow-xl border border-white/40 overflow-hidden">
-            {/* Toolbar sticky */}
-            <div className="sticky top-5 z-10 bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40">
-              <Toolbar
-                onBack={() => navigate(-1)}
-                onRefresh={() => setActiveTab("Aperçu")}
-                onFullscreen={() => setFullscreen(true)}
-                onDownload={downloadCurrent}
-                shareData={shareData}
-              />
-            </div>
-
-            {/* Split centre / droite */}
-            <div className="flex gap-4 lg:gap-6 xl:gap-8">
-              {/* Main panel */}
-              <div className="flex-1 min-w-0 border-r border-slate-200/30">
-                <div className="p-5 sm:p-6 lg:p-8">
-                  <Tabs list={tabs} active={activeTab} onChange={setActiveTab} />
-                  <div ref={previewRef} className="file-preview-container min-h-[50vh]">
-                    {activeTab === "Aperçu" && (
-                      <Apercu
-                        article={article}
-                        currentUrl={currentUrl}
-                        currentType={currentType}
-                        currentTitle={currentTitle}
-                        onOpen={openInNew}
-                        onDownload={downloadCurrent}
-                      />
-                    )}
-                    {activeTab === "Médias" && <Medias mediaList={mediaList} />}
-                    {activeTab === "Métadonnées" && (
-                      <Metadonnees article={article} currentType={currentType} currentTitle={currentTitle} />
-                    )}
-                    {activeTab === "Versions" && hasHistory && <Versions history={article.history} />}
-                    {activeTab === "Statistiques" && <StatsCharts article={article} />}
-                    {activeTab === "SEO" && <SeoPanel article={article} />}
-                  </div>
-                </div>
-              </div>
-
-              {/* Right panel */}
-              <DetailsPanel
-                article={article}
-                currentType={currentType}
-                currentTitle={currentTitle}
-                similar={similar}
-                similarLoading={similarLoading}
-                onOpenSimilar={(slugOrId) => navigate(`/articles/${slugOrId}`)}
-                selectedFile={selectedFile}
-                me={me}
-                token={token}
-                rights={rights}
-                onOpenRating={() => { setRatingMode("create"); setRatingOpen(true); }}
-                onOpenRatingEdit={() => { setRatingMode("edit"); setRatingOpen(true); }}
-                ratingAverage={article?.rating_average}
-                ratingCount={article?.rating_count}
-                myRating={myRating}
-                ratingLoaded={ratingLoaded}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Fullscreen Modal */}
-      {fullscreen && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center">
-          <div className="relative w-full h-full flex items-center justify-center">
-            <div className="max-w-7xl w-full p-6 sm:p-10 lg:p-12">
-              <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl">
-                <Tabs list={tabs} active={activeTab} onChange={setActiveTab} />
-                {activeTab === "Aperçu" && (
-                  <Apercu
-                    article={article}
-                    currentUrl={currentUrl}
-                    currentType={currentType}
-                    currentTitle={currentTitle}
-                    onOpen={openInNew}
-                    onDownload={downloadCurrent}
-                  />
-                )}
-                {activeTab === "Médias" && <Medias mediaList={mediaList} />}
-                {activeTab === "Métadonnées" && <Metadonnees article={article} currentType={currentType} currentTitle={currentTitle} />}
-                {activeTab === "Versions" && <Versions history={article.history} />}
-                {activeTab === "Statistiques" && <StatsCharts article={article} />}
-                {activeTab === "SEO" && <SeoPanel article={article} />}
-              </div>
-            </div>
-            <button
-              onClick={() => setFullscreen(false)}
-              className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/80 text-2xl sm:text-3xl hover:text-white transition-colors duration-300"
-              aria-label="Fermer"
-            >
-              <FaTimes />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Tag Manager Modal */}
-      {article?.id && (
-        <TagManagerModal
-          open={tagModalOpen}
-          onClose={() => setTagModalOpen(false)}
-          articleId={article.id}
-          existingTags={article?.tags || []}
-          onChange={(newList) => setArticle((a) => ({ ...(a || {}), tags: newList }))}
-          meOverride={me}
-          rightsOverride={rights}
-        />
-      )}
-
-      {/* Rating Modal */}
-      {article?.id && (
-        <RatingModal
-          open={ratingOpen}
-          onClose={() => setRatingOpen(false)}
-          articleId={article.id}
-          articleTitle={article.title}
-          initialAverage={article.rating_average}
-          initialCount={article.rating_count}
-          tokenOverride={token}
-          mode={ratingMode}
-          initialMyRating={myRating || 0}
-          initialMyReview={myReview || ""}
-          onSubmitSuccess={({ rating_average, rating_count, my_rating, my_review }) => {
-            const avg = rating_average;
-            const cnt = rating_count;
-            setArticle(a => ({
-              ...(a || {}),
-              rating_average: Number.isFinite(avg) ? avg : (a?.rating_average ?? 0),
-              rating_count:   Number.isFinite(cnt) ? cnt : (a?.rating_count ?? 0),
-            }));
-            if (typeof my_rating === "number") setMyRating(my_rating);
-            if (typeof my_review === "string") setMyReview(my_review);
-          }}
-        />
-      )}
-
-      {/* Debug */}
-      {DEBUG_HTTP && (
-        <details className="fixed bottom-8 left-8 bg-white/95 backdrop-blur-xl p-6 rounded-2xl border border-white/60 max-w-[40rem] shadow-xl">
-          <summary className="text-slate-700 cursor-pointer font-medium flex items-center">
-            <FaInfoCircle className="mr-2" /> Debug
-          </summary>
-          <div className="text-xs my-3">
-            <div className="mb-2 font-medium text-slate-800">Show URL</div>
-            <code className="break-all text-slate-600">
-              {buildArticleShowUrl(idOrSlug, { include: ["categories","tags","media"], fields: ["id","title","slug"] })}
-            </code>
-          </div>
-          <pre className="text-xs max-h-64 overflow-auto bg-slate-50/80 p-4 rounded-xl border border-slate-200/50">
-            {JSON.stringify(article, null, 2)}
-          </pre>
-        </details>
-      )}
-
-      {/* 🔑 Modale mot de passe (quand l'article est déjà affiché) */}
-      <PasswordModal
-        open={unlockOpen}
-        onClose={() => { dispatch(clearAuthError()); setUnlockOpen(false); }}
-        onSubmit={handleUnlock}
-        defaultValue={getStoredPassword(idOrSlug)}
-        title="Déverrouiller l’article"
-        error={unlockError}
-        busy={unlockBusy}
+    <>
+      <SeoHead
+        title={article.title}
+        description={article.seo_data?.meta_description || article.excerpt}
+        keywords={
+          Array.isArray(article.seo_data?.keywords)
+            ? article.seo_data.keywords.join(", ")
+            : article.seo_data?.keywords
+        }
+        canonical={canonical}
+        image={imageUrl}
+        type="article"
+        robots={robots}
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "Article",
+          "headline": article.title,
+          "image": imageUrl ? [imageUrl] : undefined,
+          "datePublished": article.published_at,
+          "dateModified": article.updated_at,
+          "author": authorNameOf(article)
+            ? [{ "@type": "Person", "name": authorNameOf(article) }]
+            : undefined,
+          "mainEntityOfPage": canonical
+        }}
       />
-    </div>
-  );
-}
 
-/* ---------------- Sub-UI ---------------- */
-function Sidebar({ open, toggle, mediaCount, tags, mediaList, selectedFile, onSelectFile, similar, similarLoading, onOpenSimilar, onOpenTagManager }) {
-  return (
-    <div className={`sidebar pt-4 overflow-auto w-72 lg:w-80 bg-white/70 backdrop-blur-xl shadow-2xl border-r border-white/40 flex-shrink-0 transition-all duration-500 ${open ? "" : "hidden"} lg:block`}>
-      <div className="p-6 border-b border-slate-200/30 sticky top-0 bg-white/70 backdrop-blur-xl z-10">
-        <h2 className="text-2xl font-light text-slate-800 flex items-center st">
-          <FaFolderOpen className="mr-3 text-blue-500" />
-          Bibliothèque
-        </h2>
-        <div className="mt-6 relative">
-          <input
-            type="text"
-            placeholder="Rechercher..."
-            className="w-full px-4 py-3 pl-12 border border-slate-200/60 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 bg-white/80 backdrop-blur-sm transition-all duration-300 text-sm"
-          />
-          <FaSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" />
-        </div>
-      </div>
-      <div className="overflow-y-auto h-full pb-24">
-        {/* Fichiers liés */}
-        <div className="p-6">
-          <h3 className="font-medium text-slate-700 mb-5 flex items-center text-lg">
-            <FaClock className="mr-2 text-blue-500" />
-            Fichiers liés
-          </h3>
-          <div className="space-y-3">
-            {mediaList.length ? mediaList.map((f, idx) => (
-              <div
-                key={f.id ?? `media-${idx}`}
-                className={`file-item p-4 rounded-2xl cursor-pointer flex items-center transition-all duration-300 border ${
-                  selectedFile?.id === f.id
-                    ? "bg-blue-50/80 border-blue-200 shadow-lg scale-[1.02]"
-                    : "bg-white/60 border-slate-200/40 hover:border-blue-200/60 hover:shadow-md hover:scale-[1.01]"
-                }`}
-                onClick={() => onSelectFile(f)}
-              >
-                <div className={`w-12 h-12 ${iconBgForType(f.type)} rounded-xl flex items-center justify-center mr-4 transition-transform duration-300 hover:scale-110`}>
-                  {iconForType(f.type, "text-2xl")}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-800 truncate">{f.title}</p>
-                  <p className="text-xs text-slate-500">{f.size} • {f.date}</p>
-                </div>
-                {f.favorite && <FaStar className="ml-2 text-amber-400 flex-shrink-0" />}
-              </div>
-            )) : (
-              <div className="text-sm text-slate-500 py-12 text-center bg-slate-50/50 rounded-2xl">Aucun média lié à cet article.</div>
-            )}
-          </div>
-        </div>
-
-        {/* Tags */}
-        <div className="p-6 border-t border-slate-200/30">
-          <h3 className="font-medium text-slate-700 mb-5 flex items-center text-lg">
-            <FaTag className="mr-2 text-emerald-500" />
-            Tags
-          </h3>
-
-          {Array.isArray(tags) && tags.length > 0 ? (
-            <TagList tags={tags} onAddClick={onOpenTagManager} onTagClick={undefined} max={10} />
-          ) : (
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-slate-500 px-4 py-2 rounded-full bg-slate-100/80">Aucun tag</span>
-              <button
-                onClick={onOpenTagManager}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-slate-300/60 text-slate-600 bg-white/70 hover:bg-slate-50 transition-all duration-300"
-                title="Gérer les tags"
-                type="button"
-              >
-                <FaPlus className="text-slate-500" />
-                Ajouter
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Similaires */}
-        <SimilarList
-          similar={similar}
-          loading={similarLoading}
-          onOpenSimilar={onOpenSimilar}
-        />
-      </div>
-      <button
-        onClick={toggle}
-        className="absolute top-6 right-6 text-slate-600 hover:text-slate-900 lg:hidden transition-colors duration-300"
-        title="Replier"
-      >
-        <FaTimes className="text-2xl" />
-      </button>
-    </div>
-  );
-}
-
-function SimilarList({ similar, loading, onOpenSimilar }) {
-  return (
-    <div className="p-6 border-t border-slate-200/30">
-      <h3 className="font-medium text-slate-700 mb-5 flex items-center text-lg">
-        <FaChartBar className="mr-2 text-blue-700" />
-        Similaires
-      </h3>
-      <div className="space-y-4 overflow-auto min-h-96 max-h-72 pr-2 custom-scrollbar">
-        {loading && (
-          <div className="text-center py-16 bg-gradient-to-br from-blue-50/80 to-indigo-50/80 rounded-2xl border border-blue-100/40 backdrop-blur-sm">
-            <div className="inline-block w-8 h-8 border-4 border-blue-300 border-t-blue-600 rounded-full animate-spin mb-4"></div>
-            <p className="text-base font-medium text-blue-700 mb-1">Chargement…</p>
-            <p className="text-sm text-blue-500">Recherche d'articles similaires</p>
+      <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 font-sans px-3 sm:px-4 lg:px-6 2xl:px-10 py-4">
+        {unlockError && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {unlockError}
           </div>
         )}
 
-        {!loading && (similar.length ? similar.map((it, index) => {
-          const coverRaw =
-            (typeof it.featured_image === "string" && it.featured_image) ||
-            it.featured_image?.url ||
-            it.media?.[0]?.url ||
-            null;
-          const cover = coverRaw ? toAbsolute(coverRaw) : null;
-          return (
-            <button
-              key={it.id ?? `${it.slug}-${index}`}
-              onClick={() => onOpenSimilar(it.slug || it.id)}
-              className="w-full text-left p-5 rounded-2xl cursor-pointer flex items-center transition-all duration-300 border border-slate-200/60 bg-white/80 backdrop-blur-sm hover:border-blue-300/70 hover:shadow-lg hover:shadow-blue-100/40 hover:scale-[1.02] transform transition-all duration-300 group"
-              style={{ animationDelay: `${index * 80}ms`, animation: 'slideInUp 0.5s ease-out forwards' }}
-            >
-              <div className="relative w-14 h-14 bg-gradient-to-br from-slate-100 to-slate-200 rounded-xl flex items-center justify-center mr-4 overflow-hidden shadow-sm group-hover:shadow-md transition-all duration-300">
-                {cover ? (
-                  <>
-                    <img src={cover} alt={it.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                  </>
-                ) : (
-                  <FaFile className="text-slate-500 text-xl group-hover:text-blue-600 transition-colors duration-300" />
-                )}
-                <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 scale-0 group-hover:scale-100 flex items-center justify-center">
-                  <span className="text-white text-xs">→</span>
-                </div>
+        <div className="flex gap-4 lg:gap-6 xl:gap-8">
+          <Sidebar
+            open={sidebarOpen}
+            toggle={() => setSidebarOpen(s => !s)}
+            mediaCount={mediaList.length}
+            tags={article?.tags || []}
+            mediaList={mediaList}
+            selectedFile={selectedFile}
+            onSelectFile={setSelectedFile}
+            similar={similar}
+            similarLoading={similarLoading}
+            onOpenSimilar={(slugOrId) => { setSelectedFile(null); navigate(`/articles/${slugOrId}`); }}
+            onOpenTagManager={() => setTagModalOpen(true)}
+            TagListComponent={TagList}
+            iconForType={iconForType}
+            iconBgForType={iconBgForType}
+            toAbsolute={toAbsolute}
+          />
+
+          {/* Main */}
+          <div className="flex-1 min-w-0 flex flex-col">
+            <div className="bg-white/60 backdrop-blur-xl rounded-2xl shadow-xl border border-white/40 overflow-hidden">
+              <div className="sticky top-5 z-10 bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40">
+                <Toolbar
+                  onBack={() => navigate(-1)}
+                  onRefresh={() => setActiveTab("Aperçu")}
+                  onFullscreen={() => setFullscreen(true)}
+                  onDownload={downloadCurrent}
+                  shareData={shareData}
+                />
               </div>
 
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-800 group-hover:text-blue-800 transition-colors duration-300 truncate mb-1">
-                  {it.title}
-                </p>
-                <p className="text-xs text-slate-500 group-hover:text-slate-600 transition-colors duration-300 truncate">
-                  {(it.categories || []).map((c) => c.name).join(", ") || "—"}
-                </p>
-              </div>
-
-              <div className="ml-3 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
-                <div className="w-7 h-7 bg-blue-100 group-hover:bg-blue-200 rounded-full flex items-center justify-center">
-                  <span className="text-blue-600 text-sm font-bold">→</span>
+              <div className="flex gap-4 lg:gap-6 xl:gap-8">
+                {/* Main panel */}
+                <div className="flex-1 min-w-0 border-r border-slate-200/30">
+                  <div className="p-5 sm:p-6 lg:p-8">
+                    <Tabs list={tabs} active={activeTab} onChange={setActiveTab} />
+                    <div key={article?.id} ref={previewRef} className="file-preview-container min-h-[50vh]">
+                      {activeTab === "Aperçu" && (
+                        <Apercu
+                          article={article}
+                          currentUrl={currentUrl}
+                          currentType={currentType}
+                          currentTitle={currentTitle}
+                          onOpen={openInNew}
+                          onDownload={downloadCurrent}
+                        />
+                      )}
+                      {activeTab === "Médias" && <Medias mediaList={mediaList} />}
+                      {activeTab === "Métadonnées" && (
+                        <Metadonnees article={article} currentType={currentType} currentTitle={currentTitle} />
+                      )}
+                      {activeTab === "Versions" && hasHistory && <Versions history={article.history} />}
+                      {activeTab === "Statistiques" && <StatsCharts article={article} />}
+                      {activeTab === "SEO" && <SeoPanel article={article} />}
+                    </div>
+                  </div>
                 </div>
+
+                {/* Right panel */}
+                <DetailsPanel
+                  article={article}
+                  currentType={currentType}
+                  currentTitle={currentTitle}
+                  selectedFile={selectedFile}
+                  me={me}
+                  token={token}
+                  rights={rights}
+                  onOpenRating={() => { setRatingMode("create"); setRatingOpen(true); }}
+                  onOpenRatingEdit={() => { setRatingMode("edit"); setRatingOpen(true); }}
+                  ratingAverage={article?.rating_average}
+                  ratingCount={article?.rating_count}
+                  myRating={myRating}
+                  ratingLoaded={ratingLoaded}
+                />
               </div>
-            </button>
-          );
-        }) : (
-          <div className="text-center py-16 bg-gradient-to-br from-slate-50/80 to-slate-100/80 rounded-2xl border border-slate-200/40 backdrop-blur-sm">
-            <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FaFile className="text-slate-400 text-xl" />
             </div>
-            <p className="text-base font-medium text-slate-600 mb-1">Aucun article similaire.</p>
-            <p className="text-sm text-slate-500">Revenez plus tard pour découvrir du nouveau contenu</p>
           </div>
-        ))}
+        </div>
 
-       <style>{`
-  @keyframes slideInUp {
-    from { opacity: 0; transform: translateY(15px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-  .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-  .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 3px; }
-  .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-  .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-`}</style>
+        {/* Fullscreen Modal */}
+        {fullscreen && (
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center">
+            <div className="relative w-full h-full flex items-center justify-center">
+              <div className="max-w-7xl w-full p-6 sm:p-10 lg:p-12">
+                <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl">
+                  <Tabs list={tabs} active={activeTab} onChange={setActiveTab} />
+                  {activeTab === "Aperçu" && (
+                    <Apercu
+                      article={article}
+                      currentUrl={currentUrl}
+                      currentType={currentType}
+                      currentTitle={currentTitle}
+                      onOpen={openInNew}
+                      onDownload={downloadCurrent}
+                    />
+                  )}
+                  {activeTab === "Médias" && <Medias mediaList={mediaList} />}
+                  {activeTab === "Métadonnées" && <Metadonnees article={article} currentType={currentType} currentTitle={currentTitle} />}
+                  {activeTab === "Versions" && <Versions history={article.history} />}
+                  {activeTab === "Statistiques" && <StatsCharts article={article} />}
+                  {activeTab === "SEO" && <SeoPanel article={article} />}
+                </div>
+              </div>
+              <button
+                onClick={() => setFullscreen(false)}
+                className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/80 text-2xl sm:text-3xl hover:text-white transition-colors duration-300"
+                aria-label="Fermer"
+              >
+                <FaTimes />
+              </button>
+            </div>
+          </div>
+        )}
 
-      </div>
-    </div>
-  );
-}
+        {/* Tag Manager Modal */}
+        {article?.id && (
+          <TagManagerModal
+            open={tagModalOpen}
+            onClose={() => setTagModalOpen(false)}
+            articleId={article.id}
+            existingTags={article?.tags || []}
+            onChange={(newList) => setArticle((a) => ({ ...(a || {}), tags: newList }))}
+            meOverride={me}
+            rightsOverride={rights}
+          />
+        )}
 
-function Toolbar({ onBack, onRefresh, onFullscreen, onDownload, shareData }) {
-  return (
-    <div className="border-b border-slate-200/30 p-4 sm:p-5 lg:p-6 flex justify-between items-center bg-gradient-to-r from-white/30 to-transparent sty">
-      <div className="flex items-center space-x-2 sm:space-x-3">
-        <button onClick={onBack} className="p-3 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50/80 transition-all duration-300 flex items-center justify-center" title="Retour">
-          <FaArrowLeft />
-        </button>
-        <button className="p-3 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50/80 transition-all duration-300 flex items-center justify-center" title="Avancer">
-          <FaArrowRight />
-        </button>
-        <button onClick={onRefresh} className="p-3 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50/80 transition-all duration-300 flex items-center justify-center" title="Rafraîchir">
-          <FaRedo />
-        </button>
-      </div>
-      <div className="flex items-center space-x-3 sm:space-x-4">
-        <button onClick={onFullscreen} className="px-4 sm:px-5 lg:px-6 py-3 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50/80 border border-slate-300/60 transition-all duration-300 flex items-center backdrop-blur-sm">
-          <FaExpand className="mr-2" />
-          <span>Plein écran</span>
-        </button>
-        <button onClick={onDownload} className="px-4 sm:px-5 lg:px-6 py-3 rounded-xl text-slate-600 hover:text-emerald-600 hover:bg-emerald-50/80 border border-slate-300/60 transition-all duration-300 flex items-center backdrop-blur-sm">
-          <FaDownload className="mr-2" />
-          <span>Télécharger</span>
-        </button>
+        {/* Rating Modal */}
+        {article?.id && (
+          <RatingModal
+            open={ratingOpen}
+            onClose={() => setRatingOpen(false)}
+            articleId={article.id}
+            articleTitle={article.title}
+            initialAverage={article.rating_average}
+            initialCount={article.rating_count}
+            tokenOverride={token}
+            mode={ratingMode}
+            initialMyRating={myRating || 0}
+            initialMyReview={myReview || ""}
+            onSubmitSuccess={({ rating_average, rating_count, my_rating, my_review }) => {
+              const avg = rating_average;
+              const cnt = rating_count;
+              setArticle(a => ({
+                ...(a || {}),
+                rating_average: Number.isFinite(avg) ? avg : (a?.rating_average ?? 0),
+                rating_count:   Number.isFinite(cnt) ? cnt : (a?.rating_count ?? 0),
+              }));
+              if (typeof my_rating === "number") setMyRating(my_rating);
+              if (typeof my_review === "string") setMyReview(my_review);
+            }}
+          />
+        )}
 
-        <ShareButton
-          title={shareData?.title}
-          excerpt={shareData?.excerpt}
-          url={shareData?.url}
-          articleId={shareData?.articleId}
+        {/* Debug */}
+        {DEBUG_HTTP && (
+          <details className="fixed bottom-8 left-8 bg-white/95 backdrop-blur-xl p-6 rounded-2xl border border-white/60 max-w-[40rem] shadow-xl">
+            <summary className="text-slate-700 cursor-pointer font-medium flex items-center">
+              <FaInfoCircle className="mr-2" /> Debug
+            </summary>
+            <div className="text-xs my-3">
+              <div className="mb-2 font-medium text-slate-800">Show URL</div>
+              <code className="break-all text-slate-600">
+                {buildArticleShowUrl(idOrSlug, { include: ["categories","tags","media"], fields: ["id","title","slug"] })}
+              </code>
+            </div>
+            <pre className="text-xs max-h-64 overflow-auto bg-slate-50/80 p-4 rounded-xl border border-slate-200/50">
+              {JSON.stringify(article, null, 2)}
+            </pre>
+          </details>
+        )}
+
+        <PasswordModal
+          open={unlockOpen}
+          onClose={() => { dispatch(clearAuthError()); setUnlockOpen(false); }}
+          onSubmit={handleUnlock}
+          defaultValue={getStoredPassword(idOrSlug)}
+          title="Déverrouiller l’article"
+          error={unlockError}
+          busy={unlockBusy}
         />
       </div>
-    </div>
-  );
-}
-
-function Tabs({ list, active, onChange }) {
-  return (
-    <div className="flex border-b border-slate-200/30 mb-6 sm:mb-8 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
-      {list.map((tab) => (
-        <button
-          key={tab}
-          onClick={() => onChange(tab)}
-          className={`px-4 sm:px-6 py-3 sm:py-4 font-medium whitespace-nowrap transition-all duration-300 border-b-2 ${
-            active === tab
-              ? "text-blue-600 border-blue-500"
-              : "text-slate-600 border-transparent hover:text-blue-600 hover:border-blue-300"
-          }`}
-        >
-          {tab}
-        </button>
-      ))}
-    </div>
+    </>
   );
 }
 
@@ -1240,33 +1004,54 @@ function Tabs({ list, active, onChange }) {
 function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDownload }) {
   const contentStr = (article?.content ?? "").toString();
   const looksHtml = /<\/?[a-z][\s\S]*>/i.test(contentStr);
+  const bgUrl = backgroundMediaUrl(article);
+  const [searchParams] = useSearchParams();
+  const isEdit =
+    searchParams.get("edit") === "1" ||
+    (searchParams.get("mode") || "").toLowerCase() === "edit" ||
+    article?.meta?.is_editing === true;
 
   return (
-    <div className="space-y-8 lg:space-y-10 overflow-auto max-h-screen">
-      {!currentUrl ? (
-        <div className="text-center py-16 lg:py-20">
-          <div className="w-24 h-24 lg:w-28 lg:h-28 bg-gradient-to-br from-blue-100 to-blue-200 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl">
-            <FaFile className="text-blue-600 text-4xl lg:text-5xl" />
-          </div>
-          <h3 className="text-2xl lg:3xl font-light text-slate-800 mb-3">Aucun média</h3>
-          <p className="text-slate-600 mt-2 max-w-md mx-auto">Ajoutez un média à l'article ou ouvrez l'onglet « Médias » pour explorer les fichiers disponibles.</p>
-        </div>
-      ) : (
-        <PreviewByType type={currentType} url={currentUrl} title={currentTitle} onOpen={onOpen} onDownload={onDownload} />
+    <div className="space-y-8 lg:space-y-10 overflow-auto max-h-screen relative">
+      {isEdit && bgUrl && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-2xl"
+          style={{
+            backgroundImage: `url(${bgUrl})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            filter: "blur(12px)",
+            opacity: 0.18
+          }}
+        />
       )}
+      <div className="relative">
+        {!currentUrl ? (
+          <div className="text-center py-16 lg:py-20">
+            <div className="w-24 h-24 lg:w-28 lg:h-28 bg-gradient-to-br from-blue-100 to-blue-200 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl">
+              <FaFile className="text-blue-600 text-4xl lg:text-5xl" />
+            </div>
+            <h3 className="text-2xl lg:3xl font-light text-slate-800 mb-3">Aucun média</h3>
+            <p className="text-slate-600 mt-2 max-w-md mx-auto">Ajoutez un média à l'article ou ouvrez l'onglet « Médias » pour explorer les fichiers disponibles.</p>
+          </div>
+        ) : (
+          <PreviewByType type={currentType} url={currentUrl} title={currentTitle} onOpen={onOpen} onDownload={onDownload} />
+        )}
 
-      {contentStr && (
-        <div className="pt-2 sm:pt-4">
-          <h3 className="text-xl lg:2xl font-light text-slate-800 mb-4 lg:mb-6">Contenu de l'article</h3>
-          <div className="bg-slate-50/50 rounded-2xl p-5 sm:p-6 lg:p-8 border border-slate-200/40">
-            {looksHtml ? (
-              <div className="prose prose-slate max-w-none prose-lg" dangerouslySetInnerHTML={{ __html: contentStr }} />
-            ) : (
-              <p className="whitespace-pre-line text-slate-700 leading-relaxed">{contentStr}</p>
-            )}
+        {contentStr && (
+          <div className="pt-2 sm:pt-4">
+            <h3 className="text-xl lg:2xl font-light text-slate-800 mb-4 lg:mb-6">Contenu de l'article</h3>
+            <div className="bg-slate-50/50 rounded-2xl p-5 sm:p-6 lg:p-8 border border-slate-200/40">
+              {looksHtml ? (
+                <div className="prose prose-slate max-w-none prose-lg" dangerouslySetInnerHTML={{ __html: contentStr }} />
+              ) : (
+                <p className="whitespace-pre-line text-slate-700 leading-relaxed">{contentStr}</p>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -1318,8 +1103,8 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
             <SmartImage
               src={abs}
               alt={title}
-              modern="off"          // évite NS_BINDING_ABORTED
-              ratio="56.25%"        // 16:9
+              modern="off"
+              ratio="56.25%"
               rounding="rounded-2xl"
               className="object-contain"
             />
@@ -1450,7 +1235,7 @@ function Metadonnees({ article, currentType, currentTitle }) {
     ["Date de création", formatDate(article?.created_at)],
     ["Dernière modification", formatDate(article?.updated_at)],
     ["Publié le", formatDate(article?.published_at)],
-    ["Auteur", article?.author_name || (article?.author_id ? `Auteur #${article.author_id}` : "—")],
+    ["Auteur", authorNameOf(article)],
     ["Catégorie principale", firstCategory(article)],
     ["Mots-clés (tags)", "__TAGS__"],
     ["Lecture (min)", article?.reading_time ?? "—"],
@@ -1555,10 +1340,9 @@ function StatsCharts({ article }) {
   const historyBarData = Object.entries(actionsCount).map(([k, v]) => ({ name: k, count: v }));
 
   return (
-     <div className="w-full bg-gradient-to-br from-slate-50/30 via-white/30 to-blue-50/30 backdrop-blur-sm rounded-2xl p-4 sm:p-6 lg:p-8">
+    <div className="w-full bg-gradient-to-br from-slate-50/30 via-white/30 to-blue-50/30 backdrop-blur-sm rounded-2xl p-4 sm:p-6 lg:p-8">
       <Toaster />
 
-      {/* Header */}
       <div className="mb-8 lg:mb-10">
         <h1 className="text-2xl lg:3xl font-light text-slate-800 mb-2 leading-tight">
           Statistiques de l'article
@@ -1566,44 +1350,29 @@ function StatsCharts({ article }) {
         <div className="h-[3px] w-16 lg:w-20 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full" />
       </div>
 
-      {/* KPIs — compact */}
       <div className="flex flex-wrap gap-3 sm:gap-4 lg:gap-5 mb-8 lg:mb-12 text-base leading-tight">
         <div className="flex-1 min-w-[140px] sm:min-w-[160px] md:min-w-[180px] xl:min-w-[200px]">
-          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm"
-            label="Vues" value={views} icon={<FaEye />} color="blue" />
+          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm" label="Vues" value={views} icon={<FaEye />} color="blue" />
         </div>
         <div className="flex-1 min-w-[140px] sm:min-w-[160px] md:min-w-[180px] xl:min-w-[200px]">
-          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm"
-            label="Partages" value={shares} icon={<FaShareAlt />} color="green" />
+          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm" label="Partages" value={shares} icon={<FaShareAlt />} color="green" />
         </div>
         <div className="flex-1 min-w-[140px] sm:min-w-[160px] md:min-w-[180px] xl:min-w-[200px]">
-          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm"
-            label="Commentaires" value={comments} icon={<FaComment />} color="blue" />
+          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm" label="Commentaires" value={comments} icon={<FaComment />} color="blue" />
         </div>
         <div className="flex-1 min-w-[140px] sm:min-w-[160px] md:min-w-[180px] xl:min-w-[200px]">
-          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm"
-            label="Note moyenne" value={avgRating?.toFixed(2)} suffix="/5" icon={<FaStar />} color="orange" />
+          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm" label="Note moyenne" value={avgRating?.toFixed(2)} suffix="/5" icon={<FaStar />} color="orange" />
         </div>
       </div>
 
-      {/* Charts — compact */}
       <div className="flex flex-wrap gap-3 lg:gap-4">
-        {/* Engagement */}
         <div className="flex-1 basis-full xl:basis-1/3 min-w-[240px]">
-          <ChartCard className="p-4 sm:p-5 rounded-xl shadow-sm"
-            title="Engagement" subtitle="Répartition des interactions" icon={<FaChartBar />}>
+          <ChartCard className="p-4 sm:p-5 rounded-xl shadow-sm" title="Engagement" subtitle="Répartition des interactions" icon={<FaChartBar />}>
             {engagementData.length ? (
               <div className="h-56 md:h-64 xl:h-72 2xl:h-[24rem] flex items-center justify-center">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie
-                      dataKey="value"
-                      data={engagementData}
-                      innerRadius={44}
-                      outerRadius={80}
-                      paddingAngle={2}
-                      stroke="none"
-                    >
+                    <Pie dataKey="value" data={engagementData} innerRadius={44} outerRadius={80} paddingAngle={2} stroke="none">
                       {engagementData.map((_, i) => (
                         <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                       ))}
@@ -1628,7 +1397,6 @@ function StatsCharts({ article }) {
           </ChartCard>
         </div>
 
-        {/* Tags / Historique */}
         <div className="flex-1 basis-full xl:basis-1/3 min-w-[240px]">
           <ChartCard className="p-4 sm:p-5 rounded-xl shadow-sm"
             title={tagsBarData.length ? 'Tags populaires' : 'Historique'}
@@ -1636,10 +1404,7 @@ function StatsCharts({ article }) {
             icon={tagsBarData.length ? <FaTag /> : <FaHistory />}>
             <div className="h-56 md:h-64 xl:h-72 2xl:h-[24rem]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={tagsBarData.length ? tagsBarData : historyBarData}
-                  margin={{ top: 16, right: 16, left: 12, bottom: 52 }}
-                >
+                <BarChart data={tagsBarData.length ? tagsBarData : historyBarData} margin={{ top: 16, right: 16, left: 12, bottom: 52 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" opacity={0.6} />
                   <XAxis
                     dataKey="name"
@@ -1651,12 +1416,7 @@ function StatsCharts({ article }) {
                     axisLine={false}
                     tickLine={false}
                   />
-                  <YAxis
-                    allowDecimals={false}
-                    tick={{ fill: '#64748b', fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
+                  <YAxis allowDecimals={false} tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: 'rgba(255, 255, 255, 0.95)',
@@ -1667,43 +1427,22 @@ function StatsCharts({ article }) {
                       padding: '8px 10px',
                     }}
                   />
-                  <Bar
-                    dataKey={tagsBarData.length ? 'usage' : 'count'}
-                    fill="#3b82f6"
-                    radius={[6, 6, 0, 0]}
-                    stroke="none"
-                    barSize={18}
-                  />
+                  <Bar dataKey={tagsBarData.length ? 'usage' : 'count'} fill="#3b82f6" radius={[6, 6, 0, 0]} stroke="none" barSize={18} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </ChartCard>
         </div>
 
-        {/* Qualité */}
         <div className="flex-1 basis-full xl:basis-1/3 min-w-[240px]">
-          <ChartCard className="p-4 sm:p-5 rounded-xl shadow-sm"
-            title="Qualité" subtitle="Note moyenne attribuée" icon={<FaStar />}>
+          <ChartCard className="p-4 sm:p-5 rounded-xl shadow-sm" title="Qualité" subtitle="Note moyenne attribuée" icon={<FaStar />}>
             <div className="h-56 md:h-64 xl:h-72 2xl:h-[24rem] flex flex-col items-center justify-center">
               {avgRating > 0 ? (
                 <>
                   <div className="relative w-36 h-36 md:w-40 md:h-40 xl:w-44 xl:h-44 mb-4">
                     <ResponsiveContainer width="100%" height="100%">
-                      <RadialBarChart
-                        innerRadius="62%"
-                        outerRadius="88%"
-                        data={[{ name: 'Note', value: (avgRating / 5) * 100 }]}
-                        startAngle={90}
-                        endAngle={-270}
-                      >
-                        <RadialBar
-                          dataKey="value"
-                          minAngle={12}
-                          clockWise
-                          background={{ fill: '#e2e8f0' }}
-                          fill="#fbbf24"
-                          cornerRadius={6}
-                        />
+                      <RadialBarChart innerRadius="62%" outerRadius="88%" data={[{ name: 'Note', value: (avgRating / 5) * 100 }]} startAngle={90} endAngle={-270}>
+                        <RadialBar dataKey="value" minAngle={12} clockWise background={{ fill: '#e2e8f0' }} fill="#fbbf24" cornerRadius={6} />
                       </RadialBarChart>
                     </ResponsiveContainer>
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -1715,11 +1454,7 @@ function StatsCharts({ article }) {
                   </div>
                   <div className="flex items-center gap-1">
                     {[...Array(5)].map((_, i) => (
-                      <FaStar
-                        key={i}
-                        className={i < Math.round(avgRating) ? 'text-yellow-400' : 'text-gray-200'}
-                        size={14}
-                      />
+                      <FaStar key={i} className={i < Math.round(avgRating) ? 'text-yellow-400' : 'text-gray-200'} size={14} />
                     ))}
                     <span className="ml-2 text-xs sm:text-sm text-slate-600">
                       ({ratings} {ratings <= 1 ? 'note' : 'notes'})
@@ -1737,53 +1472,8 @@ function StatsCharts({ article }) {
   );
 }
 
-function SeoPanel({ article }) {
-  const meta = article?.meta || {};
-  const seo = article?.seo_data || {};
-  const items = [
-    ["Meta title", meta.meta_title],
-    ["Meta description", meta.meta_description],
-    ["Meta keywords", meta.meta_keywords || meta.keywords],
-    ["Custom field 1", meta.custom_field_1],
-    ["Custom field 2", meta.custom_field_2],
-    ["OG title", seo.og_title],
-    ["OG description", seo.og_description],
-    ["Twitter title", seo.twitter_title],
-    ["Twitter description", seo.twitter_description],
-  ];
-
-  return (
-    <div className="w-full h-full overflow-auto space-y-6 lg:space-y-8">
-      <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-200/40 overflow-hidden shadow-lg">
-        <table className="min-w-full divide-y divide-slate-200/50">
-          <tbody className="divide-y divide-slate-200/50">
-            {items.map(([k, v]) => (
-              <tr key={k} className="hover:bg-slate-50/60 transition-colors duration-300">
-                <td className="px-6 lg:px-8 py-5 text-sm font-medium text-slate-800 bg-slate-50/60 border-r border-slate-200/50 w-1/3">{k}</td>
-                <td className="px-6 lg:px-8 py-5 text-sm text-slate-700 break-words">{v || "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {seo?.schema_org && (
-        <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-200/40 p-6 shadow-lg">
-          <h4 className="font-medium text-slate-800 mb-4 flex items-center text-lg">
-            <FaInfoCircle className="mr-3 text-blue-600" />
-            Schema.org
-          </h4>
-          <pre className="text-xs bg-slate-50/80 p-6 rounded-xl border border-slate-200/50 overflow-auto text-slate-700">
-            {JSON.stringify(seo.schema_org, null, 2)}
-          </pre>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function DetailsPanel({
-  article, currentType, currentTitle, similar, similarLoading, onOpenSimilar,
+  article, currentType, currentTitle,
   selectedFile, me, token, rights, onOpenRating, onOpenRatingEdit,
   ratingAverage, ratingCount, myRating, ratingLoaded
 }) {
@@ -1808,7 +1498,8 @@ function DetailsPanel({
       ? "bg-slate-100 text-slate-700 ring-1 ring-slate-200"
       : "bg-blue-50 text-blue-700 ring-1 ring-blue-200";
 
-  const tags = article?.tags || [];
+  const avatar = authorAvatarUrl(article);
+  const name = authorNameOf(article);
 
   return (
     <aside className="shrink-0 w-full sm:w-[20rem] lg:w-[22rem] xl:w-[24rem] 2xl:w-[26rem] p-6 lg:p-8">
@@ -1818,12 +1509,11 @@ function DetailsPanel({
       </h2>
 
       <div className="relative overflow-hidden rounded-3xl border border-slate-200/60 bg-white/70 backdrop-blur-sm mb-6">
-        {/* Ligne lumineuse */}
         <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-sky-300 to-transparent" />
 
         {/* Header compact */}
-        <div className="relative  flex items-center gap-3 p-4 border-b border-slate-200/50">
-          <div className={`w-12 h-12 ${iconBgForType(currentType)} rounded-xl  flex items-center justify-center shadow-md ring-1 ring-inset ring-white/40`}>
+        <div className="relative flex items-center gap-3 p-4 border-b border-slate-200/50">
+          <div className={`w-12 h-12 ${iconBgForType(currentType)} rounded-xl flex items-center justify-center shadow-md ring-1 ring-inset ring-white/40`}>
             {iconForType(currentType, "text-lg")}
           </div>
 
@@ -1848,6 +1538,25 @@ function DetailsPanel({
 
         {/* Contenu compact */}
         <div className="p-4">
+          {/* Auteur avec avatar */}
+          <div className="flex items-center gap-3 mb-3">
+            {avatar ? (
+              <img
+                src={avatar}
+                alt={name}
+                className="w-10 h-10 rounded-full ring-1 ring-white/70 border border-slate-200 object-cover"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-sm font-semibold">
+                {initialsOf(name)}
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-slate-900 truncate">{name}</div>
+              <div className="text-xs text-slate-500 truncate">Auteur</div>
+            </div>
+          </div>
+
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[13px] leading-tight">
             <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
               <dt className="flex items-center gap-2 text-slate-500">
@@ -1869,7 +1578,6 @@ function DetailsPanel({
             </div>
           </dl>
 
-          {/* Catégorie */}
           <div className="mt-4 flex gap-4 items-center justify-start">
             <div className="flex items-center gap-2 text-slate-500 text-[13px]">
               <FiTag className="w-4 h-4" />
@@ -1927,71 +1635,5 @@ function DetailsPanel({
         />
       )}
     </aside>
-  );
-}
-
-/* KPI Card */
-function KpiCard({ label, value, suffix, icon, color = "blue" }) {
-  const colorClasses = {
-    blue: "from-blue-50/80 to-blue-100/60 text-blue-600 border-blue-100/60",
-    green: "from-emerald-50/80 to-emerald-100/60 text-emerald-600 border-emerald-100/60",
-    yellow: "from-yellow-50/80 to-yellow-100/60 text-yellow-600 border-yellow-100/60",
-    orange: "from-orange-50/80 to-orange-100/60 text-orange-600 border-orange-100/60",
-    indigo: "from-indigo-50/80 to-indigo-100/60 text-indigo-600 border-indigo-100/60",
-  };
-
-  const gradientClasses = {
-    blue: "from-blue-500 to-blue-600",
-    green: "from-emerald-500 to-emerald-600",
-    yellow: "from-yellow-500 to-yellow-600",
-    orange: "from-orange-500 to-orange-600",
-    indigo: "from-indigo-500 to-indigo-600",
-  };
-
-  return (
-    <div className={`relative group rounded-2xl border bg-gradient-to-br ${colorClasses[color]} backdrop-blur-sm p-6 sm:p-7 lg:p-8 transition-all duration-500 hover:shadow-xl hover:-translate-y-2 hover:scale-[1.02]`}>
-      <div className={`absolute top-0 left-6 lg:left-8 h-1 w-16 bg-gradient-to-r ${gradientClasses[color]} rounded-b-full`} />
-      <div className="flex items-start justify-between mb-4 lg:mb-6">
-        <div className="text-xs font-medium text-slate-600 uppercase tracking-wider">
-          {label}
-        </div>
-        {icon && <div className="opacity-40 group-hover:opacity-60 transition-opacity duration-500">{icon}</div>}
-      </div>
-      <div className="text-2xl lg:text-3xl font-light text-slate-800 tracking-tight">
-        {value ?? "—"}
-        {suffix && <span className="text-base lg:text-xl text-slate-500 ml-1">{suffix}</span>}
-      </div>
-    </div>
-  );
-}
-
-/* Chart Card */
-function ChartCard({ title, subtitle, children, icon }) {
-  return (
-    <div className="group rounded-3xl border border-white/60 bg-white/50 backdrop-blur-xl p-6 sm:p-8 lg:p-10 shadow-xl hover:shadow-2xl transition-all duration-700 hover:-translate-y-2">
-      <div className="flex items-center justify-between mb-6 lg:mb-8">
-        <div>
-          <h3 className="text-xl lg:2xl font-light text-slate-800 mb-2 flex items-center gap-4">
-            {icon && <span className="text-slate-400 group-hover:text-slate-600 transition-colors duration-500">{icon}</span>}
-            {title}
-          </h3>
-          {subtitle && <p className="text-sm text-slate-500">{subtitle}</p>}
-        </div>
-      </div>
-      <div className="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent mb-6 lg:mb-8" />
-      <div className="relative">{children}</div>
-    </div>
-  );
-}
-
-/* Empty Chart */
-function EmptyChart({ message = "Pas assez de données pour ce graphique" }) {
-  return (
-    <div className="h-64 md:h-72 xl:h-80 2xl:h-[28rem] flex flex-col items-center justify-center text-slate-400">
-      <div className="w-16 h-16 rounded-full bg-slate-100/80 flex items-center justify-center mb-4">
-        <FaChartBar className="text-2xl" />
-      </div>
-      <p className="text-sm text-center max-w-xs leading-relaxed">{message}</p>
-    </div>
   );
 }
