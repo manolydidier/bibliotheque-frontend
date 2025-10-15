@@ -1,7 +1,9 @@
 import {
-  FaExternalLinkAlt,FaInfoCircle,
+  FaExternalLinkAlt,
+  FaInfoCircle,
   FaLock
 } from "react-icons/fa";
+
 export default function SeoPanel({ article }) {
   // --- Helpers locaux ---
   const safeObj = (v) => {
@@ -55,99 +57,99 @@ export default function SeoPanel({ article }) {
   ].filter(Boolean).join("\n");
 
   const Badge = ({ ok, text }) => (
-    <span className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold
-      ${ok ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"}`}>
+    <span className={`ml-2 inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium transition-colors
+      ${ok ? "bg-green-100 text-green-800 border border-green-200" : "bg-orange-100 text-orange-800 border border-orange-200"}`}>
       {text}
     </span>
   );
 
   return (
-    <div className="w-full h-full overflow-auto space-y-6 lg:space-y-8">
+    <div className="w-full h-full overflow-auto space-y-5 lg:space-y-6 p-1">
       {/* Meta Title */}
-      <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-200/40 p-6 shadow-lg">
+      <div className="bg-gradient-to-br from-white to-slate-50 rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow">
         <div className="flex items-center justify-between mb-3">
-          <h4 className="font-medium text-slate-800 text-lg flex items-center">
+          <h4 className="font-semibold text-slate-900 text-base flex items-center">
             <span>Meta title</span>
             <Badge ok={titleOK} text={`${titleLen} caractères`} />
           </h4>
         </div>
-        <p className="text-slate-700">{metaTitle || "—"}</p>
+        <p className="text-slate-700 leading-relaxed">{metaTitle || "—"}</p>
         {!titleOK && (
-          <p className="mt-2 text-xs text-amber-600">
-            Conseil : entre 15 et 60 caractères est idéal pour l’affichage.
-          </p>
+          <div className="mt-3 p-3 bg-orange-50 border-l-4 border-orange-400 rounded-r text-xs text-orange-700">
+            Conseil : entre 15 et 60 caractères est idéal pour l'affichage.
+          </div>
         )}
       </div>
 
       {/* Meta Description */}
-      <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-200/40 p-6 shadow-lg">
+      <div className="bg-gradient-to-br from-white to-slate-50 rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow">
         <div className="flex items-center justify-between mb-3">
-          <h4 className="font-medium text-slate-800 text-lg flex items-center">
+          <h4 className="font-semibold text-slate-900 text-base flex items-center">
             <span>Meta description</span>
             <Badge ok={descOK} text={`${descLen} caractères`} />
           </h4>
         </div>
-        <p className="text-slate-700 break-words">{metaDescription || "—"}</p>
+        <p className="text-slate-700 break-words leading-relaxed">{metaDescription || "—"}</p>
         {!descOK && (
-          <p className="mt-2 text-xs text-amber-600">
+          <div className="mt-3 p-3 bg-orange-50 border-l-4 border-orange-400 rounded-r text-xs text-orange-700">
             Conseil : visez ~155–160 caractères (≥50 pour éviter les snippets trop courts).
-          </p>
+          </div>
         )}
       </div>
 
       {/* Canonical + Robots */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-200/40 p-6 shadow-lg">
-          <h4 className="font-medium text-slate-800 text-lg mb-3 flex items-center">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className="bg-gradient-to-br from-white to-slate-50 rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow">
+          <h4 className="font-semibold text-slate-900 text-base mb-3 flex items-center">
             Canonical
           </h4>
-          <div className="text-slate-700 break-words">{canonical || "—"}</div>
+          <div className="text-slate-700 break-words text-sm">{canonical || "—"}</div>
           {canonical && (
             <a
               href={canonical}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center mt-3 text-sm text-blue-600 hover:underline"
+              className="inline-flex items-center mt-3 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
               title="Ouvrir"
             >
-              <span className="mr-2">Ouvrir</span>
-              <FaExternalLinkAlt />
+              <span className="mr-1.5">Ouvrir</span>
+              <FaExternalLinkAlt className="text-[10px]" />
             </a>
           )}
           {!seo.canonical_url && canonical && (
-            <p className="mt-2 text-xs text-slate-500">
-              (Dérivé automatiquement via <code>VITE_PUBLIC_SITE_URL</code> + <code>/articles/{'{slug}'}</code>)
+            <p className="mt-3 text-xs text-slate-500 italic">
+              (Dérivé automatiquement via <code className="px-1 py-0.5 bg-slate-100 rounded text-[11px]">VITE_PUBLIC_SITE_URL</code> + <code className="px-1 py-0.5 bg-slate-100 rounded text-[11px]">/articles/{'{slug}'}</code>)
             </p>
           )}
         </div>
 
-        <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-200/40 p-6 shadow-lg">
-          <h4 className="font-medium text-slate-800 text-lg mb-3 flex items-center">
+        <div className="bg-gradient-to-br from-white to-slate-50 rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow">
+          <h4 className="font-semibold text-slate-900 text-base mb-3 flex items-center">
             Robots
           </h4>
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold
-              ${robotsIndex ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-rose-50 text-rose-700 ring-1 ring-rose-200"}`}>
+            <span className={`inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-medium border
+              ${robotsIndex ? "bg-green-100 text-green-800 border-green-200" : "bg-red-100 text-red-800 border-red-200"}`}>
               {robotsIndex ? "index" : "noindex"}
             </span>
-            <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold
-              ${robotsFollow ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-rose-50 text-rose-700 ring-1 ring-rose-200"}`}>
+            <span className={`inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-medium border
+              ${robotsFollow ? "bg-green-100 text-green-800 border-green-200" : "bg-red-100 text-red-800 border-red-200"}`}>
               {robotsFollow ? "follow" : "nofollow"}
             </span>
           </div>
           <p className="mt-3 text-sm text-slate-600">
-            <code>content</code> : <code>{robotsStr}</code>
+            <code className="px-2 py-0.5 bg-slate-100 rounded text-xs">content</code> : <code className="px-2 py-0.5 bg-slate-100 rounded text-xs">{robotsStr}</code>
           </p>
         </div>
       </div>
 
       {/* Prévisualisation des balises <head> */}
-      <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-200/40 p-6 shadow-lg">
-        <h4 className="font-medium text-slate-800 mb-3 flex items-center text-lg">
-          <FaInfoCircle className="mr-3 text-blue-600" />
+      <div className="bg-gradient-to-br from-white to-slate-50 rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow">
+        <h4 className="font-semibold text-slate-900 mb-4 flex items-center text-base">
+          <FaInfoCircle className="mr-2 text-blue-600" />
           Balises générées
         </h4>
-        <pre className="text-xs bg-slate-50/80 p-6 rounded-xl border border-slate-200/50 overflow-auto text-slate-700">
+        <pre className="text-xs bg-slate-900 text-green-400 p-4 rounded-lg overflow-auto font-mono border border-slate-700 leading-relaxed">
 {headPreview}
         </pre>
       </div>

@@ -4,9 +4,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   FiCalendar, FiEye, FiEyeOff, FiLock, FiUpload, FiUser, FiTag,
   FiFolder, FiSettings, FiEdit3, FiStar, FiMessageCircle,
-  FiShare2, FiThumbsUp, FiBarChart2, FiClock, FiUsers, FiShield, FiSave, FiPlay, FiRefreshCw, FiMaximize2, FiX
+  FiShare2, FiThumbsUp, FiBarChart2, FiClock, FiUsers, FiShield, FiSave, FiPlay, FiRefreshCw, FiMaximize2, FiX,
+  FiTrash2,
+  
 } from 'react-icons/fi';
-
+import ArticleMediaManager from "../Medias/ArticleMediaManager";
 // ✅ Ton éditeur TinyMCE React
 import RichTextEditor from './RichTextEditor';
 
@@ -116,6 +118,7 @@ const toAbsolute = (u) => {
   const base = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/api\/?$/i, "");
   return base ? `${base}/${fixed.replace(/^\/+/, "")}` : `/${fixed.replace(/^\/+/, "")}`;
 };
+
 
 // Image principale (priorités identiques au Visualiseur)
 const primaryMediaUrl = (obj) => {
@@ -249,7 +252,6 @@ async function updateArticleWithFiles(id, fd) {
     headers: { 'Content-Type': 'multipart/form-data' }
   });
 }
-
 /* ===============================
    Composant principal
 =============================== */
@@ -329,6 +331,8 @@ const ArticleForm = () => {
 
   /* ---------- ERREURS LARAVEL (422) ---------- */
   const [errors, setErrors] = useState({});
+const [lb, setLb] = useState({ open: false, src: '', alt: '' });
+
   const totalErrors = useMemo(
     () => Object.values(errors).reduce((acc, arr) => acc + (Array.isArray(arr) ? arr.length : 0), 0),
     [errors]
@@ -954,7 +958,7 @@ const ArticleForm = () => {
   }, [model.status, model.published_at, model.scheduled_at, model.expires_at]);
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 relative overflow-hidden">
+    <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 relative h-[1200px] overflow-auto">
       {/* Barre de progression */}
       <div className="fixed top-0 left-0 right-0 z-[9999] h-1.5 bg-slate-200/60">
         <div
@@ -974,7 +978,7 @@ const ArticleForm = () => {
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/70 backdrop-blur-2xl border-b border-slate-200/70 shadow-sm">
+      <header className="sticky top-0  bg-white/70 backdrop-blur-2xl border-b border-slate-200/70 shadow-sm z-[100]">
         <div className="mx-auto max-w-screen-2xl px-6 lg:px-8 py-5">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-4">
@@ -1052,10 +1056,11 @@ const ArticleForm = () => {
                 { id: 'settings', label: 'Paramètres', icon: <FiSettings className="w-4 h-4" />, color: 'from-violet-500 to-purple-500' },
                 { id: 'author', label: 'Auteur', icon: <FiUser className="w-4 h-4" />, color: 'from-pink-500 to-rose-500' },
                 { id: 'taxonomy', label: 'Taxonomie', icon: <FiTag className="w-4 h-4" />, color: 'from-green-500 to-emerald-500' },
-                { id: 'media', label: 'Médias', icon: <FiUpload className="w-4 h-4" />, color: 'from-orange-500 to-amber-500' },
+                { id: 'media', label: 'Medias', icon: <FiUpload className="w-4 h-4" />, color: 'from-orange-500 to-amber-500' },
                 { id: 'analytics', label: 'Stats', icon: <FiBarChart2 className="w-4 h-4" />, color: 'from-indigo-500 to-blue-500' },
                 { id: 'management', label: 'Gestion', icon: <FiShield className="w-4 h-4" />, color: 'from-red-500 to-pink-500' },
-                { id: 'preview', label: 'Aperçu', icon: <FiEye className="w-4 h-4" />, color: 'from-emerald-500 to-teal-500' }
+                { id: 'preview', label: 'Aperçu', icon: <FiEye className="w-4 h-4" />, color: 'from-emerald-500 to-teal-500' },
+                
               ].map(tab => (
                 <li key={tab.id}>
                   <button
@@ -1757,53 +1762,6 @@ const ArticleForm = () => {
           </div>
         )}
 
-        {/* MEDIA (+ lightbox) */}
-        {activeTab === 'media' && (
-          <div className="flex gap-6 w-full flex-col lg:flex-row items-center justify-center">
-            <section className={`${card} p-8 space-y-4 w-full`}>
-              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-3">
-                <span className="p-2 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-lg">
-                  <FiUpload className="w-4 h-4" />
-                </span>
-                Image à la Une
-              </h3>
-
-              <ImageDropPaste
-                id="featured-image"
-                label="Télécharger / déposer / coller l'image principale"
-                accept="image/jpeg, image/png, image/jpg, image/gif, image/webp"
-                file={featFile}
-                previewUrl={featPreview}
-                existingUrl={viewerFeaturedUrl || ''} // ✅ même URL résolue que le Visualiseur
-                alt={model.featured_image_alt || ''}
-                showAlt
-                inputClass={inputClass('featured_image_alt')}
-                onPickFile={(f) => setFeatFile(f)}
-                onChangeAlt={(val) => onChange('featured_image_alt', val)}
-                helperNode={<p className={hint}>Important pour le SEO et l'accessibilité</p>}
-                errorNode={
-                  <>
-                    <FieldError name="featured_image_file" />
-                    <FieldError name="featured_image_alt" />
-                  </>
-                }
-              />
-
-              {(featPreview || viewerFeaturedUrl) && (
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setLightbox({ open: true, url: featPreview || viewerFeaturedUrl })}
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-sm"
-                  >
-                    <FiMaximize2 className="w-4 h-4" /> Agrandir
-                  </button>
-                </div>
-              )}
-            </section>
-          </div>
-        )}
-
         {/* ANALYTICS */}
         {activeTab === 'analytics' && (
           <div className="grid grid-cols-1 gap-6">
@@ -1958,7 +1916,7 @@ const ArticleForm = () => {
 
             {/* ✅ Aperçu de l’image calculée comme le Visualiseur */}
             {viewerFeaturedUrl ? (
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 z-[10000]">
                 <div className="text-xs text-slate-400 mb-2">Aperçu de l’image (Visualiseur)</div>
                 <div className="w-full max-w-2xl">
                   <img
@@ -1977,6 +1935,166 @@ const ArticleForm = () => {
             )}
           </section>
         )}
+        {lb.open && (
+          <div
+            className="fixed inset-0 z-[9000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setLb({ open: false, src: '', alt: '' })}
+          >
+            <div
+              className="relative w-full max-w-6xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => setLb({ open: false, src: '', alt: '' })}
+                className="absolute -top-4 right-0 translate-y-[-100%] px-3 py-1.5 rounded-xl bg-white/90 border border-slate-200 text-slate-900 font-semibold shadow"
+                title="Fermer"
+              >
+                <FiX className="inline w-4 h-4 mr-1" /> Fermer
+              </button>
+              {/* eslint-disable-next-line jsx-a11y/img-redundant-alt */}
+              <img
+                src={lb.src}
+                alt={lb.alt || 'Image'}
+                className="w-full h-auto max-h-[85vh] object-contain rounded-2xl shadow-2xl"
+              />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'media' && (
+            <div className="flex flex-col gap-6">
+               <section className={`${card} p-6 w-full`}>
+                <label className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                  <span className="p-1.5 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 text-white">
+                    <FiUpload className="w-4 h-4" />
+                  </span>
+                  Image à la Une
+                </label>
+
+                <div className="mt-4 grid grid-cols-1 lg:grid-cols-[minmax(360px,560px)_1fr] gap-6 items-start">
+                  {/* Aperçu large + overlay actions */}
+                  <div className="relative rounded-2xl border-2 border-slate-200 bg-slate-50 overflow-hidden">
+                    <div className="w-full h-[360px] md:h-[420px]">
+                      {/* eslint-disable-next-line jsx-a11y/img-redundant-alt */}
+                      {featPreview || viewerFeaturedUrl ? (
+                        <img
+                          src={featPreview || viewerFeaturedUrl}
+                          alt={model.featured_image_alt || model.title || 'Image'}
+                          className="w-full h-full object-cover"
+                          onClick={() => {
+                            const src = featPreview || viewerFeaturedUrl;
+                            if (src) setLb({ open: true, src, alt: model.featured_image_alt || model.title || 'Image' });
+                          }}
+                          title="Clique pour agrandir"
+                          style={{ cursor: 'zoom-in' }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-400">
+                          <FiUpload className="w-10 h-10 mb-2" />
+                          <div className="text-sm">Aucune image</div>
+                          <div className="text-[11px]">JPEG / PNG / WebP / GIF</div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Bouton “Voir en grand” (si une image existe) */}
+                    {(featPreview || viewerFeaturedUrl) && (
+                      <button
+                        type="button"
+                        onClick={() => setLb({
+                          open: true,
+                          src: featPreview || viewerFeaturedUrl,
+                          alt: model.featured_image_alt || model.title || 'Image'
+                        })}
+                        className="absolute top-3 left-3 inline-flex items-center justify-center
+                                  px-3 py-2 rounded-xl bg-black/50 hover:bg-black/60 text-white text-sm font-semibold"
+                        title="Voir en grand"
+                      >
+                        <FiMaximize2 className="w-4 h-4 mr-1" /> Voir en grand
+                      </button>
+                    )}
+
+                    {/* Bouton corbeille (visible seulement si un fichier local est sélectionné) */}
+                    {featPreview && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // annule la sélection locale → retour à l’image Laravel si présente
+                          setFeatFile(null);
+                        }}
+                        className="absolute top-3 right-3 inline-flex items-center justify-center
+                                  w-10 h-10 rounded-xl bg-white/90 border border-slate-200 text-slate-700
+                                  hover:bg-white shadow"
+                        title="Retirer la sélection locale"
+                      >
+                        <FiTrash2 className="w-5 h-5" />
+                      </button>
+                    )}
+
+                    {/* Overlay bas : Choisir une image (toujours visible) */}
+                    <label
+                      htmlFor="featured-file"
+                      className="absolute inset-x-3 bottom-3 inline-flex items-center justify-center gap-2
+                                px-3 py-2 rounded-xl text-white text-sm font-semibold
+                                bg-black/50 hover:bg-black/60 cursor-pointer transition"
+                    >
+                      <FiUpload className="w-4 h-4" />
+                      Choisir une image
+                    </label>
+
+                    {/* File input caché */}
+                    <input
+                      id="featured-file"
+                      type="file"
+                      accept="image/jpeg,image/png,image/jpg,image/gif,image/webp"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] || null;
+                        setFeatFile(f); // ton useEffect existant mettra featPreview à jour
+                      }}
+                    />
+                  </div>
+
+                  {/* Colonne droite : ALT + tips + erreurs */}
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-semibold text-slate-700 mb-1 block">
+                        Texte alternatif (SEO / accessibilité)
+                      </label>
+                      <input
+                        className={inputClass('featured_image_alt')}
+                        value={model.featured_image_alt || ''}
+                        onChange={(e) => onChange('featured_image_alt', e.target.value)}
+                        placeholder="Décrivez brièvement l’image (utilisé par les lecteurs d’écran)"
+                      />
+                      <p className={hint}>Important pour le SEO et l’accessibilité</p>
+                      <FieldError name="featured_image_alt" />
+                    </div>
+
+                    {/* Erreurs de validation fichier */}
+                    <div>
+                      <FieldError name="featured_image_file" />
+                    </div>
+
+                    <div className="text-[11px] text-slate-500">
+                      Formats acceptés : JPEG, PNG, WebP, GIF
+                    </div>
+                  </div>
+                </div>
+              </section>
+              {/* ⚡️ gestion de la médiathèque liée à l’article */}
+              {model.id ? (
+                <section className={`${card} p-6`}>
+                  <ArticleMediaManager articleId={model.id} />
+                </section>
+              ) : (
+                <section className={`${card} p-6 text-sm text-slate-600`}>
+                  Crée d’abord l’article (titre + contenu), puis tu pourras ajouter des médias liés.
+                </section>
+              )}
+            </div>
+          )}
       </main>
 
       {/* Footer actions */}
