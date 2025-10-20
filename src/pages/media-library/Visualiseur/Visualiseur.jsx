@@ -9,6 +9,7 @@ import Toolbar from "./components/Toolbar";
 import Tabs from "./components/Tabs";
 import TagList, { TagPill } from "./components/TagList";
 import { KpiCard, ChartCard, EmptyChart } from "./components/Cards";
+import FilePreview from "./FilePreview/FilePreview";
 import {
   setAuthError,
   clearAuthError,
@@ -805,7 +806,41 @@ export default function Visualiseur() {
           "mainEntityOfPage": canonical
         }}
       />
+<div key={article?.id} ref={previewRef} className="file-preview-container min-h-[50vh]">
 
+  {activeTab === "Aperçu" && (
+    <FilePreview
+      file={
+        selectedFile
+          ? {
+              ...article,
+              // place le média sélectionné en tête pour que FilePreview le prenne
+              media: [{ url: selectedFile.fileUrl, mime: selectedFile.mime_type }, ...(article.media || [])],
+              featured_image: undefined,
+            }
+          : article
+      }
+      activeTab="Aperçu"
+    />
+  )}
+
+  {activeTab === "Médias" && <Medias mediaList={mediaList} />}
+
+  {activeTab === "Métadonnées" && (
+    <FilePreview file={article} activeTab="Métadonnées" />
+  )}
+
+  {activeTab === "Versions" && hasHistory && (
+    <FilePreview file={article} activeTab="Versions" />
+  )}
+
+  {activeTab === "Statistiques" && (
+    <FilePreview file={article} activeTab="Statistiques" />
+  )}
+
+  {activeTab === "SEO" && <SeoPanel article={article} />}
+
+</div>
       <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 font-sans px-3 sm:px-4 lg:px-6 2xl:px-10 py-4">
         {unlockError && (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -1471,6 +1506,10 @@ function StatsCharts({ article }) {
     </div>
   );
 }
+
+
+
+
 
 function DetailsPanel({
   article, currentType, currentTitle,

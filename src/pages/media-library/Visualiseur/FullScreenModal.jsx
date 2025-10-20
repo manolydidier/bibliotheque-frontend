@@ -1,7 +1,7 @@
-// src/pages/media-library/Visualiseur/FullScreenModal.jsx
+// src/media-library/FullScreenModal.jsx
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FaTimes, FaExpand, FaCompress, FaSearchPlus, FaSearchMinus, FaSync } from "react-icons/fa";
-import FilePreview from "./FilePreview/FilePreview";
+import FilePreview from "./parts/Visualiseur/FilePreview/FilePreview";
 
 /* -------- helpers Fullscreen (cross-browser) -------- */
 function isFsOn() {
@@ -49,7 +49,14 @@ async function exitFs() {
   }
 }
 
-export default function FullScreenModal({ file, onClose, activeTab }) {
+/**
+ * FullScreenModal
+ * - file: l'article (ou article enrichi) à passer à FilePreview
+ * - activeTab: onglet courant venant du parent (ignoré si forceApercu = true)
+ * - forceApercu: si true, le modal affiche toujours FilePreview en "Aperçu"
+ * - onClose: callback fermeture
+ */
+export default function FullScreenModal({ file, onClose, activeTab, forceApercu = true }) {
   const wrapRef = useRef(null);
   const scrollRef = useRef(null);
   const contentRef = useRef(null);
@@ -74,7 +81,7 @@ export default function FullScreenModal({ file, onClose, activeTab }) {
     }
   }, [clampZoom]);
 
-  // Raccourcis clavier: Ctrl/Cmd + '+', '-', '0'
+  // Raccourcis clavier: Ctrl/Cmd + '+', '-', '0', et ESC pour fermer
   useEffect(() => {
     const onKey = (e) => {
       if (e.ctrlKey || e.metaKey) {
@@ -82,10 +89,14 @@ export default function FullScreenModal({ file, onClose, activeTab }) {
         if (e.key === "-") { e.preventDefault(); zoomOut(); }
         if (e.key === "0") { e.preventDefault(); zoomReset(); }
       }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        handleClose();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [zoomIn, zoomOut, zoomReset]);
+  }, [zoomIn, zoomOut, zoomReset]); // handleClose est stable via useCallback
 
   // ====== Fullscreen lifecycle ======
   useEffect(() => {
@@ -171,6 +182,9 @@ export default function FullScreenModal({ file, onClose, activeTab }) {
   // Curseur caché quand UI masquée
   const cursorClass = uiVisible ? "cursor-default" : "cursor-none";
 
+  // Onglet à rendre
+  const tabToRender = forceApercu ? "Aperçu" : (activeTab || "Aperçu");
+
   return (
     <div {...containerProps} onMouseMove={pokeUi}>
       {/* Topbar épurée (auto-hide) */}
@@ -240,9 +254,6 @@ export default function FullScreenModal({ file, onClose, activeTab }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-full h-full max-w-[98vw] max-h-[96vh] p-0 md:p-4">
-          {/* IMPORTANT: overflow-auto permet le scroll vertical/horizontal,
-              overscroll-contain évite de "tirer" la page,
-              touch-action autorise le scroll tactile et le pinch-zoom natif */}
           <div
             ref={scrollRef}
             className="w-full h-full rounded-none md:rounded-2xl bg-black overflow-auto overscroll-contain"
@@ -252,8 +263,6 @@ export default function FullScreenModal({ file, onClose, activeTab }) {
             }}
             onWheel={handleWheel}
           >
-            {/* Le wrapper applique le zoom. On garde min-size pour occuper l'espace
-                et générer des barres de scroll quand zoom > 1 ou contenu > viewport */}
             <div
               ref={contentRef}
               className="w-full h-full min-w-full min-h-full flex items-center justify-center"
@@ -264,7 +273,7 @@ export default function FullScreenModal({ file, onClose, activeTab }) {
               }}
             >
               <div className="w-full h-full">
-                <FilePreview file={file} activeTab={activeTab} />
+                <FilePreview file={file} activeTab={tabToRender} />
               </div>
             </div>
           </div>

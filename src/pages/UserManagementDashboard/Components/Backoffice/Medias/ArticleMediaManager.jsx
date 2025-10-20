@@ -4,14 +4,16 @@ import { createPortal } from "react-dom";
 import axios from "axios";
 import {
   FiUpload, FiEdit3, FiTrash2, FiImage, FiRefreshCw, FiStar,
-  FiToggleLeft, FiToggleRight, FiAlertTriangle, FiX,
-  FiChevronDown, FiChevronUp, FiGrid, FiList, FiRotateCw, FiCornerUpLeft
+  FiToggleLeft, FiToggleRight, FiAlertTriangle, FiX, FiGrid, FiList,
+  FiSearch, FiFilter, FiChevronDown, FiChevronUp, FiRotateCcw, FiCheckSquare,
+  FiSquare, FiCornerDownLeft, FiLink
 } from "react-icons/fi";
+import { useSearchParams, useLocation } from "react-router-dom";
 
 /* =========================================================
    AXIOS LOCAL
    ========================================================= */
-const API_BASE_URL = 
+const API_BASE_URL =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
   (typeof process !== 'undefined' && process.env?.VITE_API_BASE_URL) ||
   '';
@@ -24,26 +26,36 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("tokenGuard");
   if (token) config.headers.Authorization = `Bearer ${token}`;
-  if (config.data instanceof FormData) delete config.headers["Content-Type"];
-  else if (!config.headers["Content-Type"]) config.headers["Content-Type"] = "application/json";
+
+  if (config.data instanceof FormData) {
+    delete config.headers["Content-Type"];
+  } else {
+    if (!config.headers["Content-Type"]) {
+      config.headers["Content-Type"] = "application/json";
+    }
+  }
   config.headers.Accept = "application/json";
   return config;
 });
 
 const ROUTES = {
   byArticle: (articleId) => `/article-media/by-article/${articleId}`,
+  index: `/article-media`,
   upload: `/article-media/upload`,
   update: (id) => `/article-media/${id}`,
   destroy: (id) => `/article-media/${id}`,
   toggleActive: (id) => `/article-media/${id}/toggle-active`,
   toggleFeatured: (id) => `/article-media/${id}/toggle-featured`,
   restore: (id) => `/article-media/${id}/restore`,
-  forceDelete: (id) => `/article-media/${id}/force`,
+  force: (id) => `/article-media/${id}/force`,
 };
 
 const http = {
   async listByArticle(articleId, params = {}) {
     return api.get(ROUTES.byArticle(articleId), { params });
+  },
+  async listTrashedByArticle(articleId, params = {}) {
+    return api.get(ROUTES.index, { params: { article_id: articleId, trashed: 'only', ...params } });
   },
   async upload(fd, onProgress) {
     return api.post(ROUTES.upload, fd, { onUploadProgress: onProgress });
@@ -64,8 +76,83 @@ const http = {
     return api.post(ROUTES.restore(id));
   },
   async forceDelete(id) {
-    return api.delete(ROUTES.forceDelete(id));
+    return api.delete(ROUTES.force(id));
   },
+};
+
+/* =========================================================
+   URL Helpers — affichage via VITE_API_BASE_STORAGE
+   ========================================================= */
+// Base publique pour SERVIR les médias (ex: http://127.0.0.1:8000)
+const RAW_STORAGE_BASE =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_STORAGE) ||
+  (typeof process !== 'undefined' && process.env?.VITE_API_BASE_STORAGE) ||
+  "";
+
+const ABS_STORAGE_BASE = (() => {
+  let base = (RAW_STORAGE_BASE || "").trim();
+  if (!base) {
+    // Derive depuis l'API si l'ENV de storage n'est pas défini
+    // ex: http://127.0.0.1:8000/api  ->  http://127.0.0.1:8000
+    if (API_BASE_URL) base = API_BASE_URL.replace(/\/api(?:\/.*)?$/i, "");
+  }
+  try { return base.replace(/\/+$/, ""); } catch { return ""; }
+})();
+
+console.log("ABS_STORAGE_BASE =", ABS_STORAGE_BASE);
+
+// URL absolue ? (http/https, blob: pour previews, data: uri)
+const isAbsoluteLike = (u = "") =>
+  /^https?:\/\//i.test(u) || /^blob:/i.test(u) || /^data:/i.test(u);
+
+// Normalise les chemins “app relatifs” vers /storage/...
+const fixMediaPath = (u) => {
+  if (!u) return u;
+  let s = String(u).trim();
+  if (isAbsoluteLike(s)) return s;
+
+  // nettoie les / en début
+  s = s.replace(/^\/+/, '');
+
+  // Si déjà sous /storage, on garde
+  if (s.startsWith('storage/')) return s;
+
+  // Dossiers fréquents côté Laravel storage:public
+  if (s.startsWith('articles/') || s.startsWith('thumbnails/') || s.startsWith('uploads/')) {
+    return `storage/${s}`;
+  }
+  return s; // on renvoie tel quel, toAbsoluteMedia fera le préfixe base
+};
+
+// Construit une URL absolue pour <img src=...>, <video src=...>
+const toAbsoluteMedia = (u) => {
+  if (!u) return null;
+  const s = String(u).trim();
+  if (isAbsoluteLike(s)) return s; // http(s) | blob: | data:
+  const fixed = fixMediaPath(s);
+  const rel = fixed.replace(/^\/+/, '');
+  return ABS_STORAGE_BASE ? `${ABS_STORAGE_BASE}/${rel}` : `/${rel}`;
+};
+
+// Helpers type
+const isImageMime = (mt = "") => /^image\//i.test(mt);
+const looksLikeImagePath = (u = "") => /\.(png|jpe?g|webp|gif|avif|bmp|svg)$/i.test(u || "");
+
+// Helpers médias (PRIORITÉ AUX *PATH* plutôt qu'aux *URL*)
+const mediaHref = (m) => toAbsoluteMedia(m?.path ?? m?.url ?? "");
+const mediaThumb = (m) => {
+  const mt = m?.mime_type || "";
+  const rawThumb = m?.thumbnail_path ?? m?.thumbnail_url ?? "";
+  const rawFull = m?.path ?? m?.url ?? "";
+
+  // Si on a un thumbnail de type image, on le prend
+  if (rawThumb && looksLikeImagePath(rawThumb)) return toAbsoluteMedia(rawThumb);
+
+  // Sinon si c'est une image, on affiche le fichier principal
+  if (isImageMime(mt) && rawFull) return toAbsoluteMedia(rawFull);
+
+  // Sinon pas d'aperçu image (PDF/vidéo etc.)
+  return null;
 };
 
 /* =========================================================
@@ -85,30 +172,36 @@ const Badge = ({ children, className = "" }) => (
   </span>
 );
 
-const IconBtn = ({ title, onClick, children, variant = "blue", disabled }) => {
-  const palette = variant === "red"
-    ? "border-rose-300 text-rose-700 hover:bg-rose-50"
-    : variant === "amber"
-    ? "border-amber-300 text-amber-700 hover:bg-amber-50"
-    : "border-blue-300 text-blue-700 hover:bg-blue-50";
-  return (
-    <button
-      title={title}
-      onClick={onClick}
-      disabled={disabled}
-      className={`inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border-2 bg-white transition ${palette} disabled:opacity-50`}
-    >
-      {children}
-    </button>
-  );
-};
+const IconBtn = ({ title, onClick, className = "", children, disabled }) => (
+  <button
+    title={title}
+    onClick={onClick}
+    disabled={disabled}
+    className={`inline-flex items-center justify-center rounded-xl border-2 px-2.5 py-2 text-sm font-semibold transition-colors
+      ${disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-slate-50"}
+      ${className}`}
+  >
+    {children}
+  </button>
+);
+
+const TinyIconBtn = ({ title, onClick, className = "", children, disabled }) => (
+  <button
+    title={title}
+    onClick={(e) => { e.stopPropagation?.(); onClick?.(e); }}
+    disabled={disabled}
+    className={`inline-flex items-center justify-center w-9 h-9 rounded-xl border-2 text-sm font-semibold transition-colors
+      ${disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-slate-50"}
+      ${className}`}
+  >
+    {children}
+  </button>
+);
 
 const Toast = ({ open, kind = "success", msg = "" }) => {
   const color =
-    kind === "error"
-      ? "bg-rose-600"
-      : kind === "warn"
-      ? "bg-amber-600"
+    kind === "error" ? "bg-rose-600"
+      : kind === "warn" ? "bg-amber-600"
       : "bg-emerald-600";
   return (
     <div
@@ -125,7 +218,7 @@ const Toast = ({ open, kind = "success", msg = "" }) => {
 };
 
 /* =========================================================
-   Confirm Dialog
+   Dialog de confirmation
    ========================================================= */
 const ConfirmDialog = ({ open, title, message, onConfirm, onCancel, danger = false }) => {
   useEffect(() => {
@@ -161,9 +254,22 @@ const ConfirmDialog = ({ open, title, message, onConfirm, onCancel, danger = fal
               <p className="text-sm text-slate-600 leading-relaxed">{message}</p>
             </div>
           </div>
+
           <div className="flex items-center justify-end gap-2 pt-2">
-            <button onClick={onCancel} className="px-4 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold">Annuler</button>
-            <button onClick={onConfirm} className={`px-4 py-2 rounded-xl text-white font-semibold shadow ${danger ? "bg-rose-600 hover:bg-rose-700" : "bg-blue-600 hover:bg-blue-700"}`}>Confirmer</button>
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold transition-colors"
+            >
+              Annuler
+            </button>
+            <button
+              onClick={onConfirm}
+              className={`px-4 py-2 rounded-xl text-white font-semibold shadow transition-colors ${
+                danger ? "bg-rose-600 hover:bg-rose-700" : "bg-blue-600 hover:bg-blue-700"
+              }`}
+            >
+              Confirmer
+            </button>
           </div>
         </div>
       </div>
@@ -185,7 +291,12 @@ const Lightbox = ({ open, src, alt, onClose }) => {
   return (
     <div className="fixed inset-0 z-[10050] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
       <div className="relative max-w-6xl w-full" onClick={(e) => e.stopPropagation()}>
-        <button onClick={onClose} className="absolute -top-4 right-0 translate-y-[-100%] px-3 py-1.5 rounded-xl bg-white/90 border border-slate-200 text-slate-900 font-semibold shadow">Fermer</button>
+        <button
+          onClick={onClose}
+          className="absolute -top-4 right-0 translate-y-[-100%] px-3 py-1.5 rounded-xl bg-white/90 border border-slate-200 text-slate-900 font-semibold shadow"
+        >
+          Fermer
+        </button>
         <img src={src} alt={alt || "Image"} className="w-full h-auto rounded-2xl shadow-2xl" />
       </div>
     </div>
@@ -193,7 +304,7 @@ const Lightbox = ({ open, src, alt, onClose }) => {
 };
 
 /* =========================================================
-   Upload Modal
+   Modal Upload
    ========================================================= */
 const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
   const [file, setFile] = useState(null);
@@ -259,6 +370,7 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
     try {
       setSubmitting(true);
       setProgress(0);
+
       const fd = new FormData();
       fd.append("file", file, file.name);
       fd.append("article_id", String(articleId));
@@ -267,16 +379,20 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
       if (caption) fd.append("caption[fr]", caption);
       fd.append("is_featured", isFeatured ? "1" : "0");
 
-      const res = await http.upload(fd, (prog) => {
-        const p = Math.round((prog.loaded * 100) / (prog.total || 1));
-        setProgress(p);
+      const res = await http.upload(fd, (pe) => {
+        const pct = Math.round((pe.loaded * 100) / pe.total);
+        setProgress(pct);
       });
+
       onUploaded?.(res?.data?.data || res?.data);
       onClose?.();
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || "Erreur lors du téléchargement";
       setErr(msg);
-    } finally { setSubmitting(false); setProgress(0); }
+    } finally {
+      setSubmitting(false);
+      setProgress(0);
+    }
   };
 
   if (!open) return null;
@@ -288,12 +404,18 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
         <div className="relative z-[100001] w-full max-w-2xl rounded-3xl bg-white border border-slate-200 shadow-2xl p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-slate-900">Ajouter un média</h3>
-            <button onClick={onClose} disabled={submitting} className="px-3 py-1.5 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold disabled:opacity-50">Fermer</button>
+            <button
+              onClick={onClose}
+              disabled={submitting}
+              className="px-3 py-1.5 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold disabled:opacity-50"
+            >
+              Fermer
+            </button>
           </div>
 
           <div ref={dropRef} className="rounded-2xl border-2 border-dashed border-slate-300 p-6 bg-slate-50/60 text-center">
             {preview ? (
-              <img src={preview} alt="Preview" className="mx-auto max-h-64 rounded-xl" />
+              <img src={toAbsoluteMedia(preview)} alt="Preview" className="mx-auto max-h-64 rounded-xl" />
             ) : (
               <div className="text-slate-600">
                 <FiUpload className="w-8 h-8 mx-auto mb-3" />
@@ -319,17 +441,42 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2 space-y-2">
               <label className="text-sm font-semibold text-slate-700">Nom</label>
-              <input value={name} onChange={(e) => setName(e.target.value)} disabled={submitting} className="w-full px-4 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 disabled:bg-slate-50" placeholder="Nom interne" />
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={submitting}
+                className="w-full px-4 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 disabled:bg-slate-50"
+                placeholder="Nom interne"
+              />
               <label className="text-sm font-semibold text-slate-700">Texte alternatif (FR)</label>
-              <input value={alt} onChange={(e) => setAlt(e.target.value)} disabled={submitting} className="w-full px-4 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 disabled:bg-slate-50" />
+              <input
+                value={alt}
+                onChange={(e) => setAlt(e.target.value)}
+                disabled={submitting}
+                className="w-full px-4 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 disabled:bg-slate-50"
+              />
               <label className="text-sm font-semibold text-slate-700">Légende (FR)</label>
-              <input value={caption} onChange={(e) => setCaption(e.target.value)} disabled={submitting} className="w-full px-4 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 disabled:bg-slate-50" />
+              <input
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                disabled={submitting}
+                className="w-full px-4 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 disabled:bg-slate-50"
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-700">Options</label>
               <label className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl border-2 border-slate-200 bg-white cursor-pointer text-sm">
-                <span className="flex items-center gap-2"><FiStar className="text-amber-500" /> Vedette</span>
-                <input type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)} disabled={submitting} className="sr-only" />
+                <span className="flex items-center gap-2">
+                  <FiStar className="text-amber-500" />
+                  Vedette
+                </span>
+                <input
+                  type="checkbox"
+                  checked={isFeatured}
+                  onChange={(e) => setIsFeatured(e.target.checked)}
+                  disabled={submitting}
+                  className="sr-only"
+                />
                 <span className={`relative inline-flex h-5 w-9 items-center rounded-full ${isFeatured ? "bg-blue-600" : "bg-slate-300"}`}>
                   <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${isFeatured ? "translate-x-4" : "translate-x-0"}`} />
                 </span>
@@ -350,16 +497,34 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
                 <span className="font-semibold text-blue-600">{progress}%</span>
               </div>
               <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-600 transition-all duration-300" style={{ width: `${progress}%` }} />
+                <div
+                  className="h-full bg-blue-600 transition-all duration-300"
+                  style={{ width: `${progress}%` }}
+                />
               </div>
             </div>
           )}
 
-          {err && <p className="text-sm text-rose-600 flex items-center gap-2"><FiAlertTriangle className="w-4 h-4" />{err}</p>}
+          {err && <p className="text-sm text-rose-600 flex items-center gap-2">
+            <FiAlertTriangle className="w-4 h-4" />
+            {err}
+          </p>}
 
           <div className="flex items-center justify-end gap-2 pt-2">
-            <button onClick={onClose} disabled={submitting} className="px-4 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold disabled:opacity-50">Annuler</button>
-            <button onClick={submit} disabled={submitting || !file} className={`px-4 py-2 rounded-xl text-white font-semibold shadow ${submitting || !file ? "bg-slate-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"}`}>
+            <button
+              onClick={onClose}
+              disabled={submitting}
+              className="px-4 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold disabled:opacity-50"
+            >
+              Annuler
+            </button>
+            <button
+              onClick={submit}
+              disabled={submitting || !file}
+              className={`px-4 py-2 rounded-xl text-white font-semibold shadow ${
+                submitting || !file ? "bg-slate-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
+              }`}
+            >
               {submitting ? `Envoi... ${progress}%` : "Téléverser"}
             </button>
           </div>
@@ -370,7 +535,7 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
 };
 
 /* =========================================================
-   Edit Modal
+   Modal Édition
    ========================================================= */
 const EditModal = ({ open, media, onClose, onSaved }) => {
   const [name, setName] = useState("");
@@ -428,6 +593,9 @@ const EditModal = ({ open, media, onClose, onSaved }) => {
 
   if (!open || !media) return null;
 
+  const isImg = isImageMime(media.mime_type);
+  const imgThumb = mediaThumb(media);
+
   return (
     <ModalPortal>
       <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4" aria-modal="true" role="dialog">
@@ -435,42 +603,91 @@ const EditModal = ({ open, media, onClose, onSaved }) => {
         <div className="relative z-[100001] w-full max-w-2xl rounded-3xl bg-white border border-slate-200 shadow-2xl p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-slate-900">Modifier le média</h3>
-            <button onClick={onClose} className="px-3 py-1.5 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold">Fermer</button>
+            <button
+              onClick={onClose}
+              className="px-3 py-1.5 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold"
+            >
+              Fermer
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-1">
-              <img src={media.thumbnail_url || media.url} alt={media.alt_text?.fr || media.alt_text?.[0] || media.name} className="w-full h-auto rounded-xl border" />
-              <div className="text-xs text-slate-500 mt-2">{media.mime_type} • {fmtBytes(media.size)}</div>
+              <div className="w-full rounded-xl border overflow-hidden bg-slate-50 flex items-center justify-center p-2">
+                {imgThumb ? (
+                  <img
+                    src={imgThumb}
+                    alt={media.alt_text?.fr || media.alt_text?.[0] || media.name}
+                    className="w-full h-auto object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-40 flex flex-col items-center justify-center text-slate-600">
+                    <div className="text-sm font-semibold truncate px-4 text-center">{media.name || "(fichier)"}</div>
+                    <div className="text-xs mt-1">{media.mime_type || "document"}</div>
+                    <a
+                      href={mediaHref(media)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-semibold"
+                    >
+                      Ouvrir
+                    </a>
+                  </div>
+                )}
+              </div>
+              <div className="text-xs text-slate-500 mt-2">
+                {media.mime_type} • {fmtBytes(media.size)}
+              </div>
             </div>
             <div className="md:col-span-2 space-y-2">
               <label className="text-sm font-semibold text-slate-700">Nom</label>
-              <input value={name} onChange={(e) => setName(e.target.value)} className="w-full px-4 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400" />
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full px-4 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400"
+              />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm font-semibold text-slate-700">Texte alternatif (FR)</label>
-                  <input value={alt} onChange={(e) => setAlt(e.target.value)} className="w-full px-4 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400" />
+                  <input
+                    value={alt}
+                    onChange={(e) => setAlt(e.target.value)}
+                    className="w-full px-4 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400"
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-semibold text-slate-700">Légende (FR)</label>
-                  <input value={caption} onChange={(e) => setCaption(e.target.value)} className="w-full px-4 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400" />
+                  <input
+                    value={caption}
+                    onChange={(e) => setCaption(e.target.value)}
+                    className="w-full px-4 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400"
+                  />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <label className="text-sm font-semibold text-slate-700">Ordre</label>
-                  <input type="number" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="w-full px-4 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400" />
+                  <input
+                    type="number"
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value)}
+                    className="w-full px-4 py-2 rounded-xl border-2 border-slate-200"
+                  />
                 </div>
                 <label className="flex items-center justify-between gap-2 mt-6 px-3 py-2 rounded-xl border-2 border-slate-200 bg-white cursor-pointer text-sm">
-                  <span className="flex items-center gap-2">{isActive ? <FiToggleRight className="text-blue-600" /> : <FiToggleLeft className="text-slate-500" />} Actif</span>
+                  <span className="flex items-center gap-2">
+                    {isActive ? <FiToggleRight /> : <FiToggleLeft />} Actif
+                  </span>
                   <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="sr-only" />
                   <span className={`relative inline-flex h-5 w-9 items-center rounded-full ${isActive ? "bg-blue-600" : "bg-slate-300"}`}>
                     <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${isActive ? "translate-x-4" : "translate-x-0"}`} />
                   </span>
                 </label>
                 <label className="flex items-center justify-between gap-2 mt-6 px-3 py-2 rounded-xl border-2 border-slate-200 bg-white cursor-pointer text-sm">
-                  <span className="flex items-center gap-2"><FiStar className="text-amber-500" /> Vedette</span>
+                  <span className="flex items-center gap-2">
+                    <FiStar className="text-amber-500" /> Vedette
+                  </span>
                   <input type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)} className="sr-only" />
                   <span className={`relative inline-flex h-5 w-9 items-center rounded-full ${isFeatured ? "bg-blue-600" : "bg-slate-300"}`}>
                     <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${isFeatured ? "translate-x-4" : "translate-x-0"}`} />
@@ -483,8 +700,16 @@ const EditModal = ({ open, media, onClose, onSaved }) => {
           {err && <p className="text-sm text-rose-600">{err}</p>}
 
           <div className="flex items-center justify-end gap-2 pt-2">
-            <button onClick={onClose} className="px-4 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold">Annuler</button>
-            <button onClick={submit} disabled={saving} className={`px-4 py-2 rounded-xl text-white font-semibold shadow ${saving ? "bg-slate-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"}`}>
+            <button onClick={onClose} className="px-4 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold">
+              Annuler
+            </button>
+            <button
+              onClick={submit}
+              disabled={saving}
+              className={`px-4 py-2 rounded-xl text-white font-semibold shadow ${
+                saving ? "bg-slate-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
+              }`}
+            >
               {saving ? "Enregistrement…" : "Enregistrer"}
             </button>
           </div>
@@ -498,11 +723,13 @@ const EditModal = ({ open, media, onClose, onSaved }) => {
    Composant principal
    ========================================================= */
 const ArticleMediaManager = ({ articleId }) => {
+  // Données
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // UI states
   const [uploadOpen, setUploadOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [current, setCurrent] = useState(null);
@@ -511,7 +738,45 @@ const ArticleMediaManager = ({ articleId }) => {
   const [lightboxSrc, setLightboxSrc] = useState("");
   const [lightboxAlt, setLightboxAlt] = useState("");
 
-  const [confirmDialog, setConfirmDialog] = useState({ open: false, title: "", message: "", onConfirm: null, danger: false });
+  const [viewMode, setViewMode] = useState("grid");
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState(() => new Set());
+  const selectedCount = selected.size;
+  const isSelected = (id) => selected.has(id);
+  const toggleSelect = (id) => setSelected((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+  const clearSelection = () => setSelected(new Set());
+  const toggleSelectAll = () => {
+    if (selected.size === filteredItems.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filteredItems.map(it => it.id)));
+    }
+  };
+
+  // Corbeille
+  const [trashMode, setTrashMode] = useState(false);
+
+  // Filtres (accordéon)
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [type, setType] = useState("");
+  const [isActive, setIsActive] = useState("");
+  const [isFeatured, setIsFeatured] = useState("");
+  const [sortBy, setSortBy] = useState("sort_order");
+  const [sortDir, setSortDir] = useState("asc");
+
+  // Confirm & Toast
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    onConfirm: null,
+    danger: false
+  });
 
   const [toast, setToast] = useState({ open: false, kind: "success", msg: "" });
   const toastTimer = useRef(null);
@@ -522,40 +787,79 @@ const ArticleMediaManager = ({ articleId }) => {
   };
   useEffect(() => () => toastTimer.current && clearTimeout(toastTimer.current), []);
 
-  // Filtres / vue
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [type, setType] = useState("");            // image|video|audio|document
-  const [isActive, setIsActive] = useState("");    // "", "1", "0"
-  const [isFeatured, setIsFeatured] = useState(""); // "", "1", "0"
-  const [sortBy, setSortBy] = useState("sort_order");
-  const [sortDir, setSortDir] = useState("asc");
-  const [viewMode, setViewMode] = useState("grid"); // grid | list
-  const [inTrash, setInTrash] = useState(false);    // Vue corbeille
+  /* ----------- URL <-> Filtres ----------- */
+  const [urlSearchParams, setUrlSearchParams] = useSearchParams();
+  const location = useLocation();
 
+  useEffect(() => {
+    const p = Object.fromEntries(urlSearchParams.entries());
+    if (p.type) setType(p.type);
+    if (p.q != null) setSearch(p.q);
+    if (p.is_active === "1" || p.is_active === "0") setIsActive(p.is_active);
+    if (p.is_featured === "1" || p.is_featured === "0") setIsFeatured(p.is_featured);
+    if (p.sort_by) setSortBy(p.sort_by);
+    if (p.sort_dir) setSortDir(p.sort_dir === "desc" ? "desc" : "asc");
+    if (p.view === "list" || p.view === "grid") setViewMode(p.view);
+    if (p.trash === "1") setTrashMode(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const p = new URLSearchParams();
+    if (type) p.set("type", type);
+    if (search.trim()) p.set("q", search.trim());
+    if (isActive !== "") p.set("is_active", isActive);
+    if (isFeatured !== "") p.set("is_featured", isFeatured);
+    if (sortBy && sortBy !== "sort_order") p.set("sort_by", sortBy);
+    if (sortDir && sortDir !== "asc") p.set("sort_dir", sortDir);
+    if (viewMode !== "grid") p.set("view", viewMode);
+    if (trashMode) p.set("trash", "1");
+    setUrlSearchParams(p, { replace: true });
+  }, [type, search, isActive, isFeatured, sortBy, sortDir, viewMode, trashMode, setUrlSearchParams]);
+
+  const shareUrl = useMemo(() => {
+    const qs = urlSearchParams.toString();
+    const base = typeof window !== "undefined" ? window.location.origin : "";
+    return `${base}${location.pathname}${qs ? `?${qs}` : ""}`;
+  }, [location.pathname, urlSearchParams]);
+
+  const copyShareUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+    } catch {
+      showToast("Impossible de copier le lien", "error");
+      return;
+    }
+    showToast("Lien copié ✅");
+  };
+
+  /* ----------- LOAD ----------- */
   const load = async () => {
     if (!articleId) return;
     try {
       setLoading(true);
       setErr("");
 
-      // ✅ type en minuscule (conforme à l'Enum backend)
       const params = {
-        ...(type ? { type } : {}),
+        ...(type ? { type: type.toUpperCase() } : {}),
         ...(isActive !== "" ? { is_active: isActive === "1" } : {}),
         ...(isFeatured !== "" ? { is_featured: isFeatured === "1" } : {}),
+        ...(search.trim() ? { q: search.trim() } : {}),
         sort_by: sortBy,
         sort_dir: sortDir,
         per_page: 9999,
-        // ✅ gestion corbeille
-        ...(inTrash ? { trashed: "only" } : {}),
       };
 
-      const res = await http.listByArticle(articleId, params);
-      const data = Array.isArray(res?.data?.data) ? res.data.data : (Array.isArray(res?.data) ? res.data : []);
-
-      // Garde-fou si l’API n’applique pas trashed=only : on re-filtre localement.
-      const safe = inTrash ? data.filter(x => !!x.deleted_at) : data.filter(x => !x.deleted_at);
-      setItems(safe);
+      let res;
+      if (trashMode) {
+        res = await http.listTrashedByArticle(articleId, params);
+        const payload = res?.data?.data ?? res?.data ?? [];
+        setItems(Array.isArray(payload?.data) ? payload.data : payload);
+      } else {
+        res = await http.listByArticle(articleId, params);
+        const data = Array.isArray(res?.data?.data) ? res.data.data : (Array.isArray(res?.data) ? res.data : []);
+        setItems(data);
+      }
     } catch (e) {
       const msg = e?.response?.status === 403
         ? "Non autorisé (403). Vérifie l'authentification/Policy."
@@ -566,15 +870,30 @@ const ArticleMediaManager = ({ articleId }) => {
     }
   };
 
-  useEffect(() => { load(); }, [articleId, refreshKey, type, isActive, isFeatured, sortBy, sortDir, inTrash]);
+  useEffect(() => { load(); }, [articleId, refreshKey, type, isActive, isFeatured, sortBy, sortDir, trashMode, search]);
 
-  const onUploaded = () => { showToast("Média téléversé ✅"); setRefreshKey((k) => k + 1); };
+  /* ----------- Derived data ----------- */
+  const filteredItems = useMemo(() => {
+    const s = search.trim().toLowerCase();
+    if (!s) return items;
+    return items.filter((it) =>
+      (it.name || '').toLowerCase().includes(s) ||
+      String(it.id || '').includes(s) ||
+      (it.mime_type || '').toLowerCase().includes(s)
+    );
+  }, [items, search]);
 
-  const openEdit = (m) => {
+  /* ----------- Actions ----------- */
+  const onUploaded = () => {
+    showToast("Média téléversé ✅");
+    setRefreshKey((k) => k + 1);
+  };
+
+  const askEdit = (m) => {
     setConfirmDialog({
       open: true,
       title: "Modifier le média",
-      message: `Voulez-vous modifier "${m.name}" ?`,
+      message: `Voulez-vous modifier « ${m.name} » ?`,
       danger: false,
       onConfirm: () => {
         setCurrent(m);
@@ -584,13 +903,16 @@ const ArticleMediaManager = ({ articleId }) => {
     });
   };
 
-  const onSaved = () => { showToast("Média mis à jour ✅"); setRefreshKey((k) => k + 1); };
+  const onSaved = () => {
+    showToast("Média mis à jour ✅");
+    setRefreshKey((k) => k + 1);
+  };
 
-  const onDelete = (m) => {
+  const askDelete = (m) => {
     setConfirmDialog({
       open: true,
       title: "Supprimer le média",
-      message: `Êtes-vous sûr de vouloir supprimer "${m.name}" ? Cette action est réversible (corbeille).`,
+      message: `Supprimer « ${m.name} » ? Cette action est réversible (corbeille).`,
       danger: true,
       onConfirm: async () => {
         setConfirmDialog(prev => ({ ...prev, open: false }));
@@ -598,6 +920,7 @@ const ArticleMediaManager = ({ articleId }) => {
           await http.destroy(m.id);
           showToast("Média supprimé ✅");
           setItems((arr) => arr.filter((x) => x.id !== m.id));
+          setSelected((s) => { const n = new Set(s); n.delete(m.id); return n; });
         } catch (e) {
           const msg = e?.response?.data?.message || e?.message || "Suppression impossible";
           showToast(msg, "error");
@@ -606,95 +929,190 @@ const ArticleMediaManager = ({ articleId }) => {
     });
   };
 
-  const onRestore = (m) => {
-    setConfirmDialog({
-      open: true,
-      title: "Restaurer le média",
-      message: `Restaurer "${m.name}" de la corbeille ?`,
-      danger: false,
-      onConfirm: async () => {
-        setConfirmDialog(prev => ({ ...prev, open: false }));
-        try {
-          await http.restore(m.id);
-          showToast("Média restauré ✅");
-          setRefreshKey(k => k + 1);
-        } catch {
-          showToast("Erreur de restauration", "error");
-        }
-      }
-    });
+  const doToggleActive = async (m) => {
+    try {
+      const res = await http.toggleActive(m.id);
+      const upd = res?.data?.data || res?.data;
+      setItems((arr) => arr.map((it) => (it.id === m.id ? { ...it, ...upd } : it)));
+      showToast(`Média ${m.is_active ? "désactivé" : "activé"} ✅`);
+    } catch {
+      showToast("Erreur statut actif", "error");
+    }
   };
 
-  const onForceDelete = (m) => {
-    setConfirmDialog({
-      open: true,
-      title: "Suppression définitive",
-      message: `Supprimer définitivement "${m.name}" ? Cette action est irréversible.`,
-      danger: true,
-      onConfirm: async () => {
-        setConfirmDialog(prev => ({ ...prev, open: false }));
-        try {
-          await http.forceDelete(m.id);
-          showToast("Média supprimé définitivement ✅");
-          setRefreshKey(k => k + 1);
-        } catch {
-          showToast("Erreur suppression définitive", "error");
-        }
-      }
-    });
-  };
-
-  const toggleActive = (m) => {
-    const newStatus = !m.is_active;
-    setConfirmDialog({
-      open: true,
-      title: newStatus ? "Activer le média" : "Désactiver le média",
-      message: `Voulez-vous ${newStatus ? "activer" : "désactiver"} "${m.name}" ?`,
-      danger: !newStatus,
-      onConfirm: async () => {
-        setConfirmDialog(prev => ({ ...prev, open: false }));
-        try {
-          const res = await http.toggleActive(m.id);
-          const upd = res?.data?.data || res?.data;
-          setItems((arr) => arr.map((it) => (it.id === m.id ? { ...it, ...upd } : it)));
-          showToast(`Média ${newStatus ? "activé" : "désactivé"} ✅`);
-        } catch {
-          showToast("Erreur statut actif", "error");
-        }
-      }
-    });
-  };
-
-  const toggleFeatured = (m) => {
-    const newStatus = !m.is_featured;
-    setConfirmDialog({
-      open: true,
-      title: newStatus ? "Définir comme vedette" : "Retirer de la vedette",
-      message: `Voulez-vous ${newStatus ? "mettre" : "retirer"} "${m.name}" ${newStatus ? "en" : "de la"} vedette ?`,
-      danger: false,
-      onConfirm: async () => {
-        setConfirmDialog(prev => ({ ...prev, open: false }));
-        try {
-          const res = await http.toggleFeatured(m.id);
-          const upd = res?.data?.data || res?.data;
-          setItems((arr) => arr.map((it) => (it.id === m.id ? { ...it, ...upd } : it)));
-          showToast(`Média ${newStatus ? "mis en" : "retiré de la"} vedette ✅`);
-        } catch {
-          showToast("Erreur statut vedette", "error");
-        }
-      }
-    });
+  const doToggleFeatured = async (m) => {
+    try {
+      const res = await http.toggleFeatured(m.id);
+      const upd = res?.data?.data || res?.data;
+      setItems((arr) => arr.map((it) => (it.id === m.id ? { ...it, ...upd } : it)));
+      showToast(`Média ${m.is_featured ? "retiré de" : "mis en"} vedette ✅`);
+    } catch {
+      showToast("Erreur statut vedette", "error");
+    }
   };
 
   const openLightbox = (m) => {
-    setLightboxSrc(m.url || m.thumbnail_url);
+    const src = mediaThumb(m) || mediaHref(m);
+    setLightboxSrc(src || "");
     setLightboxAlt(m.alt_text?.fr || m.alt_text?.[0] || m.name || "");
     setLightboxOpen(true);
   };
 
+  const doRestore = async (id) => {
+    try {
+      await http.restore(id);
+      showToast("Média restauré ✅");
+      setRefreshKey((k) => k + 1);
+      setSelected((s) => { const n = new Set(s); n.delete(id); return n; });
+    } catch {
+      showToast("Restauration impossible", "error");
+    }
+  };
+  const doForceDelete = async (id) => {
+    setConfirmDialog({
+      open: true,
+      title: "Suppression définitive",
+      message: "Cette action est irréversible. Continuer ?",
+      danger: true,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, open: false }));
+        try {
+          await http.forceDelete(id);
+          showToast("Supprimé définitivement ✅");
+          setRefreshKey((k) => k + 1);
+          setSelected((s) => { const n = new Set(s); n.delete(id); return n; });
+        } catch {
+          showToast("Suppression définitive impossible", "error");
+        }
+      }
+    });
+  };
+
+  const bulkToggleActive = async (active) => {
+    const ids = Array.from(selected);
+    if (!ids.length) return;
+    setConfirmDialog({
+      open: true,
+      title: active ? "Activer la sélection" : "Désactiver la sélection",
+      message: `${ids.length} élément(s) seront ${active ? "activés" : "désactivés"}.`,
+      danger: !active,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, open: false }));
+        try {
+          for (const id of ids) {
+            const m = items.find(x => x.id === id);
+            if (!m) continue;
+            if (!!m.is_active !== active) {
+              await http.toggleActive(id);
+            }
+          }
+          showToast("Statut mis à jour ✅");
+          clearSelection();
+          setRefreshKey(k => k + 1);
+        } catch {
+          showToast("Échec sur au moins un élément", "error");
+        }
+      }
+    });
+  };
+
+  const bulkToggleFeatured = async (featured) => {
+    const ids = Array.from(selected);
+    if (!ids.length) return;
+    setConfirmDialog({
+      open: true,
+      title: featured ? "Mettre en vedette" : "Retirer la vedette",
+      message: `${ids.length} élément(s) seront ${featured ? "mis" : "retirés"} en vedette.`,
+      danger: false,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, open: false }));
+        try {
+          for (const id of ids) {
+            const m = items.find(x => x.id === id);
+            if (!m) continue;
+            if (!!m.is_featured !== featured) {
+              await http.toggleFeatured(id);
+            }
+          }
+          showToast("Vedette mise à jour ✅");
+          clearSelection();
+          setRefreshKey(k => k + 1);
+        } catch {
+          showToast("Échec sur au moins un élément", "error");
+        }
+      }
+    });
+  };
+
+  const bulkDelete = async () => {
+    const ids = Array.from(selected);
+    if (!ids.length) return;
+    setConfirmDialog({
+      open: true,
+      title: "Supprimer la sélection",
+      message: `${ids.length} élément(s) iront dans la corbeille.`,
+      danger: true,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, open: false }));
+        try {
+          for (const id of ids) { await http.destroy(id); }
+          showToast("Sélection supprimée ✅");
+          clearSelection();
+          setRefreshKey(k => k + 1);
+        } catch {
+          showToast("Échec sur au moins un élément", "error");
+        }
+      }
+    });
+  };
+
+  const bulkRestore = async () => {
+    const ids = Array.from(selected);
+    if (!ids.length) return;
+    setConfirmDialog({
+      open: true,
+      title: "Restaurer la sélection",
+      message: `${ids.length} élément(s) seront restaurés.`,
+      danger: false,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, open: false }));
+        try {
+          for (const id of ids) { await http.restore(id); }
+          showToast("Sélection restaurée ✅");
+          clearSelection();
+          setRefreshKey(k => k + 1);
+        } catch {
+          showToast("Échec sur au moins un élément", "error");
+        }
+      }
+    });
+  };
+
+  const bulkForceDelete = async () => {
+    const ids = Array.from(selected);
+    if (!ids.length) return;
+    setConfirmDialog({
+      open: true,
+      title: "Suppression DÉFINITIVE",
+      message: `${ids.length} élément(s) seront supprimés de manière irréversible.`,
+      danger: true,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, open: false }));
+        try {
+          for (const id of ids) { await http.forceDelete(id); }
+          showToast("Sélection supprimée définitivement ✅");
+          clearSelection();
+          setRefreshKey(k => k + 1);
+        } catch {
+          showToast("Échec sur au moins un élément", "error");
+        }
+      }
+    });
+  };
+
   const header = useMemo(
     () => (
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="relative">
             <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl blur opacity-40" />
@@ -703,165 +1121,345 @@ const ArticleMediaManager = ({ articleId }) => {
             </div>
           </div>
           <div>
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Médias de l'article</h2>
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+              {trashMode ? "Corbeille des médias" : "Médias de l'article"}
+            </h2>
             <div className="text-xs text-slate-500">
-              Gestion des fichiers liés à l'article #{articleId}
-              {inTrash && <span className="ml-2 text-rose-600 font-semibold">• CORBEILLE</span>}
+              {trashMode
+                ? `Éléments supprimés pour l'article #${articleId}`
+                : `Gestion des fichiers liés à l'article #${articleId}`}
             </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {!inTrash ? (
-            <IconBtn title="Ouvrir la corbeille" onClick={() => setInTrash(true)} variant="red">
-              <FiTrash2 />
-              <span className="hidden sm:inline text-[12px] font-semibold">Corbeille</span>
+        <div className="flex items-center gap-2">
+          {trashMode ? (
+            <IconBtn
+              title="Retour à la bibliothèque"
+              onClick={() => { setTrashMode(false); clearSelection(); }}
+              className="border-blue-200 text-blue-700"
+            >
+              <FiCornerDownLeft className="w-4 h-4" />
             </IconBtn>
           ) : (
-            <IconBtn title="Retour au dossier principal" onClick={() => setInTrash(false)}>
-              <FiCornerUpLeft />
-              <span className="hidden sm:inline text-[12px] font-semibold">Retour</span>
+            <IconBtn
+              title="Ouvrir la corbeille"
+              onClick={() => { setTrashMode(true); clearSelection(); }}
+              className="border-rose-200 text-rose-700"
+            >
+              <FiTrash2 className="w-4 h-4" />
             </IconBtn>
           )}
 
-          <IconBtn title="Rafraîchir" onClick={() => setRefreshKey((k) => k + 1)}>
-            <FiRefreshCw />
-            <span className="hidden sm:inline text-[12px] font-semibold">Rafraîchir</span>
+          <IconBtn
+            title="Rafraîchir"
+            onClick={() => setRefreshKey((k) => k + 1)}
+            className="border-slate-200 text-slate-700"
+          >
+            <FiRefreshCw className="w-4 h-4" />
           </IconBtn>
 
-          {!inTrash && (
-            <IconBtn title="Ajouter un média" onClick={() => setUploadOpen(true)}>
-              <FiUpload />
-              <span className="hidden sm:inline text-[12px] font-semibold">Ajouter</span>
+          {!trashMode && (
+            <IconBtn
+              title="Ajouter un média"
+              onClick={() => setUploadOpen(true)}
+              className="border-blue-200 text-blue-700"
+            >
+              <FiUpload className="w-4 h-4" />
             </IconBtn>
           )}
         </div>
       </div>
     ),
-    [articleId, inTrash]
+    [articleId, trashMode]
   );
 
-  const Filters = (
-    <div className="mt-4">
+  const FilterPill = ({ label, onClear, title }) => (
+    <span
+      title={title || label}
+      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold
+               bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-200"
+    >
+      {label}
       <button
-        className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border-2 border-slate-200 bg-white hover:bg-slate-50"
-        onClick={() => setFiltersOpen(v => !v)}
+        onClick={onClear}
+        className="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded hover:bg-blue-100 transition"
+        aria-label="retirer le filtre"
       >
-        <span className="text-sm font-semibold text-slate-800">Filtres & tri</span>
-        {filtersOpen ? <FiChevronUp /> : <FiChevronDown />}
+        <FiX className="w-3 h-3" />
       </button>
+    </span>
+  );
 
-      {filtersOpen && (
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-5 gap-3 rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600">Type</label>
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
-            >
-              <option value="">Tous</option>
-              <option value="image">Images</option>
-              <option value="video">Vidéos</option>
-              <option value="audio">Audios</option>
-              <option value="document">Documents</option>
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600">Actif</label>
-            <select
-              value={isActive}
-              onChange={(e) => setIsActive(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
-            >
-              <option value="">Tous</option>
-              <option value="1">Actif</option>
-              <option value="0">Inactif</option>
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600">Vedette</label>
-            <select
-              value={isFeatured}
-              onChange={(e) => setIsFeatured(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
-            >
-              <option value="">Tous</option>
-              <option value="1">Oui</option>
-              <option value="0">Non</option>
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600">Tri</label>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
-            >
-              <option value="sort_order">Ordre</option>
-              <option value="name">Nom</option>
-              <option value="created_at">Création</option>
-              <option value="size">Taille</option>
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600">Direction</label>
-            <select
-              value={sortDir}
-              onChange={(e) => setSortDir(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
-            >
-              <option value="asc">Asc</option>
-              <option value="desc">Desc</option>
-            </select>
-          </div>
+  const resetAllFilters = () => {
+    setType("");
+    setIsActive("");
+    setIsFeatured("");
+    setSearch("");
+    setSortBy("sort_order");
+    setSortDir("asc");
+  };
 
-          <div className="md:col-span-5 flex items-center justify-between pt-2">
-            <div className="flex items-center gap-2">
-              <IconBtn title="Vue grille" onClick={() => setViewMode("grid")} variant={viewMode === "grid" ? "blue" : "amber"}>
-                <FiGrid />
-              </IconBtn>
-              <IconBtn title="Vue liste" onClick={() => setViewMode("list")} variant={viewMode === "list" ? "blue" : "amber"}>
-                <FiList />
-              </IconBtn>
-            </div>
-            <div className="flex items-center gap-2">
-              <IconBtn title="Réinitialiser filtres" onClick={() => { setType(""); setIsActive(""); setIsFeatured(""); setSortBy("sort_order"); setSortDir("asc"); }} >
-                <FiRotateCw />
-                <span className="hidden sm:inline text-[12px] font-semibold">Réinitialiser</span>
-              </IconBtn>
-            </div>
-          </div>
+  const activePills = useMemo(() => {
+    const pills = [];
+    if (type) {
+      const map = { image: "Image", video: "Vidéo", audio: "Audio", document: "Document" };
+      pills.push({ id: "type", label: `Type: ${map[type] || type}`, clear: () => setType("") });
+    }
+    if (isActive !== "") {
+      pills.push({ id: "is_active", label: `Actif: ${isActive === "1" ? "Oui" : "Non"}`, clear: () => setIsActive("") });
+    }
+    if (isFeatured !== "") {
+      pills.push({ id: "is_featured", label: `Vedette: ${isFeatured === "1" ? "Oui" : "Non"}`, clear: () => setIsFeatured("") });
+    }
+    if (search.trim()) {
+      pills.push({ id: "q", label: `Recherche: “${search.trim()}”`, clear: () => setSearch("") });
+    }
+    if (sortBy !== "sort_order" || sortDir !== "asc") {
+      const map = { sort_order: "Ordre", name: "Nom", created_at: "Création", size: "Taille" };
+      pills.push({
+        id: "sort",
+        label: `Tri: ${map[sortBy] || sortBy} ${sortDir.toUpperCase()}`,
+        clear: () => { setSortBy("sort_order"); setSortDir("asc"); }
+      });
+    }
+    return pills;
+  }, [type, isActive, isFeatured, search, sortBy, sortDir]);
+
+  const activeFiltersCount = activePills.length;
+
+  const toolbar = (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center gap-2 flex-1 min-w-[260px]">
+        <div className="relative flex-1">
+          <FiSearch className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher par nom, #id, type MIME…"
+            className="w-full pl-9 pr-3 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+          />
         </div>
-      )}
+
+        <IconBtn
+          title={filtersOpen ? "Masquer les filtres" : "Afficher les filtres"}
+          onClick={() => setFiltersOpen(o => !o)}
+          className={`border-slate-200 ${filtersOpen ? "text-blue-700 border-blue-200" : "text-slate-700"}`}
+        >
+          <div className="relative inline-flex items-center">
+            <FiFilter className="w-4 h-4" />
+            {activeFiltersCount > 0 && (
+              <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-5 px-1.5 rounded-full text-[11px] font-bold bg-blue-600 text-white">
+                {activeFiltersCount}
+              </span>
+            )}
+            {filtersOpen ? (
+              <FiChevronUp className="w-4 h-4 ml-1" />
+            ) : (
+              <FiChevronDown className="w-4 h-4 ml-1" />
+            )}
+          </div>
+        </IconBtn>
+
+        <IconBtn
+          title="Copier le lien de cette vue (filtres inclus)"
+          onClick={copyShareUrl}
+          className="border-slate-200 text-slate-700"
+        >
+          <FiLink className="w-4 h-4" />
+        </IconBtn>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <IconBtn
+          title="Mode grille"
+          onClick={() => setViewMode("grid")}
+          className={`border-slate-200 ${viewMode === 'grid' ? "text-blue-700 border-blue-200" : "text-slate-700"}`}
+        >
+          <FiGrid className="w-4 h-4" />
+        </IconBtn>
+        <IconBtn
+          title="Mode liste"
+          onClick={() => setViewMode("list")}
+          className={`border-slate-200 ${viewMode === 'list' ? "text-blue-700 border-blue-200" : "text-slate-700"}`}
+        >
+          <FiList className="w-4 h-4" />
+        </IconBtn>
+
+        <IconBtn
+          title={selectMode ? "Quitter la multi-sélection" : "Activer la multi-sélection"}
+          onClick={() => { setSelectMode(v => !v); if (selectMode) clearSelection(); }}
+          className={`border-slate-200 ${selectMode ? "text-blue-700 border-blue-200" : "text-slate-700"}`}
+        >
+          {selectMode ? <FiCheckSquare className="w-4 h-4" /> : <FiSquare className="w-4 h-4" />}
+        </IconBtn>
+      </div>
     </div>
   );
 
-  const Card = (m) => {
-    const isImg = (m.mime_type || "").startsWith("image/");
-    return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-col">
-        <div
-          className={`relative group rounded-xl overflow-hidden bg-slate-100 border mb-3 ${isImg ? "cursor-zoom-in" : "cursor-default"}`}
-          onClick={() => isImg && openLightbox(m)}
-          title={isImg ? "Agrandir" : m.mime_type}
+  const filtersBlock = filtersOpen && (
+    <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-600">Type</label>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
+          >
+            <option value="">Tous</option>
+            <option value="image">Image</option>
+            <option value="video">Vidéo</option>
+            <option value="audio">Audio</option>
+            <option value="document">Document</option>
+          </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-600">Actif</label>
+          <select
+            value={isActive}
+            onChange={(e) => setIsActive(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
+          >
+            <option value="">Tous</option>
+            <option value="1">Actifs</option>
+            <option value="0">Inactifs</option>
+          </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-600">Vedette</label>
+          <select
+            value={isFeatured}
+            onChange={(e) => setIsFeatured(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
+          >
+            <option value="">Tous</option>
+            <option value="1">En vedette</option>
+            <option value="0">Non vedette</option>
+          </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-600">Tri par</label>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
+          >
+            <option value="sort_order">Ordre</option>
+            <option value="name">Nom</option>
+            <option value="created_at">Création</option>
+            <option value="size">Taille</option>
+          </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-600">Direction</label>
+          <select
+            value={sortDir}
+            onChange={(e) => setSortDir(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
+          >
+            <option value="asc">Asc</option>
+            <option value="desc">Desc</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  );
+
+  const bulkBar = selectedCount > 0 && (
+    <div className="sticky top-[64px] z-[30] mt-4 rounded-2xl border-2 border-blue-200 bg-blue-50/70 backdrop-blur p-3 flex items-center justify-between">
+      <div className="text-sm font-semibold text-blue-900">
+        {selectedCount} élément{selectedCount>1?'s':''} sélectionné{selectedCount>1?'s':''}
+      </div>
+      <div className="flex items-center gap-2">
+        <IconBtn
+          title={selected.size === filteredItems.length ? "Tout désélectionner" : "Tout sélectionner"}
+          onClick={toggleSelectAll}
+          className="border-blue-200 text-blue-700"
         >
-          <img src={m.thumbnail_url || m.url} alt={m.alt_text?.fr || m.alt_text?.[0] || m.name} className="w-full h-44 object-cover" />
+          {selected.size === filteredItems.length ? <FiSquare className="w-4 h-4" /> : <FiCheckSquare className="w-4 h-4" />}
+        </IconBtn>
+
+        {!trashMode ? (
+          <>
+            <IconBtn title="Activer" onClick={() => bulkToggleActive(true)} className="border-blue-200 text-blue-700"><FiToggleRight className="w-4 h-4" /></IconBtn>
+            <IconBtn title="Désactiver" onClick={() => bulkToggleActive(false)} className="border-blue-200 text-blue-700"><FiToggleLeft className="w-4 h-4" /></IconBtn>
+            <IconBtn title="Mettre en vedette" onClick={() => bulkToggleFeatured(true)} className="border-blue-200 text-blue-700"><FiStar className="w-4 h-4" /></IconBtn>
+            <IconBtn title="Retirer la vedette" onClick={() => bulkToggleFeatured(false)} className="border-blue-200 text-blue-700"><FiStar className="w-4 h-4 opacity-50" /></IconBtn>
+            <IconBtn title="Supprimer" onClick={bulkDelete} className="border-rose-200 text-rose-700"><FiTrash2 className="w-4 h-4" /></IconBtn>
+          </>
+        ) : (
+          <>
+            <IconBtn title="Restaurer" onClick={bulkRestore} className="border-blue-200 text-blue-700"><FiRotateCcw className="w-4 h-4" /></IconBtn>
+            <IconBtn title="Supprimer définitivement" onClick={bulkForceDelete} className="border-rose-200 text-rose-700"><FiTrash2 className="w-4 h-4" /></IconBtn>
+          </>
+        )}
+        <IconBtn title="Vider la sélection" onClick={clearSelection} className="border-slate-200 text-slate-700"><FiX className="w-4 h-4" /></IconBtn>
+      </div>
+    </div>
+  );
+
+  const renderCard = (m) => {
+    const isImg = isImageMime(m.mime_type);
+    const thumb = mediaThumb(m);
+
+    return (
+      <div key={m.id} className={`rounded-2xl border ${isSelected(m.id) ? "border-blue-400 ring-2 ring-blue-200" : "border-slate-200"} bg-white p-4 flex flex-col`}>
+        <div className="relative group rounded-xl overflow-hidden bg-slate-100 border mb-3 flex items-center justify-center">
+          {thumb ? (
+            <img
+              src={thumb}
+              alt={m.alt_text?.fr || m.alt_text?.[0] || m.name}
+              className={`w-full h-44 object-cover ${isImg ? "cursor-zoom-in" : "cursor-default"}`}
+              onClick={() => isImg && openLightbox(m)}
+              title={isImg ? "Agrandir" : m.mime_type}
+            />
+          ) : (
+            <div className="h-44 w-full flex flex-col items-center justify-center text-slate-600">
+              <div className="text-sm font-semibold truncate px-4 text-center">{m.name || "(fichier)"}</div>
+              <div className="text-xs mt-1">{m.mime_type || "document"}</div>
+              <a
+                href={mediaHref(m)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-semibold"
+                title="Ouvrir dans un nouvel onglet"
+              >
+                Ouvrir
+              </a>
+            </div>
+          )}
+
           {m.is_featured && (
             <Badge className="absolute top-2 left-2 bg-amber-50 border-amber-200 text-amber-700">
               <FiStar className="mr-1" /> Vedette
             </Badge>
           )}
-          {!m.is_active && !inTrash && (
-            <Badge className="absolute top-2 right-2 bg-slate-100 border-slate-300 text-slate-700">Inactif</Badge>
+          {!m.is_active && (
+            <Badge className="absolute top-2 right-2 bg-slate-100 border-slate-300 text-slate-700">
+              Inactif
+            </Badge>
           )}
-          {inTrash && (
-            <Badge className="absolute top-2 right-2 bg-rose-50 border-rose-200 text-rose-700">Supprimé</Badge>
+
+          {selectMode && (
+            <button
+              title={isSelected(m.id) ? "Désélectionner" : "Sélectionner"}
+              onClick={(e) => { e.stopPropagation(); toggleSelect(m.id); }}
+              className={`absolute bottom-2 left-2 w-9 h-9 rounded-xl border-2 bg-white/90 flex items-center justify-center ${isSelected(m.id) ? "border-blue-400 text-blue-700" : "border-slate-300 text-slate-600"}`}
+            >
+              {isSelected(m.id) ? <FiCheckSquare /> : <FiSquare />}
+            </button>
           )}
         </div>
 
         <div className="flex-1 min-h-0">
-          <div className="font-semibold text-slate-800 truncate" title={m.name}>{m.name || "(sans nom)"}</div>
+          <div className="font-semibold text-slate-800 truncate" title={m.name}>
+            {m.name || "(sans nom)"}
+          </div>
           <div className="text-xs text-slate-500 mt-1">
             {m.mime_type} • {fmtBytes(m.size)}
             {m.dimensions?.width && m.dimensions?.height ? ` • ${m.dimensions.width}×${m.dimensions.height}` : ""}
@@ -873,32 +1471,31 @@ const ArticleMediaManager = ({ articleId }) => {
         </div>
 
         <div className="mt-3 grid grid-cols-4 gap-2">
-          {!inTrash ? (
+          {!trashMode ? (
             <>
-              <IconBtn title="Modifier" onClick={() => openEdit(m)}>
+              <TinyIconBtn title="Modifier" onClick={() => askEdit(m)} className="border-blue-200 text-blue-700">
                 <FiEdit3 />
-              </IconBtn>
-              <IconBtn title={m.is_active ? "Désactiver" : "Activer"} onClick={() => toggleActive(m)}>
+              </TinyIconBtn>
+              <TinyIconBtn title={m.is_active ? "Désactiver" : "Activer"} onClick={() => doToggleActive(m)} className="border-blue-200 text-blue-700">
                 {m.is_active ? <FiToggleRight /> : <FiToggleLeft />}
-              </IconBtn>
-              <IconBtn title={m.is_featured ? "Retirer vedette" : "Mettre vedette"} onClick={() => toggleFeatured(m)} variant="amber">
-                <FiStar />
-              </IconBtn>
-              <IconBtn title="Supprimer" onClick={() => onDelete(m)} variant="red">
+              </TinyIconBtn>
+              <TinyIconBtn title={m.is_featured ? "Retirer vedette" : "Mettre vedette"} onClick={() => doToggleFeatured(m)} className="border-blue-200 text-blue-700">
+                <FiStar className={m.is_featured ? "" : "opacity-50"} />
+              </TinyIconBtn>
+              <TinyIconBtn title="Supprimer" onClick={() => askDelete(m)} className="border-rose-200 text-rose-700">
                 <FiTrash2 />
-              </IconBtn>
+              </TinyIconBtn>
             </>
           ) : (
             <>
-              <IconBtn title="Restaurer" onClick={() => onRestore(m)}>
-                <FiRotateCw />
-              </IconBtn>
-              <div className="col-span-3">
-                <IconBtn title="Supprimer définitivement" onClick={() => onForceDelete(m)} variant="red">
-                  <FiTrash2 />
-                  <span className="hidden sm:inline text-[12px] font-semibold">Supprimer définitivement</span>
-                </IconBtn>
-              </div>
+              <TinyIconBtn title="Restaurer" onClick={() => doRestore(m.id)} className="border-blue-200 text-blue-700">
+                <FiRotateCcw />
+              </TinyIconBtn>
+              <div className="opacity-40 pointer-events-none" />
+              <div className="opacity-40 pointer-events-none" />
+              <TinyIconBtn title="Supprimer définitivement" onClick={() => doForceDelete(m.id)} className="border-rose-200 text-rose-700">
+                <FiTrash2 />
+              </TinyIconBtn>
             </>
           )}
         </div>
@@ -906,35 +1503,83 @@ const ArticleMediaManager = ({ articleId }) => {
     );
   };
 
-  const Row = (m) => {
-    const isImg = (m.mime_type || "").startsWith("image/");
+  const renderRow = (m) => {
+    const isImg = isImageMime(m.mime_type);
+    const thumb = mediaThumb(m);
+
     return (
-      <div className="grid grid-cols-[80px_1fr_auto] gap-3 items-center rounded-2xl border border-slate-200 bg-white p-3">
-        <div className="h-16 w-full rounded-xl overflow-hidden bg-slate-100 border cursor-pointer" title="Agrandir" onClick={() => isImg && openLightbox(m)}>
-          <img src={m.thumbnail_url || m.url} alt={m.alt_text?.fr || m.alt_text?.[0] || m.name} className="w-full h-full object-cover" />
+      <div key={m.id} className={`flex items-center gap-3 rounded-2xl border ${isSelected(m.id) ? "border-blue-400 ring-2 ring-blue-200" : "border-slate-200"} bg-white p-3`}>
+        {selectMode ? (
+          <button
+            title={isSelected(m.id) ? "Désélectionner" : "Sélectionner"}
+            onClick={() => toggleSelect(m.id)}
+            className={`w-9 h-9 rounded-xl border-2 flex items-center justify-center ${isSelected(m.id) ? "border-blue-400 text-blue-700" : "border-slate-300 text-slate-600"}`}
+          >
+            {isSelected(m.id) ? <FiCheckSquare /> : <FiSquare />}
+          </button>
+        ) : null}
+
+        <div
+          className="w-16 h-16 rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center"
+          title={isImg ? "Agrandir" : m.mime_type}
+        >
+          {thumb ? (
+            <img
+              src={thumb}
+              alt={m.name}
+              className="w-full h-full object-cover cursor-pointer"
+              onClick={() => isImg && openLightbox(m)}
+            />
+          ) : (
+            <a
+              href={mediaHref(m)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-2 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-[11px] font-semibold"
+            >
+              Ouvrir
+            </a>
+          )}
         </div>
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-slate-800 truncate">{m.name || "(sans nom)"}</div>
-          <div className="text-xs text-slate-500">
-            #{m.id} • {m.mime_type} • {fmtBytes(m.size)}
-            {m.dimensions?.width && m.dimensions?.height ? ` • ${m.dimensions.width}×${m.dimensions.height}` : ""}
-            {m.is_featured ? " • ⭐ Vedette" : ""}
-            {!m.is_active && !inTrash ? " • (Inactif)" : ""}
-            {inTrash ? " • (Supprimé)" : ""}
+
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-slate-800 truncate" title={m.name}>
+            {m.name || "(sans nom)"}
+          </div>
+          <div className="text-[12px] text-slate-500 truncate">
+            #{m.id} • {m.mime_type} • {fmtBytes(m.size)}{m.dimensions?.width && m.dimensions?.height ? ` • ${m.dimensions.width}×${m.dimensions.height}` : ""}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {m.is_featured && <Badge className="bg-amber-50 border-amber-200 text-amber-700"><FiStar className="mr-1" />Vedette</Badge>}
+            {!m.is_active && <Badge className="bg-slate-100 border-slate-300 text-slate-700">Inactif</Badge>}
+            <Badge className="bg-slate-50 border-slate-200 text-slate-700">ordre {m.sort_order ?? 0}</Badge>
           </div>
         </div>
+
         <div className="flex items-center gap-2">
-          {!inTrash ? (
+          {!trashMode ? (
             <>
-              <IconBtn title="Modifier" onClick={() => openEdit(m)}><FiEdit3 /></IconBtn>
-              <IconBtn title={m.is_active ? "Désactiver" : "Activer"} onClick={() => toggleActive(m)}>{m.is_active ? <FiToggleRight /> : <FiToggleLeft />}</IconBtn>
-              <IconBtn title={m.is_featured ? "Retirer vedette" : "Mettre vedette"} onClick={() => toggleFeatured(m)} variant="amber"><FiStar /></IconBtn>
-              <IconBtn title="Supprimer" onClick={() => onDelete(m)} variant="red"><FiTrash2 /></IconBtn>
+              <TinyIconBtn title="Modifier" onClick={() => askEdit(m)} className="border-blue-200 text-blue-700">
+                <FiEdit3 />
+              </TinyIconBtn>
+              <TinyIconBtn title={m.is_active ? "Désactiver" : "Activer"} onClick={() => doToggleActive(m)} className="border-blue-200 text-blue-700">
+                {m.is_active ? <FiToggleRight /> : <FiToggleLeft />}
+              </TinyIconBtn>
+              <TinyIconBtn title={m.is_featured ? "Retirer vedette" : "Mettre vedette"} onClick={() => doToggleFeatured(m)} className="border-blue-200 text-blue-700">
+                <FiStar className={m.is_featured ? "" : "opacity-50"} />
+              </TinyIconBtn>
+              <TinyIconBtn title="Supprimer" onClick={() => askDelete(m)} className="border-rose-200 text-rose-700">
+                <FiTrash2 />
+              </TinyIconBtn>
             </>
           ) : (
             <>
-              <IconBtn title="Restaurer" onClick={() => onRestore(m)}><FiRotateCw /></IconBtn>
-              <IconBtn title="Supprimer définitivement" onClick={() => onForceDelete(m)} variant="red"><FiTrash2 /></IconBtn>
+              <TinyIconBtn title="Restaurer" onClick={() => doRestore(m.id)} className="border-blue-200 text-blue-700">
+                <FiRotateCcw />
+              </TinyIconBtn>
+              <TinyIconBtn title="Supprimer définitivement" onClick={() => doForceDelete(m.id)} className="border-rose-200 text-rose-700">
+                <FiTrash2 />
+              </TinyIconBtn>
             </>
           )}
         </div>
@@ -945,7 +1590,24 @@ const ArticleMediaManager = ({ articleId }) => {
   return (
     <div className="w-full">
       {header}
-      {Filters}
+      {toolbar}
+
+      {activeFiltersCount > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {activePills.map(p => (
+            <FilterPill key={p.id} label={p.label} onClear={p.clear} />
+          ))}
+          <button
+            onClick={resetAllFilters}
+            className="ml-1 text-[11px] font-semibold underline text-blue-700"
+          >
+            Tout réinitialiser
+          </button>
+        </div>
+      )}
+
+      {filtersBlock}
+      {bulkBar}
 
       {loading ? (
         <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -962,32 +1624,35 @@ const ArticleMediaManager = ({ articleId }) => {
           <FiAlertTriangle className="w-4 h-4" />
           {err}
         </div>
-      ) : items.length === 0 ? (
+      ) : filteredItems.length === 0 ? (
         <div className="mt-6 rounded-2xl border-2 border-slate-200 bg-white px-4 py-6 text-center text-slate-600">
-          {inTrash ? "Aucun média dans la corbeille." : "Aucun média pour cet article."}
-          {!inTrash && (
+          {trashMode ? "Corbeille vide." : "Aucun média pour cet article."}
+          {!trashMode && (
             <div className="mt-3">
-              <IconBtn title="Ajouter un média" onClick={() => setUploadOpen(true)}>
+              <button
+                onClick={() => setUploadOpen(true)}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow"
+              >
                 <FiUpload />
-                <span className="hidden sm:inline text-[12px] font-semibold">Ajouter un média</span>
-              </IconBtn>
+                Ajouter un média
+              </button>
             </div>
           )}
         </div>
       ) : viewMode === "grid" ? (
         <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {items.map((m) => <Card key={m.id} {...m} />)}
+          {filteredItems.map(renderCard)}
         </div>
       ) : (
-        <div className="mt-6 space-y-3">
-          {items.map((m) => <Row key={m.id} {...m} />)}
+        <div className="mt-6 grid grid-cols-1 gap-3">
+          {filteredItems.map(renderRow)}
         </div>
       )}
 
       <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onUploaded={onUploaded} articleId={articleId} />
       <EditModal open={editOpen} media={current} onClose={() => setEditOpen(false)} onSaved={onSaved} />
       <Lightbox open={lightboxOpen} src={lightboxSrc} alt={lightboxAlt} onClose={() => setLightboxOpen(false)} />
-      <ConfirmDialog 
+      <ConfirmDialog
         open={confirmDialog.open}
         title={confirmDialog.title}
         message={confirmDialog.message}
@@ -1006,6 +1671,6 @@ export default ArticleMediaManager;
    Portal util
    ========================================================= */
 const ModalPortal = ({ children }) => {
-  const target = document.getElementById("modal-root") || document.body;
-  return createPortal(children, target);
+  const target = (typeof document !== 'undefined' && (document.getElementById("modal-root") || document.body)) || null;
+  return target ? createPortal(children, target) : null;
 };
