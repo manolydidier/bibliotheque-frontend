@@ -123,6 +123,7 @@ export async function fetchArticle(idOrSlug, opts = {}) {
       params,
       headers: { "Cache-Control": "no-store" },
     });
+    console.log(resp);
     
     return unwrapArticle(resp);
   } catch (error) {

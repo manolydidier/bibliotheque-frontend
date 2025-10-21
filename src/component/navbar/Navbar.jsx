@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  faSearch, faSignInAlt, faUserPlus, faUserCircle, faCog, faSignOutAlt,
+  faSignInAlt, faUserPlus, faUserCircle, faCog, faSignOutAlt,
   faFileAlt, faVideo, faPodcast, faSitemap, faBullseye, faUsers, faEnvelope,
   faChevronDown, faBell, faArrowRotateRight, faCheckDouble, faCommentDots,
   faKey, faUserShield, faNewspaper
@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
 import { logoutUser } from '../../features/auth/authActions';
 import LanguageSwitcher from '../langue/LanguageSwitcher';
+import ArticleSearchBox from './ArticleSearchBox';
 
 /* ========================= Utils ========================= */
 const getTokenGuard = () => {
@@ -37,19 +38,16 @@ const buildAvatarUrl = (rawUrl, updatedAt, baseStorage) => {
 const isAbsoluteUrl = (u) => /^https?:\/\//i.test(String(u || ''));
 const toFrontPath = (input) => {
   if (!input) return null;
-  // si c'est déjà un chemin relatif
   if (String(input).startsWith('/')) return input;
-  // si le back a renvoyé une URL absolue → garder seulement pathname+hash
   try {
     const u = new URL(input);
     return `${u.pathname}${u.search}${u.hash}`;
   } catch {
-    // on garde tel quel si on ne peut pas parser (rare)
     return input;
   }
 };
 
-// “dernière consultation” pour compter les non-lus
+// "dernière consultation" pour compter les non-lus
 const LS_KEY = (uid) => `act_seen_ts:${uid}`;
 const getLastSeenTs = (uid) => { try { return localStorage.getItem(LS_KEY(uid)); } catch { return null; } };
 const setLastSeenNow = (uid) => { try { localStorage.setItem(LS_KEY(uid), new Date().toISOString()); } catch {} };
@@ -64,7 +62,7 @@ const fetchJson = async (url, params = {}, token) => {
   return res.json();
 };
 
-// Icône selon type d’activité
+// Icône selon type d'activité
 const typeIcon = (type) => {
   switch (type) {
     case 'permission_changed': return faKey;
@@ -81,7 +79,6 @@ const buildActivityLink = (a) => {
 
   switch (a.type) {
     case 'article_created':
-      // 👉 toujours chemin relatif pour le router Vite
       return articleSlug ? `/articles/${articleSlug}` : null;
 
     case 'comment_approved': {
@@ -101,7 +98,6 @@ const buildActivityLink = (a) => {
       return '/settings';
 
     default:
-      // Dernier recours: si back a renvoyé une URL absolue → on la réécrit en chemin relatif
       if (a.url && isAbsoluteUrl(a.url)) {
         try {
           const u = new URL(a.url);
@@ -125,7 +121,6 @@ const buildPendingLink = (item) => {
     (item.type && String(item.type).includes('comment') && item.id) ||
     null;
 
-  // priorité à url/link si fournis par le back
   if (item.url)  return item.url;
   if (item.link) return item.link;
 
@@ -142,7 +137,7 @@ const timeAgo = (iso, t) => {
   if (!iso) return '';
   const d = new Date(iso);
   const diff = (Date.now() - d.getTime()) / 1000;
-  if (diff < 60) return t('just_now','à l’instant');
+  if (diff < 60) return t('just_now','à l\'instant');
   if (diff < 3600) return t('x_min_ago','il y a {{x}} min', { x: Math.floor(diff/60) });
   if (diff < 86400) return t('x_h_ago','il y a {{x}} h', { x: Math.floor(diff/3600) });
   return d.toLocaleDateString('fr-FR') + ' ' + d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
@@ -244,7 +239,7 @@ const Navbar = () => {
 
   /* ===== Panneau notifications façon FB ===== */
   const [notifOpen, setNotifOpen] = useState(false);
-  const [notifTab, setNotifTab] = useState('news'); // 'news' | 'pending'
+  const [notifTab, setNotifTab] = useState('news');
 
   // listes
   const [news, setNews] = useState({ items: [], page: 1, last: 1, loading: false, error: null });
@@ -253,10 +248,8 @@ const Navbar = () => {
   const openNotifications = async () => {
     setNotifOpen((v) => !v);
     if (!notifOpen) {
-      // première ouverture → charger les deux onglets (page 1)
       loadNews(1, true);
       loadPending(1, true);
-      // marquer comme lu côté client
       if (userId) { setLastSeenNow(userId); setNewCount(0); }
     }
   };
@@ -285,10 +278,8 @@ const Navbar = () => {
     const token = getTokenGuard();
     setPending((s) => ({ ...s, loading: true, error: null }));
     try {
-      // Endpoint listant les éléments à modérer
       const resp = await fetchJson(`${API_BASE_URL}/moderation/pending`, { per_page: 10, page }, token);
       const raw = Array.isArray(resp?.data) ? resp.data : [];
-      // on ne force pas ici; on construira l'URL fiable au rendu avec buildPendingLink + toFrontPath
       const items = raw.map(x => ({ ...x }));
       setPending({
         items: replace ? items : [...pending.items, ...items],
@@ -308,47 +299,121 @@ const Navbar = () => {
 
   // UI générale
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [activeSubmenu, setActiveSubmenu] = useState(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(window.innerWidth > 1024);
 
-  const searchRef = useRef(null);
+  // Références pour fermer les menus au clic extérieur
   const userProfileRef = useRef(null);
   const notifRef = useRef(null);
   const navRef = useRef(null);
   const burgerRef = useRef(null);
+  const submenuRefs = useRef([]);
 
+  // Gestion du resize avec état figé
   useEffect(() => {
     const handleResize = () => {
       const isNowDesktop = window.innerWidth > 1024;
       setIsDesktop(isNowDesktop);
       if (isNowDesktop) {
-        setIsMenuOpen(false); setActiveSubmenu(null); setIsProfileOpen(false);
+        setIsMenuOpen(false);
+      } else {
+        setActiveSubmenu(null);
+        setIsProfileOpen(false);
+        setNotifOpen(false);
       }
     };
+
     const handleClickOutside = (event) => {
-      if (searchRef.current && !searchRef.current.contains(event.target)) setIsSearchOpen(false);
-      if (userProfileRef.current && !userProfileRef.current.contains(event.target)) setIsProfileOpen(false);
-      if (notifRef.current && !notifRef.current.contains(event.target)) setNotifOpen(false);
+      if (userProfileRef.current && !userProfileRef.current.contains(event.target)) {
+        setIsProfileOpen(false);
+      }
+      
+      if (notifRef.current && !notifRef.current.contains(event.target)) {
+        setNotifOpen(false);
+      }
+      
       if (isMenuOpen && navRef.current && !navRef.current.contains(event.target)) {
-        if (burgerRef.current && !burgerRef.current.contains(event.target)) setIsMenuOpen(false);
+        if (burgerRef.current && !burgerRef.current.contains(event.target)) {
+          setIsMenuOpen(false);
+          setActiveSubmenu(null);
+        }
+      }
+      
+      if (isDesktop) {
+        const isClickInSubmenu = submenuRefs.current.some(ref => 
+          ref && ref.contains(event.target)
+        );
+        const isClickInNavLink = event.target.closest('.nav-links li');
+        
+        if (!isClickInSubmenu && !isClickInNavLink) {
+          setActiveSubmenu(null);
+        }
       }
     };
+
     window.addEventListener('resize', handleResize);
     document.addEventListener('mousedown', handleClickOutside);
-    return () => { window.removeEventListener('resize', handleResize); document.removeEventListener('mousedown', handleClickOutside); };
-  }, [isMenuOpen]);
+    
+    return () => { 
+      window.removeEventListener('resize', handleResize); 
+      document.removeEventListener('mousedown', handleClickOutside); 
+    };
+  }, [isMenuOpen, isDesktop]);
 
-  const toggleMenu = () => { setIsMenuOpen(!isMenuOpen); if (!isMenuOpen) { setActiveSubmenu(null); setIsProfileOpen(false); } };
-  const toggleProfile = () => setIsProfileOpen((v) => !v);
-  const toggleSearch = () => { setIsSearchOpen((v) => !v); if (!isSearchOpen && searchRef.current) searchRef.current.focus(); };
-  const toggleSubmenu = (i) => { if (!isDesktop) setActiveSubmenu(activeSubmenu === i ? null : i); };
-  const handleNavLinkClick = () => { if (!isDesktop) setIsMenuOpen(false); };
+  // Fonctions de toggle avec état figé
+  const toggleMenu = () => { 
+    setIsMenuOpen(!isMenuOpen); 
+    if (!isMenuOpen) { 
+      setActiveSubmenu(null); 
+      setIsProfileOpen(false);
+      setNotifOpen(false);
+    } 
+  };
+
+  const toggleProfile = () => {
+    setIsProfileOpen(!isProfileOpen);
+    if (!isProfileOpen) {
+      setNotifOpen(false);
+      if (!isDesktop) setIsMenuOpen(false);
+    }
+  };
+
+  const toggleSubmenu = (i) => { 
+    if (!isDesktop) {
+      setActiveSubmenu(activeSubmenu === i ? null : i);
+    }
+  };
+
+  const handleNavLinkClick = () => { 
+    if (!isDesktop) {
+      setIsMenuOpen(false);
+      setActiveSubmenu(null);
+    }
+  };
+
+  // Gestion hover pour desktop - état figé
+  const handleSubmenuHover = (index, isHovering) => {
+    if (isDesktop) {
+      if (isHovering) {
+        setActiveSubmenu(index);
+      } else {
+        setTimeout(() => {
+          setActiveSubmenu(null);
+        }, 150);
+      }
+    }
+  };
 
   // Déconnexion
   const handleLogout = async () => {
-    try { await dispatch(logoutUser(i18n.language)); setIsProfileOpen(false); setIsMenuOpen(false); navigate('/auth'); }
+    try { 
+      await dispatch(logoutUser(i18n.language)); 
+      setIsProfileOpen(false); 
+      setIsMenuOpen(false); 
+      setNotifOpen(false);
+      navigate('/auth'); 
+    }
     catch (e) { console.error('Logout failed:', e); }
   };
 
@@ -376,86 +441,132 @@ const Navbar = () => {
   return (
     <nav className="fixed top-0 left-0 w-full bg-gradient-to-r from-blue-900 to-blue-700 shadow-md flex justify-between items-center px-6 h-20 z-50">
       {/* Logo */}
-      <Link to="/" className="logo flex items-center gap-3">
+      <Link to="/" className="logo flex items-center gap-3 flex-shrink-0">
         <div className="logo-icon w-9 h-9 bg-blue-500 rounded-lg flex items-center justify-center text-white font-bold text-lg transition-all duration-500 hover:rotate-y-180">B</div>
         <span className="logo-text text-white text-2xl font-bold bg-gradient-to-r from-white to-blue-100 bg-clip-text text-transparent">BlueUI</span>
       </Link>
 
-      {/* Desktop nav */}
+      {/* Desktop nav - CORRECTION : Menu principal fixe */}
       {isDesktop && (
-        <ul className="nav-links flex gap-8 font-medium">
-          {navLinks.map((link, i) => (
-            <li key={i} className={`${link.submenu ? 'has-submenu relative' : ''}`}
-                onMouseEnter={() => link.submenu && setActiveSubmenu(i)}
-                onMouseLeave={() => link.submenu && setActiveSubmenu(null)}>
-              <Link to={link.path} className="flex items-center py-3 text-white hover:text-white">{link.name}</Link>
-              {link.submenu && (
-                <ul className={`submenu absolute top-full left-1/2 -translate-x-1/2 bg-white rounded-lg shadow-xl w-60 py-2 transition-all ${
-                  activeSubmenu === i ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible translate-y-2'
-                }`}>
-                  {link.submenu.map((sub, j) => (
-                    <li key={j}>
-                      <Link to={sub.path} className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-500 hover:bg-blue-50 transition-all">
-                        <FontAwesomeIcon icon={sub.icon} className="mr-3 text-blue-600" />{sub.name}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          ))}
-        </ul>
+        <div className="flex-1 flex justify-center">
+          <ul className="nav-links flex gap-8 font-medium mx-auto">
+            {navLinks.map((link, i) => (
+              <li 
+                key={i} 
+                className={`${link.submenu ? 'has-submenu relative' : ''}`}
+                onMouseEnter={() => link.submenu && handleSubmenuHover(i, true)}
+                onMouseLeave={() => link.submenu && handleSubmenuHover(i, false)}
+              >
+                <Link 
+                  to={link.path} 
+                  className="flex items-center py-3 text-white hover:text-white transition-colors whitespace-nowrap"
+                >
+                  {link.name}
+                </Link>
+                {link.submenu && (
+                  <div 
+                    ref={el => submenuRefs.current[i] = el}
+                    className={`submenu absolute top-full left-1/2 -translate-x-1/2 bg-white rounded-lg shadow-xl w-60 py-2 transition-all duration-200 border border-gray-100 ${
+                      activeSubmenu === i ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible translate-y-1 pointer-events-none'
+                    }`}
+                  >
+                    {link.submenu.map((sub, j) => (
+                      <div key={j}>
+                        <Link 
+                          to={sub.path} 
+                          className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-500 hover:bg-blue-50 transition-all"
+                          onClick={() => setActiveSubmenu(null)}
+                        >
+                          <FontAwesomeIcon icon={sub.icon} className="mr-3 text-blue-600 w-4" />
+                          <span className="flex-1">{sub.name}</span>
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {/* Mobile drawer */}
       {!isDesktop && (
         <>
-          <ul ref={navRef}
-              className={`fixed top-0 left-0 w-80 h-screen bg-white flex-col items-start p-24 gap-0 shadow-lg transform transition-all duration-300 z-40 ${
-                isMenuOpen ? 'translate-x-0' : '-translate-x-full'
-              }`}>
+          <ul 
+            ref={navRef}
+            className={`fixed top-0 left-0 w-80 h-screen bg-white flex flex-col items-start p-6 pt-20 gap-0 shadow-lg transform transition-all duration-300 z-40 ${
+              isMenuOpen ? 'translate-x-0' : '-translate-x-full'
+            }`}
+          >
             {navLinks.map((link, i) => (
-              <li key={i} className={`${link.submenu ? 'has-submenu relative' : ''} w-full border-b border-gray-100`}>
+              <li key={i} className="w-full border-b border-gray-100 last:border-b-0">
                 {link.submenu ? (
                   <>
-                    <Link to={link.path} className={`flex items-center py-3 text-gray-800 ${!isDesktop && link.submenu ? 'justify-between' : ''}`}
-                          onClick={(e)=>{e.preventDefault(); toggleSubmenu(i);}}>
-                      {link.name}
-                      <FontAwesomeIcon icon={faChevronDown} className={`ml-2 transition-transform ${activeSubmenu === i ? 'rotate-180' : ''}`} />
-                    </Link>
-                    <ul className={`w-full overflow-hidden transition-all duration-300 bg-blue-50 bg-opacity-30 rounded-lg m-2 ${
-                      activeSubmenu === i ? 'max-h-96 py-2' : 'max-h-0'
-                    }`}>
-                      {link.submenu.map((sub,j)=>(
-                        <li key={j}>
-                          <Link to={sub.path} className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-500 hover:bg-blue-50 transition-all" onClick={handleNavLinkClick}>
-                            <FontAwesomeIcon icon={sub.icon} className="mr-3 text-blue-600" />{sub.name}
+                    <div 
+                      className={`flex items-center justify-between py-4 text-gray-800 cursor-pointer ${
+                        activeSubmenu === i ? 'bg-blue-50' : ''
+                      }`}
+                      onClick={() => toggleSubmenu(i)}
+                    >
+                      <span className="font-medium">{link.name}</span>
+                      <FontAwesomeIcon 
+                        icon={faChevronDown} 
+                        className={`ml-2 transition-transform duration-200 ${
+                          activeSubmenu === i ? 'rotate-180' : ''
+                        }`} 
+                      />
+                    </div>
+                    <div 
+                      className={`overflow-hidden transition-all duration-300 bg-blue-50 bg-opacity-30 rounded-lg mx-2 ${
+                        activeSubmenu === i ? 'max-h-96 py-2' : 'max-h-0'
+                      }`}
+                    >
+                      {link.submenu.map((sub,j) => (
+                        <div key={j}>
+                          <Link 
+                            to={sub.path} 
+                            className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-500 hover:bg-blue-50 transition-all"
+                            onClick={handleNavLinkClick}
+                          >
+                            <FontAwesomeIcon icon={sub.icon} className="mr-3 text-blue-600 w-4" />
+                            <span className="flex-1">{sub.name}</span>
                           </Link>
-                        </li>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   </>
                 ) : (
-                  <Link to={link.path} className="flex items-center py-3 text-gray-800" onClick={handleNavLinkClick}>{link.name}</Link>
+                  <Link 
+                    to={link.path} 
+                    className="flex items-center py-4 text-gray-800 font-medium hover:text-blue-500 transition-colors"
+                    onClick={handleNavLinkClick}
+                  >
+                    {link.name}
+                  </Link>
                 )}
               </li>
             ))}
           </ul>
-          <div className={`fixed top-0 left-0 w-full h-full bg-black bg-opacity-50 backdrop-blur-sm transition-all z-30 ${
+          
+          {/* Overlay */}
+          <div 
+            className={`fixed top-0 left-0 w-full h-full bg-black bg-opacity-50 backdrop-blur-sm transition-all z-30 ${
               isMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'
-            }`} onClick={toggleMenu}/>
+            }`} 
+            onClick={toggleMenu}
+          />
         </>
       )}
 
-      {/* Right section */}
-      <div className="flex items-center gap-6">
-        {/* Search */}
-        <div className="relative mt-2">
-          <button className="text-white text-lg hover:text-blue-200" onClick={toggleSearch}><FontAwesomeIcon icon={faSearch} /></button>
-          <input type="text" ref={searchRef}
-            className={`fixed top-24 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] max-w-md px-5 py-4 rounded-lg border-none shadow-lg transition-all ${
-              isSearchOpen ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible translate-y-2'
-            }`} placeholder={t('search')} />
+      {/* Right section - CORRECTION : Position fixe */}
+      <div className="flex items-center gap-4 flex-shrink-0">
+        {/* Search - CORRECTION : Position absolue pour ne pas déplacer le menu */}
+        <div className="relative">
+          <ArticleSearchBox 
+            placeholder={t('search')}
+            perPage={8}
+          />
         </div>
 
         {/* Lang */}
@@ -464,43 +575,44 @@ const Navbar = () => {
         {/* Notifs bell */}
         {isAuthenticated && (
           <div className="relative" ref={notifRef}>
-            <button onClick={openNotifications}
-              className="relative text-white hover:text-blue-200">
+            <button 
+              onClick={openNotifications}
+              className="relative text-white hover:text-blue-200 transition-colors p-2 rounded-full hover:bg-white/10"
+            >
               <FontAwesomeIcon icon={faBell} />
               {(newCount > 0 || pendingCount > 0) && (
-                <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[11px] font-semibold rounded-full min-w-5 h-5 px-1 flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-semibold rounded-full min-w-4 h-4 flex items-center justify-center">
                   {(newCount + pendingCount) > 99 ? '99+' : (newCount + pendingCount)}
                 </span>
               )}
             </button>
 
-            {/* Panel type “FB” */}
+            {/* Panel notifications */}
             {notifOpen && (
-              <div className="absolute right-0 mt-3 w-96 bg-white rounded-xl shadow-2xl ring-1 ring-black/5 overflow-hidden">
-                {/* Header */}
-                <div className="px-4 py-3 flex items-center justify-between border-b">
+              <div className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-2xl ring-1 ring-black/5 overflow-hidden z-50">
+                <div className="px-4 py-3 flex items-center justify-between border-b border-gray-100">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold">{t('notifications','Notifications')}</span>
+                    <span className="font-semibold text-gray-900">{t('notifications','Notifications')}</span>
                     {newCount > 0 && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{newCount}</span>}
                     {pendingCount > 0 && <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">{pendingCount} {t('to_moderate','à modérer')}</span>}
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={()=>{ setNotifOpen(false); navigate('/settings'); }}
-                            className="text-xs text-blue-600 hover:underline">
+                    <button 
+                      onClick={()=>{ setNotifOpen(false); navigate('/settings'); }}
+                      className="text-xs text-blue-600 hover:underline"
+                    >
                       {t('see_all','Tout voir')}
                     </button>
-                    <button onClick={markAllRead}
-                            className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1">
-                      <FontAwesomeIcon icon={faCheckDouble} /> {t('mark_all_read','Tout marquer lu')}
-                    </button>
-                    <button onClick={()=>{ loadNews(1,true); loadPending(1,true); }}
-                            className="text-xs text-gray-500 hover:text-gray-700">
-                      <FontAwesomeIcon icon={faArrowRotateRight} />
+                    <button 
+                      onClick={markAllRead}
+                      className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+                    >
+                      <FontAwesomeIcon icon={faCheckDouble} size="xs" /> 
+                      {t('mark_all_read','Tout marquer lu')}
                     </button>
                   </div>
                 </div>
 
-                {/* Tabs */}
                 <div className="px-4 pt-3 flex gap-2">
                   <button
                     className={`px-3 py-1.5 rounded-full text-sm ${notifTab==='news' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
@@ -516,13 +628,11 @@ const Navbar = () => {
                   </button>
                 </div>
 
-                {/* Lists */}
                 <div className="max-h-96 overflow-auto">
                   {notifTab==='news' ? (
                     <>
                       {news.items.length === 0 && !news.loading && <div className="p-4 text-sm text-gray-500">{t('no_activity','Aucune activité')}</div>}
                       {news.items.map((a)=> {
-                        // 👉 lien front robuste
                         const href = toFrontPath(buildActivityLink(a) || a.url || a.link) || '/settings';
                         const isRel = String(href).startsWith('/');
                         return isRel ? (
@@ -613,11 +723,17 @@ const Navbar = () => {
 
         {/* Auth (non connecté) */}
         {!isAuthenticated && (
-          <div className="flex gap-3">
-            <Link to="/auth" className="border border-white/30 rounded-md px-2 py-1 text-white hover:bg-white/10 hover:border-white/50">
+          <div className="flex gap-2">
+            <Link 
+              to="/auth" 
+              className="border border-white/30 rounded-lg px-3 py-2 text-white hover:bg-white/10 hover:border-white/50 transition-colors"
+            >
               <FontAwesomeIcon icon={faSignInAlt} />
             </Link>
-            <Link to="/auth" className="bg-blue-500 text-white rounded-md px-2 py-1 hover:bg-blue-600">
+            <Link 
+              to="/auth" 
+              className="bg-blue-500 text-white rounded-lg px-3 py-2 hover:bg-blue-600 transition-colors"
+            >
               <FontAwesomeIcon icon={faUserPlus} />
             </Link>
           </div>
@@ -629,32 +745,64 @@ const Navbar = () => {
             <img
               src={avatarSrc}
               alt="User"
-              className="w-10 h-10 rounded-full border-2 border-white/30 hover:border-blue-500 cursor-pointer object-cover"
+              className="w-10 h-10 rounded-full border-2 border-white/30 hover:border-blue-500 cursor-pointer object-cover transition-colors"
               onClick={toggleProfile}
               onError={handleImgError}
             />
-            <div className={`absolute top-full right-0 bg-white rounded-lg shadow-lg w-56 py-2 transition-all ${
-              isProfileOpen ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible translate-y-2'
-            }`}>
-              <Link to="/settings" className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-500 hover:bg-blue-50" onClick={toggleProfile}>
-                <FontAwesomeIcon icon={faUserCircle} className="mr-3 text-blue-600" /> {t('profile')}
+            <div 
+              className={`absolute top-full right-0 bg-white rounded-lg shadow-xl w-56 py-2 transition-all duration-200 border border-gray-100 ${
+                isProfileOpen ? 'opacity-100 visible translate-y-2' : 'opacity-0 invisible translate-y-1 pointer-events-none'
+              }`}
+            >
+              <Link 
+                to="/settings" 
+                className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-500 hover:bg-blue-50 transition-all"
+                onClick={() => setIsProfileOpen(false)}
+              >
+                <FontAwesomeIcon icon={faUserCircle} className="mr-3 text-blue-600 w-4" />
+                <span className="flex-1">{t('profile')}</span>
               </Link>
-              <Link to="/articlescontroler" className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-500 hover:bg-blue-50" onClick={toggleProfile}>
-                <FontAwesomeIcon icon={faCog} className="mr-3 text-blue-600" /> {t('settings')}
+              <Link 
+                to="/articlescontroler" 
+                className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-500 hover:bg-blue-50 transition-all"
+                onClick={() => setIsProfileOpen(false)}
+              >
+                <FontAwesomeIcon icon={faCog} className="mr-3 text-blue-600 w-4" />
+                <span className="flex-1">{t('settings')}</span>
               </Link>
-              <button onClick={handleLogout} className="w-full flex items-center px-6 py-3 text-gray-800 hover:text-blue-500 hover:bg-blue-50 text-left">
-                <FontAwesomeIcon icon={faSignOutAlt} className="mr-3 text-blue-600" /> {t('logout')}
+              <button 
+                onClick={handleLogout} 
+                className="w-full flex items-center px-6 py-3 text-gray-800 hover:text-blue-500 hover:bg-blue-50 transition-all text-left"
+              >
+                <FontAwesomeIcon icon={faSignOutAlt} className="mr-3 text-blue-600 w-4" />
+                <span className="flex-1">{t('logout')}</span>
               </button>
             </div>
           </div>
         )}
 
-        {/* Burger */}
+        {/* Burger menu */}
         {!isDesktop && (
-          <div ref={burgerRef} className="flex flex-col justify-between w-7 h-5 cursor-pointer relative z-50" onClick={toggleMenu}>
-            <div className={`h-1 bg-white rounded transition-all ${isMenuOpen ? 'rotate-45 translate-y-2' : ''}`} />
-            <div className={`h-1 bg-white rounded transition-all ${isMenuOpen ? 'opacity-0 scale-x-0' : ''}`} />
-            <div className={`h-1 bg-white rounded transition-all ${isMenuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
+          <div 
+            ref={burgerRef} 
+            className="flex flex-col justify-between w-7 h-5 cursor-pointer relative z-50 ml-2" 
+            onClick={toggleMenu}
+          >
+            <div 
+              className={`h-0.5 bg-white rounded transition-all ${
+                isMenuOpen ? 'rotate-45 translate-y-2 bg-blue-500' : 'bg-white'
+              }`} 
+            />
+            <div 
+              className={`h-0.5 bg-white rounded transition-all ${
+                isMenuOpen ? 'opacity-0 scale-x-0' : 'opacity-100 scale-x-100'
+              }`} 
+            />
+            <div 
+              className={`h-0.5 bg-white rounded transition-all ${
+                isMenuOpen ? '-rotate-45 -translate-y-2 bg-blue-500' : 'bg-white'
+              }`} 
+            />
           </div>
         )}
       </div>

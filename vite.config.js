@@ -4,7 +4,10 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
-
+  
+optimizeDeps: {
+    include: ["mammoth/mammoth.browser"],
+  },
   
   resolve: {
     alias: {

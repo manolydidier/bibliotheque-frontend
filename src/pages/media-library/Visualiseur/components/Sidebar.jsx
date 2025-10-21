@@ -1,5 +1,5 @@
 // src/media-library/Sidebar.jsx
-import React from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import {
   FaFolderOpen,
   FaSearch,
@@ -9,15 +9,171 @@ import {
   FaStar,
   FaFile,
   FaTimes,
+  FaBackspace,
 } from "react-icons/fa";
 import SimilarList from "./SimilarList";
 
-/**
- * Sidebar
- * - Design glassmorphism
- * - Animations/micro-interactions
- * - Sélection d’un fichier liée à onSelectFile(f)
- */
+/* =========================================================
+   Utils recherche (autonome)
+   ========================================================= */
+function normalize(str = "") {
+  try {
+    return String(str)
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .toLowerCase();
+  } catch {
+    return String(str).toLowerCase();
+  }
+}
+
+function parseSearchQuery(raw = "") {
+  const q = (raw || "").trim();
+  if (!q) return { tokens: {}, text: "" };
+
+  const parts = q.split(/\s+/);
+  const tokens = {};
+  const rest = [];
+
+  for (const p of parts) {
+    const m = /^([a-z_]+):(.*)$/i.exec(p);
+    if (m) {
+      const k = normalize(m[1]);
+      const v = m[2].trim();
+      if (v !== "") tokens[k] = v;
+    } else {
+      rest.push(p);
+    }
+  }
+  return { tokens, text: rest.join(" ").trim() };
+}
+
+function coerceTokenFilters(tokens = {}) {
+  const t = Object.fromEntries(
+    Object.entries(tokens).map(([k, v]) => [normalize(k), String(v).trim()])
+  );
+
+  const type = t.type || t.ty || t.t || ""; // image|video|document|pdf|word|excel|ppt
+  const actif = t.actif ?? t.active ?? t.is_active ?? "";
+  const vedette = t.vedette ?? t.featured ?? t.is_featured ?? "";
+
+  const toBool = (x) => {
+    const n = normalize(String(x));
+    if (["1", "oui", "true", "vrai", "yes", "y"].includes(n)) return true;
+    if (["0", "non", "false", "faux", "no", "n"].includes(n)) return false;
+    return null;
+  };
+
+  return {
+    type, // string
+    is_active: toBool(actif), // true|false|null
+    is_featured: toBool(vedette), // true|false|null
+    mime: t.mime || "", // ex: application/pdf
+    ext: t.ext || "", // ex: pdf, jpg
+    id: t.id || "", // substring sur id
+  };
+}
+
+/** Mise en évidence du match dans un texte (texte libre uniquement) */
+function Highlight({ text, query }) {
+  if (!query || !text) return <>{text}</>;
+  const { text: plain } = parseSearchQuery(query);
+  if (!plain) return <>{text}</>;
+
+  const raw = String(text);
+  const nText = normalize(raw);
+  const nQ = normalize(plain);
+  const idx = nText.indexOf(nQ);
+  if (idx === -1) return <>{raw}</>;
+
+  const start = raw.slice(0, idx);
+  const middle = raw.slice(idx, idx + plain.length);
+  const end = raw.slice(idx + plain.length);
+  return (
+    <>
+      {start}
+      <mark className="bg-amber-200/70 rounded px-0.5">{middle}</mark>
+      {end}
+    </>
+  );
+}
+
+/** Filtrage combiné (tokens + texte libre) */
+function matchesQuery(media, rawQuery) {
+  if (!rawQuery) return true;
+
+  const { tokens, text } = parseSearchQuery(rawQuery);
+  const tk = coerceTokenFilters(tokens);
+
+  // --- 1) Filtres tokenisés ---
+  if (tk.type) {
+    const t = normalize(tk.type);
+    const mtype = normalize(media?.type || "");
+    // mapping simple
+    const map = {
+      pdf: "pdf",
+      word: "word",
+      excel: "excel",
+      ppt: "ppt",
+      image: "image",
+      video: "video",
+      document: "document",
+    };
+    const expected = map[t] || t;
+    if (expected && !mtype.includes(expected)) return false;
+  }
+
+  if (tk.is_active != null && media?.is_active != null) {
+    if (Boolean(media.is_active) !== tk.is_active) return false;
+  }
+
+  // supporte indifféremment is_featured/favorite
+  const isFeatured = media?.is_featured ?? media?.favorite ?? false;
+  if (tk.is_featured != null) {
+    if (Boolean(isFeatured) !== tk.is_featured) return false;
+  }
+
+  if (tk.mime && media?.mime_type) {
+    const nm = normalize(media.mime_type);
+    if (!nm.includes(normalize(tk.mime))) return false;
+  }
+
+  if (tk.ext) {
+    const ext = normalize(String(tk.ext).replace(/^\./, ""));
+    const nameish = `${media?.filename || ""} ${media?.original_name || ""} ${
+      media?.title || media?.name || ""
+    }`.toLowerCase();
+    const urlish = `${media?.fileUrl || media?.url || ""}`.toLowerCase();
+    const ends = new RegExp(`\\.${ext}(\\s|$)`).test(nameish) || urlish.endsWith(`.${ext}`);
+    if (!ends) return false;
+  }
+
+  if (tk.id) {
+    const mid = String(media?.id || "");
+    if (!mid.includes(String(tk.id))) return false;
+  }
+
+  // --- 2) Texte libre résiduel ---
+  const nQ = normalize(text);
+  if (!nQ) return true;
+
+  const haystacks = [
+    media?.title,
+    media?.name,
+    media?.filename,
+    media?.original_name,
+    media?.mime_type,
+    ...(Array.isArray(media?.tags) ? media.tags : []),
+  ]
+    .filter(Boolean)
+    .map(normalize);
+
+  return haystacks.some((h) => h.includes(nQ));
+}
+
+/* =========================================================
+   Sidebar avec recherche enrichie
+   ========================================================= */
 export default function Sidebar({
   open,
   toggle,
@@ -35,6 +191,38 @@ export default function Sidebar({
   iconBgForType,
   toAbsolute,
 }) {
+  const [query, setQuery] = useState("");
+
+  /** Liste triée + filtrée */
+  const sortedFiltered = useMemo(() => {
+    const list = Array.isArray(mediaList) ? mediaList.slice() : [];
+    // tri sur title/name/filename
+    list.sort((a, b) => {
+      const aa = normalize(a?.title || a?.name || a?.filename || a?.original_name || "");
+      const bb = normalize(b?.title || b?.name || b?.filename || b?.original_name || "");
+      return aa.localeCompare(bb, "fr");
+    });
+    // filtre (tokens + texte libre)
+    return list.filter((m) => matchesQuery(m, query));
+  }, [mediaList, query]);
+
+  const handleSelect = useCallback(
+    (f) => {
+      onSelectFile?.(f);
+    },
+    [onSelectFile]
+  );
+
+  const effectiveCount = useMemo(
+    () => (query ? sortedFiltered.length : mediaList.length),
+    [query, sortedFiltered.length, mediaList.length]
+  );
+
+  // Feedback UX : tokens détectés
+  const { tokens } = useMemo(() => parseSearchQuery(query), [query]);
+  const coerced = useMemo(() => coerceTokenFilters(tokens), [tokens]);
+  const hasTokens = Object.keys(tokens).length > 0;
+
   return (
     <div
       className={`sidebar pt-4 overflow-auto w-72 lg:w-80 bg-gradient-to-br from-white/80 via-white/75 to-slate-50/80 backdrop-blur-2xl shadow-[0_8px_32px_0_rgba(31,38,135,0.15)] border-r border-white/50 flex-shrink-0 transition-all duration-500 ease-in-out ${
@@ -47,7 +235,7 @@ export default function Sidebar({
           <div className="mr-3 p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg">
             <FaFolderOpen className="text-white text-lg" />
           </div>
-        <span className="flex-1">
+          <span className="flex-1">
             Bibliothèque
             {typeof mediaCount === "number" && (
               <span className="ml-2 text-sm font-normal text-slate-500 bg-slate-100/80 px-3 py-1 rounded-full">
@@ -61,10 +249,47 @@ export default function Sidebar({
         <div className="mt-6 relative group">
           <input
             type="text"
-            placeholder="Rechercher..."
-            className="w-full px-4 py-3.5 pl-12 border border-slate-200/60 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400/60 bg-white/90 backdrop-blur-sm transition-all duration-300 text-sm placeholder:text-slate-400 shadow-sm hover:shadow-md group-hover:border-slate-300/70"
+            placeholder="Rechercher… (ex: type:image actif:1 vedette:0 ext:pdf mot-clef)"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full pl-12 pr-10 py-3.5 border border-slate-200/60 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400/60 bg-white/90 backdrop-blur-sm transition-all duration-300 text-sm placeholder:text-slate-400 shadow-sm hover:shadow-md group-hover:border-slate-300/70"
           />
           <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-all duration-300 group-focus-within:text-blue-500 group-focus-within:scale-110" />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              title="Effacer"
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors p-1 rounded-md hover:bg-slate-100"
+            >
+              <FaBackspace />
+            </button>
+          )}
+
+          {(query || hasTokens) && (
+            <div className="mt-2 text-xs text-slate-500 space-y-1">
+              {query && (
+                <div>
+                  {effectiveCount} résultat{effectiveCount > 1 ? "s" : ""} · filtre : “{query}”
+                </div>
+              )}
+              {hasTokens && (
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(coerced)
+                    .filter(([_, v]) => v !== "" && v != null)
+                    .map(([k, v]) => (
+                      <span
+                        key={k}
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-200"
+                        title={`token: ${k}`}
+                      >
+                        {k}: {String(v)}
+                      </span>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -77,30 +302,33 @@ export default function Sidebar({
               <span className="mr-2.5 p-1.5 bg-gradient-to-br from-blue-500/10 to-indigo-600/10 rounded-lg">
                 <FaClock className="text-blue-600 text-sm" />
               </span>
-              Fichiers liés
+              Fichiers
+              {query ? " (filtrés)" : " liés"}
             </h3>
-            {mediaList.length > 0 && (
-              <span className="text-xs text-slate-500 bg-slate-100/60 px-2.5 py-1 rounded-full font-medium">
-                {mediaList.length}
-              </span>
-            )}
+            <span className="text-xs text-slate-500 bg-slate-100/60 px-2.5 py-1 rounded-full font-medium">
+              {effectiveCount}
+            </span>
           </div>
 
           <div className="space-y-2.5">
-            {mediaList.length ? (
-              mediaList.map((f, idx) => {
+            {sortedFiltered.length ? (
+              sortedFiltered.map((f, idx) => {
                 const isActive = selectedFile?.id === f.id;
+                const title = f?.title || f?.name || f?.filename || "Sans titre";
+                const metaLeft = f?.size;
+                const metaRight = f?.date;
+
                 return (
                   <div
                     key={f.id ?? `media-${idx}`}
                     role="button"
                     tabIndex={0}
-                    onClick={() => onSelectFile?.(f)}
+                    onClick={() => handleSelect(f)}
                     onKeyDown={(e) => {
                       const k = e.key?.toLowerCase();
                       if (k === "enter" || k === " ") {
                         e.preventDefault();
-                        onSelectFile?.(f);
+                        handleSelect(f);
                       }
                     }}
                     className={`p-4 rounded-xl cursor-pointer flex items-center transition-all duration-300 border group outline-none ${
@@ -110,20 +338,36 @@ export default function Sidebar({
                     }`}
                   >
                     <div
-                      className={`w-11 h-11 ${iconBgForType(
-                        f.type
-                      )} rounded-xl flex items-center justify-center mr-3.5 transition-all duration-300 group-hover:scale-110 group-hover:rotate-3 shadow-sm`}
+                      className={`w-11 h-11 ${iconBgForType?.(f.type)} rounded-xl flex items-center justify-center mr-3.5 transition-all duration-300 group-hover:scale-110 group-hover:rotate-3 shadow-sm`}
                     >
-                      {iconForType(f.type, "text-xl")}
+                      {iconForType?.(f.type, "text-xl")}
                     </div>
 
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-slate-800 truncate group-hover:text-slate-900">
-                        {f.title}
+                        <Highlight text={title} query={query} />
                       </p>
-                      <p className="text-xs text-slate-500 mt-0.5 font-normal">
-                        {f.size} • {f.date}
+                      <p className="text-xs text-slate-500 mt-0.5 font-normal truncate">
+                        {metaLeft ? `${metaLeft} • ` : ""}
+                        {metaRight || ""}
                       </p>
+                      {!!(Array.isArray(f?.tags) && f.tags.length) && (
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {f.tags.slice(0, 4).map((t, i) => (
+                            <span
+                              key={`${t}-${i}`}
+                              className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100/70 text-slate-600 border border-slate-200/60"
+                            >
+                              <Highlight text={t} query={query} />
+                            </span>
+                          ))}
+                          {f.tags.length > 4 && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-200/60">
+                              +{f.tags.length - 4}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {f.favorite && (
@@ -132,6 +376,22 @@ export default function Sidebar({
                   </div>
                 );
               })
+            ) : query ? (
+              <div className="text-sm text-slate-500 py-10 text-center bg-gradient-to-br from-slate-50/70 to-slate-100/50 rounded-2xl border border-slate-200/40 backdrop-blur-sm">
+                <FaFile className="mx-auto mb-3 text-3xl text-slate-300" />
+                <p className="font-medium">Aucun média trouvé</p>
+                <p className="text-xs text-slate-400 mt-1 mb-4">
+                  Essayez un autre mot-clé ou effacez la recherche.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border border-slate-300/70 text-slate-700 bg-white/80 hover:bg-slate-50 hover:border-slate-400 transition-all"
+                >
+                  <FaTimes />
+                  Effacer le filtre
+                </button>
+              </div>
             ) : (
               <div className="text-sm text-slate-500 py-16 text-center bg-gradient-to-br from-slate-50/70 to-slate-100/50 rounded-2xl border border-slate-200/40 backdrop-blur-sm">
                 <FaFile className="mx-auto mb-3 text-3xl text-slate-300" />

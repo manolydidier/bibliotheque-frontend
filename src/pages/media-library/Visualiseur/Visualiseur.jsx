@@ -9,7 +9,9 @@ import Toolbar from "./components/Toolbar";
 import Tabs from "./components/Tabs";
 import TagList, { TagPill } from "./components/TagList";
 import { KpiCard, ChartCard, EmptyChart } from "./components/Cards";
-import FilePreview from "./FilePreview/FilePreview";
+import FilePreview from "./FilePreview/FilePreview";  
+import QuickPreviewModal from "./QuickPreviewModal";
+
 import {
   setAuthError,
   clearAuthError,
@@ -43,8 +45,14 @@ import Toaster from "../../../component/toast/Toaster";
 import RatingModal, { RateButton } from "../RatingModal";
 import PasswordModal from "../components/PasswordModal";
 import { getStoredPassword, setStoredPassword } from "../utils/passwordGate";
-import { FiCalendar, FiClock, FiTag } from "react-icons/fi";
+import { FiCalendar, FiClock, FiTag, FiSearch, FiFilter, FiChevronDown, FiChevronUp, FiGrid, FiList, FiX, FiStar } from "react-icons/fi";
 import SeoHead from "../../../services/SeoHead";
+
+/* === nouveaux imports de viewers === */
+import PdfPreview from "./FilePreview/PdfFilePreview";
+import WordPreview from "./FilePreview/WordPreview";
+import PowerPointPreview from "./FilePreview/PowerPointPreview";
+// import MapPreview from "./FilePreview/MapPreview";
 
 /* ---------------- Helpers ---------------- */
 const sanitizeParam = (x) => {
@@ -88,7 +96,7 @@ const primaryMediaUrl = (art) => {
   return raw ? toAbsolute(raw) : null;
 };
 
-// Image de fond “édition” (plusieurs conventions supportées côté Laravel)
+// Image de fond “édition”
 const backgroundMediaUrl = (art) => {
   if (!art) return null;
   const cand =
@@ -143,6 +151,8 @@ const inferTypeFromUrl = (url) => {
   if (/\.(docx?|rtf)$/.test(s)) return "word";
   if (/\.(png|jpe?g|gif|webp|svg|avif)$/.test(s)) return "image";
   if (/\.(mp4|webm|ogg|mov)$/i.test(s)) return "video";
+  if (/\.(pptx?|ppsx?)$/.test(s)) return "ppt";
+  if (s.endsWith(".geojson") || s.endsWith(".json") || s.endsWith(".zip")) return "map"; // .zip shapefile
   return "other";
 };
 
@@ -360,8 +370,32 @@ export default function Visualiseur() {
   const [ratingLoaded, setRatingLoaded] = useState(false);
   const previewRef = useRef(null);
 
+  // Aperçu rapide (modal indépendant des Tabs)
+  const [qpOpen, setQpOpen] = useState(false);
+  const [qpFile, setQpFile] = useState(null);
+
   /* ------- Actions ------- */
-  const openInNew = () => { const u = selectedFile?.fileUrl || primaryMediaUrl(article); if (u) window.open(u, "_blank", "noopener,noreferrer"); };
+    // Construit un "article-like" avec le média en tête (pour FilePreview)
+  const buildArticleWith = useCallback((m) => {
+    if (!article || !m) return article;
+    return {
+      ...article,
+      media: [{ url: m.fileUrl, mime: m.mime_type }, ...(article.media || [])],
+      featured_image: undefined,
+      title: m.title || article.title,
+    };
+  }, [article]);
+  const openInNew = useCallback(() => {
+    const m = selectedFile
+      ? selectedFile
+      : (primaryMediaUrl(article)
+          ? { fileUrl: primaryMediaUrl(article), title: article?.title || "Pièce jointe" }
+          : null);
+    if (!m) return;
+    setQpFile(buildArticleWith(m));
+    setQpOpen(true);
+  }, [selectedFile, article, buildArticleWith]);
+
   const downloadCurrent = () => {
     const u = selectedFile?.fileUrl || primaryMediaUrl(article);
     if (!u) return;
@@ -369,6 +403,21 @@ export default function Visualiseur() {
     a.href = u; a.download = "";
     document.body.appendChild(a); a.click(); a.remove();
   };
+
+// Détermine le type à partir du mime OU de l'extension
+const typeFromMimeOrExt = (mime, url = "") => {
+  const m = (mime || "").toLowerCase();
+  const s = (url || "").toLowerCase();
+
+  if (m.includes("pdf") || s.endsWith(".pdf")) return "pdf";
+  if (m.includes("presentation") || /\.(pptx?|ppsx?)$/.test(s)) return "ppt";
+  if (m.includes("spreadsheet") || /\.(xlsx?|csv)$/.test(s)) return "excel";
+  if (m.includes("word") || m.includes("msword") || /\.(docx?|rtf)$/.test(s)) return "word";
+  if (m.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg|avif)$/.test(s)) return "image";
+  if (m.startsWith("video/") || /\.(mp4|webm|ogg|mov)$/i.test(s)) return "video";
+  return "other";
+};
+
 
   /* ------- Unlock ------- */
   async function handleUnlock(password) {
@@ -525,11 +574,6 @@ export default function Visualiseur() {
     }
   }, [article, me, meLoading]);
 
-  useEffect(() => {
-    if (meLoading) return;
-    // debug logs if needed
-  }, [me, meLoading, token]);
-
   useEffect(() => {}, [article?.visibility]);
 
   /* ------- Ratings summary ------- */
@@ -573,70 +617,41 @@ export default function Visualiseur() {
   }, [article?.id]);
 
   /* ------- Media list ------- */
-  const mediaList = useMemo(() => {
-    const medias = Array.isArray(article?.media) ? article.media : [];
-    const bgEdit = backgroundMediaUrl(article);
-    const seen = new Set();
-    const list = [];
 
-    if (bgEdit) {
-      list.push({
-        id: "bg-edit",
-        title: "Image de fond (édition)",
-        type: "image",
-        size: "—",
-        date: formatDate(article?.published_at),
+const mediaList = useMemo(() => {
+  const list = Array.isArray(article?.media) ? article.media : [];
+
+  return list
+    .filter(m => !!m?.url)
+    .map(m => {
+      const url = toAbsolute(m.url); // garde ton toAbsolute
+      const title =
+        m.name?.trim?.() ||
+        m.original_filename?.trim?.() ||
+        m.filename?.trim?.() ||
+        article?.title?.trim?.() ||
+        "Sans titre";
+
+      return {
+        id: m.id,
+        title,                       // <-- nom propre du média
+        type: typeFromMimeOrExt(m.mime_type, url),
+        fileUrl: url,
+        thumbnail: m.thumbnail_url ? toAbsolute(m.thumbnail_url) : url,
+        size: m.size_readable || (typeof m.size === "number" ? `${(m.size/1024/1024).toFixed(1)} Mo` : "—"),
+        date: formatDate(m.created_at || article?.published_at),
         category: firstCategory(article),
-        thumbnail: bgEdit,
-        fileUrl: bgEdit,
-        favorite: false,
-      });
-      seen.add(bgEdit);
-    }
+        favorite: !!m.is_featured,
+        tags: Array.isArray(m.tags) ? m.tags.map(t => t.name || t) : [],
+        // champs bruts utiles si besoin ailleurs
+        name: m.name,
+        filename: m.filename,
+        original_filename: m.original_filename,
+        mime_type: m.mime_type,
+      };
+    });
+}, [article]);
 
-    if (medias.length) {
-      list.push(
-        ...medias
-          .filter((m) => !!m?.url)
-          .map((m, idx) => {
-            const abs = toAbsolute(m.url);
-            return !abs || seen.has(abs) ? null : {
-              id: m.id || idx + 1,
-              title: m.title || article?.title || "Pièce jointe",
-              type: inferTypeFromUrl(abs),
-              size: m.size_readable || "—",
-              date: formatDate(article?.published_at),
-              category: firstCategory(article),
-              thumbnail: abs,
-              fileUrl: abs,
-              favorite: m.is_favorite || false,
-            };
-          })
-          .filter(Boolean)
-      );
-      if (list.length) return list;
-    }
-
-    const src = primaryMediaUrl(article);
-    if (src) {
-      return [
-        ...list,
-        {
-          id: 1,
-          title: article?.title || "Pièce jointe",
-          type: inferTypeFromUrl(src),
-          size: "—",
-          date: formatDate(article?.published_at),
-          category: firstCategory(article),
-          thumbnail: src,
-          fileUrl: src,
-          favorite: article?.is_featured || false,
-        }
-      ];
-    }
-
-    return list;
-  }, [article]);
 
   /* ------- Default selected media ------- */
   const currentType  = selectedFile?.type || inferTypeFromUrl(primaryMediaUrl(article));
@@ -656,11 +671,6 @@ export default function Visualiseur() {
     setActiveTab("Aperçu");
     try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch {}
   }, [article?.id]);
-
-  useEffect(() => {
-    const u = selectedFile?.fileUrl || primaryMediaUrl(article);
-    if (u) {} // debug if needed
-  }, [selectedFile, article]);
 
   const shareData = useMemo(() => ({
     title: article?.title || "",
@@ -806,41 +816,9 @@ export default function Visualiseur() {
           "mainEntityOfPage": canonical
         }}
       />
-<div key={article?.id} ref={previewRef} className="file-preview-container min-h-[50vh]">
 
-  {activeTab === "Aperçu" && (
-    <FilePreview
-      file={
-        selectedFile
-          ? {
-              ...article,
-              // place le média sélectionné en tête pour que FilePreview le prenne
-              media: [{ url: selectedFile.fileUrl, mime: selectedFile.mime_type }, ...(article.media || [])],
-              featured_image: undefined,
-            }
-          : article
-      }
-      activeTab="Aperçu"
-    />
-  )}
+      {/* (AUCUN FilePreview direct ici) */}
 
-  {activeTab === "Médias" && <Medias mediaList={mediaList} />}
-
-  {activeTab === "Métadonnées" && (
-    <FilePreview file={article} activeTab="Métadonnées" />
-  )}
-
-  {activeTab === "Versions" && hasHistory && (
-    <FilePreview file={article} activeTab="Versions" />
-  )}
-
-  {activeTab === "Statistiques" && (
-    <FilePreview file={article} activeTab="Statistiques" />
-  )}
-
-  {activeTab === "SEO" && <SeoPanel article={article} />}
-
-</div>
       <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 font-sans px-3 sm:px-4 lg:px-6 2xl:px-10 py-4">
         {unlockError && (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -865,6 +843,7 @@ export default function Visualiseur() {
             iconForType={iconForType}
             iconBgForType={iconBgForType}
             toAbsolute={toAbsolute}
+             
           />
 
           {/* Main */}
@@ -889,14 +868,19 @@ export default function Visualiseur() {
                       {activeTab === "Aperçu" && (
                         <Apercu
                           article={article}
-                          currentUrl={currentUrl}
-                          currentType={currentType}
-                          currentTitle={currentTitle}
+                          currentUrl={selectedFile?.fileUrl || currentUrl}
+                          currentType={selectedFile?.type || currentType}
+                          currentTitle={selectedFile?.title || currentTitle}
                           onOpen={openInNew}
                           onDownload={downloadCurrent}
                         />
                       )}
-                      {activeTab === "Médias" && <Medias mediaList={mediaList} />}
+                      {activeTab === "Médias" && (
+                        <Medias
+                          mediaList={mediaList}
+                          onPreview={(m) => { setQpFile(buildArticleWith(m)); setQpOpen(true); }}
+                        />
+                      )}
                       {activeTab === "Métadonnées" && (
                         <Metadonnees article={article} currentType={currentType} currentTitle={currentTitle} />
                       )}
@@ -928,7 +912,7 @@ export default function Visualiseur() {
           </div>
         </div>
 
-        {/* Fullscreen Modal */}
+        {/* Fullscreen Modal (garde le plein écran pour la zone centrale si besoin) */}
         {fullscreen && (
           <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center">
             <div className="relative w-full h-full flex items-center justify-center">
@@ -938,14 +922,19 @@ export default function Visualiseur() {
                   {activeTab === "Aperçu" && (
                     <Apercu
                       article={article}
-                      currentUrl={currentUrl}
-                      currentType={currentType}
-                      currentTitle={currentTitle}
+                      currentUrl={selectedFile?.fileUrl || currentUrl}
+                      currentType={selectedFile?.type || currentType}
+                      currentTitle={selectedFile?.title || currentTitle}
                       onOpen={openInNew}
                       onDownload={downloadCurrent}
                     />
                   )}
-                  {activeTab === "Médias" && <Medias mediaList={mediaList} />}
+                  {activeTab === "Médias" && (
+                    <Medias
+                      mediaList={mediaList}
+                      onPreview={(m) => { setQpFile(buildArticleWith(m)); setQpOpen(true); }}
+                    />
+                  )}
                   {activeTab === "Métadonnées" && <Metadonnees article={article} currentType={currentType} currentTitle={currentTitle} />}
                   {activeTab === "Versions" && <Versions history={article.history} />}
                   {activeTab === "Statistiques" && <StatsCharts article={article} />}
@@ -961,6 +950,14 @@ export default function Visualiseur() {
               </button>
             </div>
           </div>
+        )}
+
+        {/* Modal d’aperçu rapide basé sur FilePreview (indépendant des Tabs) */}
+        {qpOpen && qpFile && (
+          <QuickPreviewModal
+            file={qpFile}
+            onClose={() => { setQpOpen(false); setQpFile(null); }}
+          />
         )}
 
         {/* Tag Manager Modal */}
@@ -1071,7 +1068,18 @@ function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDown
             <p className="text-slate-600 mt-2 max-w-md mx-auto">Ajoutez un média à l'article ou ouvrez l'onglet « Médias » pour explorer les fichiers disponibles.</p>
           </div>
         ) : (
-          <PreviewByType type={currentType} url={currentUrl} title={currentTitle} onOpen={onOpen} onDownload={onDownload} />
+           <div className="bg-white/60 border border-slate-200/40 rounded-2xl overflow-hidden backdrop-blur-sm shadow-lg">
+    <FilePreview
+      // on injecte le média sélectionné en tête, comme dans la QuickPreview
+      file={{
+        ...article,
+        title: currentTitle || article?.title,
+        media: [{ url: currentUrl }, ...(article?.media || [])],
+        featured_image: undefined,
+      }}
+      activeTab="Aperçu"
+    />
+  </div>
         )}
 
         {contentStr && (
@@ -1091,43 +1099,313 @@ function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDown
   );
 }
 
-function Medias({ mediaList }) {
-  if (!mediaList.length) return (
-    <div className="text-slate-600 py-16 lg:py-20 text-center">
-      <div className="w-20 h-20 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-        <FaImage className="text-slate-400 text-3xl" />
+function Medias({ mediaList, onPreview }) {
+  // --- Lecture seule : état UI ---
+  const [viewMode, setViewMode] = React.useState("grid"); // "grid" | "list"
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [q, setQ] = React.useState("");
+  const [type, setType] = React.useState("");      // "", "image","video","pdf","word","excel","ppt","other"
+  const [featured, setFeatured] = React.useState(""); // "", "1","0"
+  const [sortBy, setSortBy] = React.useState("date"); // "date" | "title" | "size"
+  const [sortDir, setSortDir] = React.useState("desc"); // "asc" | "desc"
+
+  // --- Dérivés ---
+  const activePills = React.useMemo(() => {
+    const pills = [];
+    if (q.trim())    pills.push({ id:"q", label:`Recherche: “${q.trim()}”`, clear: () => setQ("") });
+    if (type)        pills.push({ id:"type", label:`Type: ${type.toUpperCase()}`, clear: () => setType("") });
+    if (featured!=="") pills.push({ id:"featured", label:`Vedette: ${featured==="1"?"Oui":"Non"}`, clear: () => setFeatured("") });
+    if (sortBy!=="date" || sortDir!=="desc") {
+      const map = { date:"Date", title:"Titre", size:"Taille" };
+      pills.push({ id:"sort", label:`Tri: ${map[sortBy]} ${sortDir.toUpperCase()}`, clear: () => { setSortBy("date"); setSortDir("desc"); } });
+    }
+    return pills;
+  }, [q, type, featured, sortBy, sortDir]);
+
+  const filtered = React.useMemo(() => {
+    let arr = Array.isArray(mediaList) ? mediaList.slice() : [];
+    // filtres
+    if (type) arr = arr.filter(m => (m.type || "other") === type);
+    if (featured !== "") arr = arr.filter(m => (!!m.favorite) === (featured === "1"));
+    const s = q.trim().toLowerCase();
+    if (s) {
+      arr = arr.filter(m =>
+        (m.title||"").toLowerCase().includes(s) ||
+        (m.mime_type||"").toLowerCase().includes(s) ||
+        (m.filename||"").toLowerCase().includes(s) ||
+        String(m.id||"").includes(s) ||
+        (Array.isArray(m.tags) ? m.tags.join(" ").toLowerCase().includes(s) : false)
+      );
+    }
+    // tri
+    arr.sort((a,b) => {
+      const dir = sortDir === "asc" ? 1 : -1;
+      if (sortBy === "title") return (a.title||"").localeCompare(b.title||"","fr",{sensitivity:"base"}) * dir;
+      if (sortBy === "size")  return ((a.size_bytes||0) - (b.size_bytes||0)) * dir;
+      // date par défaut (string lisible en entrée => on tente Date)
+      const da = new Date(a.date||0).getTime();
+      const db = new Date(b.date||0).getTime();
+      return (da - db) * dir;
+    });
+    return arr;
+  }, [mediaList, q, type, featured, sortBy, sortDir]);
+
+  const resetAll = () => {
+    setQ(""); setType(""); setFeatured("");
+    setSortBy("date"); setSortDir("desc");
+  };
+
+  if (!mediaList?.length) {
+    return (
+      <div className="text-slate-600 py-16 lg:py-20 text-center">
+        <div className="w-20 h-20 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <FaImage className="text-slate-400 text-3xl" />
+        </div>
+        <p>Aucun média lié à cet article.</p>
       </div>
-      <p>Aucun média lié à cet article.</p>
+    );
+  }
+
+  // --- Tuiles (grille) ---
+  const Card = ({ m }) => (
+    <div
+      key={m.id ?? m.fileUrl}
+      className="rounded-2xl border border-slate-200/60 bg-white/70 backdrop-blur-sm p-4 hover:shadow-xl transition-all duration-300"
+    >
+      <div className="flex items-center gap-3">
+        <div className={`w-12 h-12 ${iconBgForType(m.type)} rounded-xl flex items-center justify-center`}>
+          {iconForType(m.type, "text-lg")}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium text-slate-800 truncate" title={m.title}>{m.title}</div>
+          <div className="text-xs text-slate-500 truncate">
+            {(m.size && m.size!=="—") ? `${m.size} • ` : ""}{m.date}
+          </div>
+        </div>
+        {m.favorite && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+            <FiStar className="w-3 h-3" /> Vedette
+          </span>
+        )}
+      </div>
+
+      {m.type === "image" && (
+        <button onClick={() => onPreview?.(m)} className="mt-3 block text-left">
+          <img
+            src={toAbsolute(m.thumbnail || m.fileUrl)}
+            alt={m.title}
+            className="w-full h-44 object-cover rounded-xl border border-slate-200/50"
+          />
+        </button>
+      )}
+
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          onClick={() => onPreview?.(m)}
+          className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
+          title="Aperçu rapide"
+        >
+          <FaEye className="inline -mt-0.5 mr-2" />
+          Aperçu
+        </button>
+        <a
+          href={m.fileUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
+          title="Ouvrir dans un onglet"
+        >
+          <FaExternalLinkAlt className="inline -mt-0.5 mr-2" />
+          Ouvrir
+        </a>
+      </div>
+    </div>
+  );
+
+  // --- Ligne (liste) ---
+  const Row = ({ m }) => (
+    <div
+      key={m.id ?? m.fileUrl}
+      className="flex items-center gap-3 rounded-2xl border border-slate-200/60 bg-white/70 backdrop-blur-sm p-3"
+    >
+      <div className={`w-10 h-10 ${iconBgForType(m.type)} rounded-lg flex items-center justify-center`}>
+        {iconForType(m.type, "text-base")}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-slate-800 truncate" title={m.title}>
+          {m.title}
+        </div>
+        <div className="text-[12px] text-slate-500 truncate">
+          {(m.size && m.size!=="—") ? `${m.size} • ` : ""}{m.date}
+          {m.favorite && <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">Vedette</span>}
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onPreview?.(m)}
+          className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
+          title="Aperçu rapide"
+        >
+          <FaEye />
+        </button>
+        <a
+          href={m.fileUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
+          title="Ouvrir dans un onglet"
+        >
+          <FaExternalLinkAlt />
+        </a>
+      </div>
     </div>
   );
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
-      {mediaList.map((m, i) => (
-        <div key={m.id ?? i} className="border border-slate-200/40 rounded-2xl overflow-hidden bg-white/60 backdrop-blur-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-1 group">
-          <div className="p-5 flex items-center gap-4 bg-slate-50/60">
-            <div className={`w-14 h-14 ${iconBgForType(m.type)} rounded-2xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110`}>
-              {iconForType(m.type, "text-2xl")}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-slate-800 truncate">{m.title}</p>
-              <p className="text-xs text-slate-500">{m.size !== "—" ? `${m.size} • ` : ""}{m.date}</p>
-            </div>
-            <a href={m.fileUrl} target="_blank" rel="noreferrer" className="ml-auto text-slate-600 hover:text-blue-600 p-2 rounded-xl transition-all duration-300" title="Ouvrir">
-              <FaExternalLinkAlt />
-            </a>
+    <div className="w-full">
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 flex-1 min-w-[260px]">
+          <div className="relative flex-1">
+            <FiSearch className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Rechercher par titre, #id, type MIME, tag…"
+              className="w-full pl-9 pr-3 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+            />
           </div>
-          {m.type === "image" && (
-            <div className="p-5">
-              <img src={toAbsolute(m.thumbnail)} alt={m.title} className="w-full h-48 object-cover rounded-xl shadow-md group-hover:shadow-xl transition-all duration-500" />
-            </div>
-          )}
+
+          <button
+            onClick={() => setFiltersOpen(o => !o)}
+            className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl border-2 ${filtersOpen ? "border-blue-200 text-blue-700" : "border-slate-200 text-slate-700"} hover:bg-slate-50`}
+            title={filtersOpen ? "Masquer les filtres" : "Afficher les filtres"}
+          >
+            <FiFilter className="w-4 h-4" />
+            {activePills.length > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-5 px-1.5 rounded-full text-[11px] font-bold bg-blue-600 text-white">
+                {activePills.length}
+              </span>
+            )}
+            {filtersOpen ? <FiChevronUp className="w-4 h-4" /> : <FiChevronDown className="w-4 h-4" />}
+          </button>
         </div>
-      ))}
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setViewMode("grid")}
+            className={`inline-flex items-center justify-center rounded-xl border-2 px-2.5 py-2 text-sm font-semibold ${viewMode==='grid' ? "border-blue-200 text-blue-700" : "border-slate-200 text-slate-700"} hover:bg-slate-50`}
+            title="Mode grille"
+          >
+            <FiGrid className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setViewMode("list")}
+            className={`inline-flex items-center justify-center rounded-xl border-2 px-2.5 py-2 text-sm font-semibold ${viewMode==='list' ? "border-blue-200 text-blue-700" : "border-slate-200 text-slate-700"} hover:bg-slate-50`}
+            title="Mode liste"
+          >
+            <FiList className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Pills actifs */}
+      {activePills.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {activePills.map(p => (
+            <span key={p.id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-200">
+              {p.label}
+              <button onClick={p.clear} className="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded hover:bg-blue-100">
+                <FiX className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+          <button onClick={resetAll} className="ml-1 text-[11px] font-semibold underline text-blue-700">
+            Tout réinitialiser
+          </button>
+        </div>
+      )}
+
+      {/* Bloc filtres */}
+      {filtersOpen && (
+        <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-600">Type</label>
+              <select
+                value={type}
+                onChange={(e) => setType(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
+              >
+                <option value="">Tous</option>
+                <option value="image">Image</option>
+                <option value="video">Vidéo</option>
+                <option value="pdf">PDF</option>
+                <option value="word">Word</option>
+                <option value="excel">Excel</option>
+                <option value="ppt">PowerPoint</option>
+                <option value="other">Autre</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-600">Vedette</label>
+              <select
+                value={featured}
+                onChange={(e) => setFeatured(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
+              >
+                <option value="">Tous</option>
+                <option value="1">En vedette</option>
+                <option value="0">Non vedette</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-600">Tri</label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
+              >
+                <option value="date">Date</option>
+                <option value="title">Titre</option>
+                <option value="size">Taille</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-600">Direction</label>
+              <select
+                value={sortDir}
+                onChange={(e) => setSortDir(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
+              >
+                <option value="desc">Desc</option>
+                <option value="asc">Asc</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Liste / Grille */}
+      {filtered.length === 0 ? (
+        <div className="mt-6 rounded-2xl border-2 border-slate-200 bg-white px-4 py-6 text-center text-slate-600">
+          Aucun média ne correspond aux filtres.
+        </div>
+      ) : viewMode === "grid" ? (
+        <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
+          {filtered.map(m => <Card key={m.id ?? m.fileUrl} m={m} />)}
+        </div>
+      ) : (
+        <div className="mt-6 grid grid-cols-1 gap-3">
+          {filtered.map(m => <Row key={m.id ?? m.fileUrl} m={m} />)}
+        </div>
+      )}
     </div>
   );
 }
 
+
+/* ====== Viewers intégrés selon type + bouton "Agrandir" => modal ====== */
 function PreviewByType({ type, url, title, onOpen, onDownload }) {
   if (type === "image") {
     const abs = toAbsolute(url);
@@ -1160,60 +1438,58 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
   }
 
   if (type === "pdf") {
+    const abs = toAbsolute(url);
     return (
-      <div className="w-full flex flex-col">
-        <div className="w-full bg-white/60 border border-slate-200/40 rounded-2xl overflow-hidden backdrop-blur-sm shadow-lg">
-          <div className="bg-red-50/80 p-4 flex items-center border-b border-red-100/60">
-            <FaFilePdf className="text-red-500 mr-4 text-3xl" />
-            <span className="font-medium text-slate-800 text-xl">{title}</span>
-          </div>
-          <div className="p-6 sm:p-8 text-slate-700">
-            <p className="text-sm leading-relaxed">Prévisualisation PDF disponible. Ouvrez le fichier pour une lecture complète avec toutes les fonctionnalités.</p>
-          </div>
-          <div className="bg-slate-50/60 p-4 flex justify-between items-center text-sm text-slate-600 border-t border-slate-200/40">
-            <span>Mode prévisualisation</span>
-            <div className="flex gap-2">
-              <button className="p-2 hover:bg-slate-200/60 rounded-xl transition-colors duration-300"><FaChevronLeft /></button>
-              <button className="p-2 hover:bg-slate-200/60 rounded-xl transition-colors duration-300"><FaChevronRight /></button>
-              <button className="p-2 hover:bg-slate-200/60 rounded-xl transition-colors duration-300"><FaSearchPlus /></button>
-              <button className="p-2 hover:bg-slate-200/60 rounded-xl transition-colors duration-300"><FaSearchMinus /></button>
-            </div>
-          </div>
-        </div>
-        <div className="mt-6 sm:mt-8 flex flex-wrap justify-center gap-3 sm:gap-4">
-          <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl flex items-center shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
-            <FaExternalLinkAlt className="mr-3" />
-            Ouvrir dans un onglet
-          </button>
-          <button onClick={onDownload} className="bg-white/80 backdrop-blur-sm text-slate-700 px-6 sm:px-8 py-3 sm:py-4 rounded-2xl border border-slate-300/60 flex items-center shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-white">
-            <FaDownload className="mr-3" />
-            Télécharger
+      <div className="w-full">
+        <PdfPreview file={{ title, fileUrl: abs }} height="75vh" usePdfJs />
+        <div className="mt-4 flex justify-center">
+          <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
+            <FaExternalLinkAlt /> Agrandir l’aperçu
           </button>
         </div>
       </div>
     );
   }
 
-  if (type === "excel" || type === "word") {
-    const bgColor = type === "excel" ? "bg-emerald-50/80 border-emerald-100/60" : "bg-blue-50/80 border-blue-100/60";
-    const iconColor = type === "excel" ? "text-emerald-600" : "text-blue-600";
-    const appName = type === "excel" ? "Excel" : "Word";
-
+  if (type === "word") {
     return (
-      <div className="w-full flex flex-col">
-        <div className="w-full bg-white/60 border border-slate-200/40 rounded-2xl overflow-hidden backdrop-blur-sm shadow-lg">
-          <div className={`${bgColor} p-4 flex items-center border-b`}>
-            {type === "excel" ? <FaFileExcel className={`${iconColor} mr-4 text-3xl`} /> : <FaFileWord className={`${iconColor} mr-4 text-3xl`} />}
-            <span className="font-medium text-slate-800 text-xl">{title}</span>
-          </div>
-          <div className="p-6 sm:p-8 text-slate-700">
-            <p className="text-sm leading-relaxed">Aperçu non disponible pour ce type de fichier — ouvrez le document ci-dessous pour le consulter.</p>
-          </div>
+      <div className="w-full">
+        <WordPreview src={toAbsolute(url)} title={title} />
+        <div className="mt-4 flex justify-center">
+          <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
+            <FaExternalLinkAlt /> Agrandir l’aperçu
+          </button>
         </div>
-        <div className="mt-6 sm:mt-8 flex justify-center">
-          <a href={url} target="_blank" rel="noreferrer" className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl flex items-center shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
-            <FaExternalLinkAlt className="mr-3" /> Ouvrir dans {appName}
-          </a>
+      </div>
+    );
+  }
+
+  if (type === "excel") {
+    const abs = toAbsolute(url);
+    const officeSrc = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(abs)}`;
+    return (
+      <div className="w-full">
+        <div className="w-full h-[75vh] rounded-2xl overflow-hidden border border-slate-200/40 bg-white">
+          <div className="px-4 py-2 border-b text-slate-700">{title || "Classeur Excel"}</div>
+          <iframe src={officeSrc} className="w-full h-[calc(75vh-40px)]" title="Excel Viewer" />
+        </div>
+        <div className="mt-4 flex justify-center">
+          <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
+            <FaExternalLinkAlt /> Agrandir l’aperçu
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (type === "ppt") {
+    return (
+      <div className="w-full">
+        <PowerPointPreview src={toAbsolute(url)} title={title} />
+        <div className="mt-4 flex justify-center">
+          <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
+            <FaExternalLinkAlt /> Agrandir l’aperçu
+          </button>
         </div>
       </div>
     );
@@ -1222,25 +1498,37 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
   if (type === "video") {
     return (
       <div className="w-full flex flex-col">
-        <div className="w-full bg-black rounded-2xl overflow-hidden border border-slate-200/40 shadow-2xl">
-          <div className="relative pt-[56.25%]">
-            <img src={url} alt={title} className="absolute inset-0 w-full h-full object-cover opacity-60" />
-            <a href={url} target="_blank" rel="noreferrer" className="absolute inset-0 flex items-center justify-center group">
-              <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white text-4xl sm:text-5xl opacity-90 hover:bg-white/30 hover:scale-110 transition-all duration-300 group-hover:shadow-2xl">
-                <FaPlay className="ml-1" />
-              </div>
-            </a>
-          </div>
+        <div className="w-full rounded-2xl overflow-hidden border border-slate-200/40 bg-black">
+          <video
+            src={toAbsolute(url)}
+            className="w-full h-[62vh] lg:h-[65vh]"
+            controls
+            playsInline
+          />
         </div>
         <div className="mt-6 sm:mt-8 flex justify-center">
-          <a href={url} target="_blank" rel="noreferrer" className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl flex items-center shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
-            <FaPlay className="mr-3" /> Lire la vidéo
-          </a>
+          <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl flex items-center shadow-2xl transition-all">
+            <FaPlay className="mr-3" /> Agrandir la vidéo
+          </button>
         </div>
       </div>
     );
   }
 
+  if (type === "map") {
+    return (
+      <div className="w-full">
+        <MapPreview dataUrl={toAbsolute(url)} />
+        <div className="mt-4 flex justify-center">
+          <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
+            <FaExternalLinkAlt /> Agrandir la carte
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // fallback: iframe générique
   return (
     <div className="w-full flex flex-col items-center justify-center py-14 lg:py-16">
       <div className="text-center">
@@ -1248,10 +1536,15 @@ function PreviewByType({ type, url, title, onOpen, onDownload }) {
           <FaFile className="text-slate-600 text-4xl lg:text-5xl" />
         </div>
         <h3 className="text-2xl lg:text-3xl font-light text-slate-800 mb-3">{title}</h3>
-        <p className="text-slate-600 mt-2 mb-6 lg:mb-8 max-w-md mx-auto">Aperçu non disponible pour ce type de fichier</p>
-        <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
-          <FaDownload className="mr-3" /> Ouvrir le fichier
-        </a>
+        <p className="text-slate-600 mt-2 mb-6 lg:mb-8 max-w-md mx-auto">Aperçu intégré</p>
+        <div className="w-full max-w-4xl h-[70vh] rounded-2xl overflow-hidden border border-slate-200/40 bg-white">
+          <iframe src={toAbsolute(url)} className="w-full h-full" title="Aperçu fichier" />
+        </div>
+        <div className="mt-6">
+          <button onClick={onOpen} className="inline-flex items-center bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl shadow-xl hover:shadow-2xl transition-all">
+            <FaExternalLinkAlt className="mr-3" /> Agrandir l’aperçu
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1300,7 +1593,7 @@ function Metadonnees({ article, currentType, currentTitle }) {
                 );
               }
               return (
-                <tr key={k} className="hover:bg-slate-50/60 transition-colors duration-300">
+                <tr key={k} className="hover:bg-slate-50/60 transition-colors durée-300">
                   <td className="px-6 lg:px-8 py-5 text-sm font-medium text-slate-800 bg-slate-50/60 border-r border-slate-200/50 w-1/3">{k}</td>
                   <td className="px-6 lg:px-8 py-5 text-sm text-slate-700">
                     {Array.isArray(v) ? (v.length ? (
@@ -1434,12 +1727,12 @@ function StatsCharts({ article }) {
 
         <div className="flex-1 basis-full xl:basis-1/3 min-w-[240px]">
           <ChartCard className="p-4 sm:p-5 rounded-xl shadow-sm"
-            title={tagsBarData.length ? 'Tags populaires' : 'Historique'}
-            subtitle={tagsBarData.length ? 'Usage global des tags' : 'Actions effectuées'}
-            icon={tagsBarData.length ? <FaTag /> : <FaHistory />}>
+            title={engagementData.length ? 'Tags populaires' : 'Historique'}
+            subtitle={engagementData.length ? 'Usage global des tags' : 'Actions effectuées'}
+            icon={engagementData.length ? <FaTag /> : <FaHistory />}>
             <div className="h-56 md:h-64 xl:h-72 2xl:h-[24rem]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={tagsBarData.length ? tagsBarData : historyBarData} margin={{ top: 16, right: 16, left: 12, bottom: 52 }}>
+                <BarChart data={(article.tags || []).length ? (article.tags || []).map(t => ({ name: t.name, usage: Number(t.usage_count || 0) })) : Object.entries((article.history || []).reduce((acc, h) => { const k = (h.action || "autre").toLowerCase(); acc[k] = (acc[k] || 0) + 1; return acc; }, {})).map(([k, v]) => ({ name: k, count: v }))} margin={{ top: 16, right: 16, left: 12, bottom: 52 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" opacity={0.6} />
                   <XAxis
                     dataKey="name"
@@ -1462,7 +1755,7 @@ function StatsCharts({ article }) {
                       padding: '8px 10px',
                     }}
                   />
-                  <Bar dataKey={tagsBarData.length ? 'usage' : 'count'} fill="#3b82f6" radius={[6, 6, 0, 0]} stroke="none" barSize={18} />
+                  <Bar dataKey={(article.tags || []).length ? 'usage' : 'count'} fill="#3b82f6" radius={[6, 6, 0, 0]} stroke="none" barSize={18} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -1506,10 +1799,6 @@ function StatsCharts({ article }) {
     </div>
   );
 }
-
-
-
-
 
 function DetailsPanel({
   article, currentType, currentTitle,
@@ -1556,7 +1845,7 @@ function DetailsPanel({
             {iconForType(currentType, "text-lg")}
           </div>
 
-          <div className="min-w-0">
+        <div className="min-w-0">
             <h3 className="text-base font-semibold text-slate-900 truncate leading-tight">
               {currentTitle || "Sans titre"}
             </h3>
