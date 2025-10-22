@@ -116,7 +116,7 @@ export default function App() {
                     <Route path="/backoffice" element={<Backoffice />} />
                     <Route path="/backoffice/album/:albumName" element={<AlbumDetailPage />} />
                     <Route path="/albumphoto" element={<AlbumPhoto />} />
-                    <Route path="/visualiseur/:photoName" element={<Visualiseur />} />
+                    <Route path="/visualiseur/:articleslug" element={<Visualiseur />} />
                     <Route path="/configuration" element={<Configuration />} />
 
 

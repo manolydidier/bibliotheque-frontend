@@ -5,14 +5,14 @@ import { toAbsolute, pickPrimaryMedia, guessKind } from "./helpers";
 import ImagePreview from "./ImagePreview";
 import VideoPreview from "./VideoPreview";
 import AudioPreview from "./AudioPreview";
-import PdfFilePreview from "./PdfFilePreview";
+import PdfFilePreviewPro from "./PdfFilePreviewPro";
 import WordPreview from "./WordPreview";
 import ExcelPreview from "./ExcelPreview";
 
-// ⬇️ remplace l’import “pro” par la version simple
-import PowerPointPreview from "./PowerPointPreview";
-import HtmlPreviewPro from "./HtmlPreviewPro";
-import ShapefilePreviewPro from "./ShapefilePreview";
+import PowerPointPreview from "./PowerPointPreview";      // ta version locale améliorée
+import HtmlPreviewPro from "./HtmlPreviewPro";            // HTML pro
+import GeoJsonPreviewPro from "./GeoJsonPreviewPro";      // ⬅️ nouveau
+import ShapefilePreviewPro from "./ShapefilePreview";     // zip shp/shx/dbf
 
 import OtherPreview from "./OtherPreview";
 import MetaPreview from "./MetaPreview";
@@ -47,18 +47,19 @@ export default function FilePreview({ file, activeTab = "Aperçu" }) {
     case "audio":
       return <AudioPreview src={toAbsolute(media.url)} type={media.mime} />;
     case "pdf":
-      return <PdfFilePreview src={toAbsolute(media.url)} title={file?.title} />;
+      return <PdfFilePreviewPro src={toAbsolute(media.url)} title={file?.title} />;
     case "word":
       return <WordPreview src={toAbsolute(media.url)} title={file?.title} />;
     case "excel":
       return <ExcelPreview src={toAbsolute(media.url)} title={file?.title} size={file?.size} date={file?.published_at || file?.created_at} />;
     case "powerpoint":
-      // ⬇️ utilise le viewer simple
       return <PowerPointPreview src={toAbsolute(media.url)} title={file?.title} />;
     case "html":
-      return <HtmlPreviewPro src={toAbsolute(media.url)} title={file?.title} />;
+      return <HtmlPreviewPro src={toAbsolute(media.url)} title={file?.title || "Aperçu HTML"} />;
+    case "geojson":
+      return <GeoJsonPreviewPro src={toAbsolute(media.url)} title={file?.title || "Carte GeoJSON"} />;
     case "shapefile":
-      return <ShapefilePreviewPro src={toAbsolute(media.url)} title={file?.title} />;
+      return <ShapefilePreviewPro src={toAbsolute(media.url)} title={file?.title || "Shapefile"} />;
     case "article":
       return (
         <article className="prose max-w-none">

@@ -1,5 +1,7 @@
 // src/components/share/ShareModal.jsx
 import React, { useEffect, useRef, useState, useMemo } from "react";
+import { createPortal } from "react-dom";
+import { useLocation, useParams } from "react-router-dom";
 import {
   FaTimes,
   FaFacebook,
@@ -12,7 +14,7 @@ import {
   FaCheck,
 } from "react-icons/fa";
 
-/* ---------- helpers locaux ---------- */
+/* ---------- Helpers locaux ---------- */
 function openNewWindow(href) {
   try {
     const w = window.open(href || "about:blank", "_blank", "noopener,noreferrer");
@@ -29,7 +31,10 @@ function buildFacebookUrl(url, quote = "") {
 }
 
 function buildWhatsAppText({ title, excerpt, url }) {
-  const parts = [title || excerpt || "", url || (typeof window !== "undefined" ? window.location.href : "")]
+  const parts = [
+    title || excerpt || "",
+    url || (typeof window !== "undefined" ? window.location.href : ""),
+  ]
     .map((s) => (s || "").trim())
     .filter(Boolean);
   return parts.join("\n\n");
@@ -43,52 +48,54 @@ export default function ShareModal({
   excerpt,
   url,
   channels = ["email", "emailAuto", "facebook", "whatsapp", "whatsappNumber"],
-  onEmailMailto,        // (opts) => void              (peut déclencher mailto + tracking côté parent)
-  onEmailAuto,          // async (opts) => void        (appel API d'envoi)
-  onFacebook,           // (opts) => void              (idéalement tracking ONLY)
-  onWhatsAppGeneral,    // (opts) => void              (idéalement tracking ONLY)
-  onWhatsAppToNumber,   // (opts) => void              (idéalement tracking ONLY)
+  onEmailMailto,
+  onEmailAuto,
+  onFacebook,
+  onWhatsAppGeneral,
+  onWhatsAppToNumber,
   defaultWhatsNumber = "",
+  global: forcedGlobal, // possibilité de forcer le mode plein écran
 }) {
-  const inputRef = useRef(null);
+  const location = useLocation();
+  const params = useParams();
 
-  // champs
+  /* ✅ Détection automatique du mode "Visualiseur" */
+  const isVisualiseur =
+    location.pathname.toLowerCase().includes("visualiseur") ||
+    !!params.articleslug ||
+    !!params.show;
+
+  const global = forcedGlobal ?? isVisualiseur;
+
+  /* ✅ Identifiant ou slug d'article (utile pour tracking ou API) */
+  const articleIdentifier = params.articleslug || params.show || null;
+
+  /* ---------- États internes ---------- */
+  const inputRef = useRef(null);
   const [emailTo, setEmailTo] = useState("");
   const [whatsNumber, setWhatsNumber] = useState(defaultWhatsNumber);
-
-  // ui
   const [copyOk, setCopyOk] = useState(false);
   const [activeTab, setActiveTab] = useState("link");
   const [isVisible, setIsVisible] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
   const [emailError, setEmailError] = useState("");
-  const [isMounted, setIsMounted] = useState(false);
 
-  const safeUrl =
-    url || (typeof window !== "undefined" ? window.location.href : "");
+  const safeUrl = url || (typeof window !== "undefined" ? window.location.href : "");
 
-  const hasEmail =
-    channels.includes("email") || channels.includes("emailAuto");
-  const hasWhatsApp =
-    channels.includes("whatsapp") || channels.includes("whatsappNumber");
+  const hasEmail = channels.includes("email") || channels.includes("emailAuto");
+  const hasWhatsApp = channels.includes("whatsapp") || channels.includes("whatsappNumber");
   const hasSocial = channels.includes("facebook");
 
-  // tabs dynamiques
   const tabs = useMemo(() => {
     const t = [{ key: "link", label: "Lien", icon: FaLink }];
     if (hasEmail) t.push({ key: "email", label: "Email", icon: FaEnvelope });
-    if (hasWhatsApp)
-      t.push({ key: "whatsapp", label: "WhatsApp", icon: FaWhatsapp });
+    if (hasWhatsApp) t.push({ key: "whatsapp", label: "WhatsApp", icon: FaWhatsapp });
     return t;
   }, [hasEmail, hasWhatsApp]);
 
   const activeIndex = Math.max(0, tabs.findIndex((t) => t.key === activeTab));
   const tabWidthPct = 100 / Math.max(1, tabs.length);
 
-  // monté (pour focus)
-  useEffect(() => setIsMounted(true), []);
-
-  // animation d’apparition quand open change
   useEffect(() => {
     if (open) {
       setIsVisible(true);
@@ -99,9 +106,7 @@ export default function ShareModal({
     }
   }, [open]);
 
-  const handleCloseAll = () => {
-    onClose?.();
-  };
+  const handleCloseAll = () => onClose?.();
 
   /* ---------- Actions ---------- */
   const handleCopyLink = async () => {
@@ -109,9 +114,7 @@ export default function ShareModal({
       await navigator.clipboard.writeText(safeUrl);
       setCopyOk(true);
       setTimeout(() => setCopyOk(false), 1200);
-    } catch {
-      /* noop */
-    }
+    } catch {}
   };
 
   const handleEmailAuto = async () => {
@@ -119,8 +122,13 @@ export default function ShareModal({
     setEmailError("");
     setEmailSending(true);
     try {
-      await onEmailAuto({ to: emailTo, title, excerpt, url: safeUrl });
-      // pas d’overlay → on ferme simplement
+      await onEmailAuto({
+        to: emailTo,
+        title,
+        excerpt,
+        url: safeUrl,
+        articleIdentifier,
+      });
       handleCloseAll();
     } catch {
       setEmailError("Échec de l’envoi automatique. Veuillez réessayer.");
@@ -131,19 +139,14 @@ export default function ShareModal({
 
   const handleEmailMailto = () => {
     if (!onEmailMailto) return;
-    onEmailMailto({ to: emailTo, title, excerpt, url: safeUrl });
+    onEmailMailto({ to: emailTo, title, excerpt, url: safeUrl, articleIdentifier });
     handleCloseAll();
   };
 
   const handleFacebook = () => {
-    // 1) ouvrir immédiatement une nouvelle fenêtre (non bloqué)
     const href = buildFacebookUrl(safeUrl);
     openNewWindow(href);
-
-    // 2) laisser le parent faire du tracking (mais SANS navigation)
-    try {
-      onFacebook?.({ href, trackOnly: true, title, excerpt, url: safeUrl });
-    } catch {}
+    onFacebook?.({ href, trackOnly: true, title, excerpt, url: safeUrl, articleIdentifier });
     handleCloseAll();
   };
 
@@ -151,10 +154,7 @@ export default function ShareModal({
     const text = buildWhatsAppText({ title, excerpt, url: safeUrl });
     const href = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
     openNewWindow(href);
-
-    try {
-      onWhatsAppGeneral?.({ href, trackOnly: true, text });
-    } catch {}
+    onWhatsAppGeneral?.({ href, trackOnly: true, text, articleIdentifier });
     handleCloseAll();
   };
 
@@ -164,19 +164,15 @@ export default function ShareModal({
     const text = buildWhatsAppText({ title, excerpt, url: safeUrl });
     const href = `https://wa.me/${encodeURIComponent(clean)}?text=${encodeURIComponent(text)}`;
     openNewWindow(href);
-
-    try {
-      onWhatsAppToNumber?.({ href, trackOnly: true, phone: clean, text });
-    } catch {}
+    onWhatsAppToNumber?.({ href, trackOnly: true, phone: clean, text, articleIdentifier });
     handleCloseAll();
   };
 
-  /* ---------- Renders ---------- */
-
+  /* ---------- Affichage ---------- */
   if (!open) return null;
 
-  return (
-    <div className="fixed inset-0 flex items-center justify-center z-[99] p-4 pointer-events-auto">
+  const modalContent = (
+    <div className="fixed inset-0 flex items-center justify-center z-[9999] p-4 pointer-events-auto">
       <div
         className={`absolute inset-0 bg-black/40 backdrop-blur-sm transition-all duration-300 ${
           isVisible ? "opacity-100" : "opacity-0"
@@ -190,7 +186,7 @@ export default function ShareModal({
             : "opacity-0 scale-95 translate-y-4"
         }`}
       >
-        {/* header */}
+        {/* ---------- Header ---------- */}
         <div className="relative bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 p-5">
           <div className="flex items-center justify-between relative z-10">
             <div className="flex items-center gap-3">
@@ -213,7 +209,7 @@ export default function ShareModal({
           </div>
         </div>
 
-        {/* body */}
+        {/* ---------- Body ---------- */}
         <div className="relative p-6 bg-gradient-to-b from-white to-blue-50/30">
           {title && (
             <div className="mb-5 p-3 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl border border-blue-100/50">
@@ -227,7 +223,7 @@ export default function ShareModal({
             </div>
           )}
 
-          {/* tabs */}
+          {/* Tabs */}
           <Tabs
             tabs={tabs}
             activeIndex={activeIndex}
@@ -236,7 +232,7 @@ export default function ShareModal({
             setActiveTab={setActiveTab}
           />
 
-          {/* content */}
+          {/* Contenu dynamique */}
           <div className="min-h-[120px]">
             {activeTab === "link" && (
               <LinkTab
@@ -279,10 +275,12 @@ export default function ShareModal({
       </div>
     </div>
   );
+
+  /* ---------- Si visualiseur => modal global via portal ---------- */
+  return global ? createPortal(modalContent, document.body) : modalContent;
 }
 
 /* ---------- Sous-composants ---------- */
-
 function Tabs({ tabs, activeIndex, tabWidthPct, activeTab, setActiveTab }) {
   return (
     <div className="relative bg-gradient-to-r from-blue-100/50 to-cyan-100/50 rounded-2xl p-1.5 text-sm mb-5 backdrop-blur-sm overflow-hidden">
@@ -321,6 +319,7 @@ function Tabs({ tabs, activeIndex, tabWidthPct, activeTab, setActiveTab }) {
   );
 }
 
+/* ---------- Onglets internes ---------- */
 function LinkTab({ safeUrl, copyOk, onCopy, onFacebook }) {
   return (
     <div className="space-y-4">
@@ -405,7 +404,6 @@ function EmailTab({
                 ? "bg-blue-400 cursor-wait"
                 : "bg-gradient-to-r from-blue-500 to-blue-500 hover:from-blue-600 hover:to-blue-600"
             }`}
-            title="Envoyer automatiquement"
           >
             {emailSending ? (
               <>
@@ -444,7 +442,6 @@ function EmailTab({
             disabled={!emailTo.trim() || emailSending}
             type="button"
             className="flex items-center justify-center gap-2 py-3.5 rounded-2xl border-2 border-blue-200 hover:border-blue-300 bg-white text-blue-700 font-semibold shadow-md transition-all duration-300 disabled:opacity-60"
-            title="Ouvrir votre client mail"
           >
             <FaEnvelope size={14} />
             Mail App
@@ -468,9 +465,7 @@ function WhatsAppTab({
           <div className="relative group flex-1">
             <input
               value={whatsNumber}
-              onChange={(e) =>
-                setWhatsNumber(e.target.value.replace(/[^\d]/g, ""))
-              }
+              onChange={(e) => setWhatsNumber(e.target.value.replace(/[^\d]/g, ""))}
               placeholder="Numéro (ex: 33612345678)"
               className="w-full px-4 py-3.5 rounded-2xl border-2 border-emerald-200/70 text-sm focus:outline-none focus:border-emerald-400 bg-gradient-to-r from-emerald-50/40 to-white transition-all duration-300 pr-12 group-hover:shadow-lg"
             />
@@ -483,9 +478,7 @@ function WhatsAppTab({
             onClick={onWhatsToNumber}
             disabled={!whatsNumber}
             type="button"
-            className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl text-white font-semibold shadow-lg transition-all duration-300 disabled:opacity-60
-                       bg-gradient-to-r from-[#25D366] to-[#128C7E] hover:from-[#1ec15a] hover:to-[#0f786e]"
-            title="Partager sur WhatsApp (numéro)"
+            className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl text-white font-semibold shadow-lg transition-all duration-300 disabled:opacity-60 bg-gradient-to-r from-[#25D366] to-[#128C7E] hover:from-[#1ec15a] hover:to-[#0f786e]"
           >
             <FaWhatsapp size={16} />
             Envoyer
@@ -497,9 +490,7 @@ function WhatsAppTab({
         <button
           onClick={onWhatsGeneral}
           type="button"
-          className="w-full flex items-center justify-center gap-3 py-3.5 rounded-2xl text-white font-semibold shadow-lg transition-all duration-300
-                     bg-gradient-to-r from-[#25D366] to-[#128C7E] hover:from-[#1ec15a] hover:to-[#0f786e]"
-          title="Partager sur WhatsApp (général)"
+          className="w-full flex items-center justify-center gap-3 py-3.5 rounded-2xl text-white font-semibold shadow-lg transition-all duration-300 bg-gradient-to-r from-[#25D366] to-[#128C7E] hover:from-[#1ec15a] hover:to-[#0f786e]"
         >
           <FaWhatsapp size={16} />
           Ouvrir WhatsApp

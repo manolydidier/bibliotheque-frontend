@@ -1,5 +1,5 @@
-// src/media-library/components/Sidebar.jsx
-import React, { useMemo, useState, useCallback, useEffect } from "react";
+import React, { useMemo, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import {
   FaFolderOpen,
   FaSearch,
@@ -7,14 +7,14 @@ import {
   FaTag,
   FaPlus,
   FaStar,
-  FaFile,
   FaTimes,
+  FaBars,
   FaBackspace,
 } from "react-icons/fa";
 import SimilarList from "./SimilarList";
 
 /* =========================================================
-   Utils recherche (autonome)
+   Utils simples
    ========================================================= */
 function normalize(str = "") {
   try {
@@ -30,62 +30,29 @@ function normalize(str = "") {
 function parseSearchQuery(raw = "") {
   const q = (raw || "").trim();
   if (!q) return { tokens: {}, text: "" };
-
   const parts = q.split(/\s+/);
   const tokens = {};
   const rest = [];
-
   for (const p of parts) {
     const m = /^([a-z_]+):(.*)$/i.exec(p);
     if (m) {
       const k = normalize(m[1]);
       const v = m[2].trim();
       if (v !== "") tokens[k] = v;
-    } else {
-      rest.push(p);
-    }
+    } else rest.push(p);
   }
   return { tokens, text: rest.join(" ").trim() };
 }
 
-function coerceTokenFilters(tokens = {}) {
-  const t = Object.fromEntries(
-    Object.entries(tokens).map(([k, v]) => [normalize(k), String(v).trim()])
-  );
-
-  const type = t.type || t.ty || t.t || ""; // image|video|document|pdf|word|excel|ppt
-  const actif = t.actif ?? t.active ?? t.is_active ?? "";
-  const vedette = t.vedette ?? t.featured ?? t.is_featured ?? "";
-
-  const toBool = (x) => {
-    const n = normalize(String(x));
-    if (["1", "oui", "true", "vrai", "yes", "y"].includes(n)) return true;
-    if (["0", "non", "false", "faux", "no", "n"].includes(n)) return false;
-    return null;
-  };
-
-  return {
-    type, // string
-    is_active: toBool(actif), // true|false|null
-    is_featured: toBool(vedette), // true|false|null
-    mime: t.mime || "", // ex: application/pdf
-    ext: t.ext || "", // ex: pdf, jpg
-    id: t.id || "", // substring sur id
-  };
-}
-
-/** Mise en évidence du match dans un texte (texte libre uniquement) */
 function Highlight({ text, query }) {
   if (!query || !text) return <>{text}</>;
   const { text: plain } = parseSearchQuery(query);
   if (!plain) return <>{text}</>;
-
   const raw = String(text);
   const nText = normalize(raw);
   const nQ = normalize(plain);
   const idx = nText.indexOf(nQ);
   if (idx === -1) return <>{raw}</>;
-
   const start = raw.slice(0, idx);
   const middle = raw.slice(idx, idx + plain.length);
   const end = raw.slice(idx + plain.length);
@@ -98,85 +65,45 @@ function Highlight({ text, query }) {
   );
 }
 
-/** Filtrage combiné (tokens + texte libre) */
-function matchesQuery(media, rawQuery) {
-  if (!rawQuery) return true;
-
-  const { tokens, text } = parseSearchQuery(rawQuery);
-  const tk = coerceTokenFilters(tokens);
-
-  // --- 1) Filtres tokenisés ---
-  if (tk.type) {
-    const t = normalize(tk.type);
-    const mtype = normalize(media?.type || "");
-    const map = {
-      pdf: "pdf",
-      word: "word",
-      excel: "excel",
-      ppt: "ppt",
-      image: "image",
-      video: "video",
-      document: "document",
-    };
-    const expected = map[t] || t;
-    if (expected && !mtype.includes(expected)) return false;
-  }
-
-  if (tk.is_active != null && media?.is_active != null) {
-    if (Boolean(media.is_active) !== tk.is_active) return false;
-  }
-
-  const isFeatured = media?.is_featured ?? media?.favorite ?? false;
-  if (tk.is_featured != null) {
-    if (Boolean(isFeatured) !== tk.is_featured) return false;
-  }
-
-  if (tk.mime && media?.mime_type) {
-    const nm = normalize(media.mime_type);
-    if (!nm.includes(normalize(tk.mime))) return false;
-  }
-
-  if (tk.ext) {
-    const ext = normalize(String(tk.ext).replace(/^\./, ""));
-    const nameish = `${media?.filename || ""} ${media?.original_name || ""} ${
-      media?.title || media?.name || ""
-    }`.toLowerCase();
-    const urlish = `${media?.fileUrl || media?.url || ""}`.toLowerCase();
-    const ends =
-      new RegExp(`\\.${ext}(\\s|$)`).test(nameish) ||
-      urlish.endsWith(`.${ext}`);
-    if (!ends) return false;
-  }
-
-  if (tk.id) {
-    const mid = String(media?.id || "");
-    if (!mid.includes(String(tk.id))) return false;
-  }
-
-  // --- 2) Texte libre résiduel ---
-  const nQ = normalize(text);
-  if (!nQ) return true;
-
-  const haystacks = [
-    media?.title,
-    media?.name,
-    media?.filename,
-    media?.original_name,
-    media?.mime_type,
-    ...(Array.isArray(media?.tags) ? media.tags : []),
-  ]
-    .filter(Boolean)
-    .map(normalize);
-
-  return haystacks.some((h) => h.includes(nQ));
+/* =========================================================
+   Section (accordéon)
+   ========================================================= */
+function Section({ title, icon: Icon, children, defaultOpen = true }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border border-slate-200/60 rounded-xl bg-white/70 mb-3 shadow-sm overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-4 py-2 font-medium text-slate-700 hover:bg-slate-50 transition-all"
+      >
+        <span className="flex items-center gap-2">
+          <Icon className="text-blue-600" /> {title}
+        </span>
+        <span
+          className={`text-slate-400 text-xs transition-transform duration-300 ${
+            open ? "rotate-180" : "rotate-0"
+          }`}
+        >
+          ▼
+        </span>
+      </button>
+      <div
+        className={`transition-all duration-500 ease-in-out ${
+          open
+            ? "max-h-[800px] opacity-100 translate-y-0"
+            : "max-h-0 opacity-0 -translate-y-2"
+        }`}
+      >
+        <div className="p-4">{children}</div>
+      </div>
+    </div>
+  );
 }
 
 /* =========================================================
-   Sidebar avec recherche enrichie + animations
+   Sidebar principale avec i18n
    ========================================================= */
 export default function Sidebar({
-  open,
-  toggle,
   mediaCount,
   tags = [],
   mediaList = [],
@@ -191,362 +118,185 @@ export default function Sidebar({
   iconBgForType,
   toAbsolute,
 }) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(true);
 
-  /** État dédié aux entrées animées (stagger) */
-  const [listEnter, setListEnter] = useState(false);
-  useEffect(() => {
-    // relance l’animation liste à chaque ouverture / changement de recherche
-    let raf1, raf2;
-    if (open) {
-      setListEnter(false);
-      raf1 = requestAnimationFrame(() => {
-        raf2 = requestAnimationFrame(() => setListEnter(true));
-      });
-    } else {
-      setListEnter(false);
-    }
-    return () => {
-      if (raf1) cancelAnimationFrame(raf1);
-      if (raf2) cancelAnimationFrame(raf2);
-    };
-  }, [open, query]);
-
-  /** Liste triée + filtrée */
   const sortedFiltered = useMemo(() => {
     const list = Array.isArray(mediaList) ? mediaList.slice() : [];
     list.sort((a, b) => {
-      const aa = normalize(
-        a?.title || a?.name || a?.filename || a?.original_name || ""
-      );
-      const bb = normalize(
-        b?.title || b?.name || b?.filename || b?.original_name || ""
-      );
+      const aa = normalize(a?.title || a?.name || "");
+      const bb = normalize(b?.title || b?.name || "");
       return aa.localeCompare(bb, "fr");
     });
-    return list.filter((m) => matchesQuery(m, query));
+    return list.filter((m) =>
+      query
+        ? normalize(
+            m?.title || m?.name || m?.filename || m?.original_name || ""
+          ).includes(normalize(query))
+        : true
+    );
   }, [mediaList, query]);
 
-  const handleSelect = useCallback(
-    (f) => {
-      onSelectFile?.(f);
-    },
-    [onSelectFile]
-  );
-
-  const effectiveCount = useMemo(
-    () => (query ? sortedFiltered.length : mediaList.length),
-    [query, sortedFiltered.length, mediaList.length]
-  );
-
-  // Feedback UX : tokens détectés
-  const { tokens } = useMemo(() => parseSearchQuery(query), [query]);
-  const coerced = useMemo(() => coerceTokenFilters(tokens), [tokens]);
-  const hasTokens = Object.keys(tokens).length > 0;
+  const handleSelect = useCallback((f) => onSelectFile?.(f), [onSelectFile]);
 
   return (
-    <div
-      className={`sidebar pt-4 overflow-auto w-72 lg:w-80
-        bg-gradient-to-br from-white/80 via-white/75 to-slate-50/80
-        backdrop-blur-2xl shadow-[0_8px_32px_0_rgba(31,38,135,0.15)]
-        border-r border-white/50 flex-shrink-0
-        transition-[transform,opacity] duration-500 ease-[cubic-bezier(.2,.7,.2,1)]
-        will-change-transform
-        ${
-          open
-            ? "translate-x-0 opacity-100 pointer-events-auto"
-            : "-translate-x-full lg:translate-x-0 opacity-0 lg:opacity-100 pointer-events-none lg:pointer-events-auto"
-        }
-        lg:block  lg:relative inset-y-0 left-0 z-40`}
-    >
-      {/* Header (fade + slight slide) */}
-      <div
-        className={`p-6 border-b border-slate-200/40 sticky top-0
-          bg-gradient-to-r from-white/80 to-slate-50/80 backdrop-blur-2xl z-10 shadow-sm
-          transition-all duration-500 ease-out
+    <>
+      {/* === Open Button (always visible) === */}
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          className="fixed top-4 left-96 z-50 p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg transition-transform duration-300 hover:scale-110"
+          title={t("Open library")}
+        >
+          <FaBars className="text-lg" />
+        </button>
+      )}
+
+      {/* === Sidebar === */}
+      <aside
+        className={`fixed top-0 left-0 flex flex-col w-96 min-h-screen
+          bg-gradient-to-br from-white via-slate-50 to-slate-100
+          backdrop-blur-xl border-r border-slate-200 shadow-xl z-40
+          transform transition-transform duration-500 ease-in-out
           ${
             open
-              ? "opacity-100 translate-y-0"
-              : "opacity-0 -translate-y-1 lg:opacity-100 lg:translate-y-0"
+              ? "translate-x-0 opacity-100"
+              : "-translate-x-[calc(100%-3rem)] opacity-90"
           }`}
       >
-        <h2 className="text-2xl font-light text-slate-800 flex items-center tracking-tight">
-          <div className="mr-3 p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg transition-transform duration-300 group-hover:rotate-1">
-            <FaFolderOpen className="text-white text-lg" />
+        {/* HEADER */}
+        <header className="p-5 border-b border-slate-200 bg-white/70 sticky top-0 z-10 flex items-center justify-between">
+          <div className="flex items-center">
+            <div className="mr-3 p-2 bg-blue-600 rounded-xl shadow">
+              <FaFolderOpen className="text-white text-lg" />
+            </div>
+            <h2 className="text-xl font-medium text-slate-800">
+              {t("Library")}
+            </h2>
           </div>
-          <span className="flex-1">
-            Bibliothèque
-            {typeof mediaCount === "number" && (
-              <span className="ml-2 text-sm font-normal text-slate-500 bg-slate-100/80 px-3 py-1 rounded-full">
-                {mediaCount}
-              </span>
-            )}
-          </span>
-        </h2>
+          {/* Close button */}
+          <button
+            onClick={() => setOpen(false)}
+            className="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition"
+            title={t("Close")}
+          >
+            <FaTimes />
+          </button>
+        </header>
 
-        {/* Recherche */}
-        <div className="mt-6 relative group">
+        {/* SEARCH BAR */}
+        <div className="p-4 relative">
+          <FaSearch className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Rechercher… (ex: type:image actif:1 vedette:0 ext:pdf mot-clef)"
+            placeholder={t("Search...")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full pl-12 pr-10 py-3.5 border border-slate-200/60 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400/60 bg-white/90 backdrop-blur-sm transition-all duration-300 text-sm placeholder:text-slate-400 shadow-sm hover:shadow-md group-hover:border-slate-300/70"
+            className="w-full pl-12 pr-10 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-blue-400 text-sm placeholder:text-slate-400 shadow-sm bg-white/90 transition-all"
           />
-          <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-all duration-300 group-focus-within:text-blue-500 group-focus-within:scale-110" />
           {query && (
             <button
-              type="button"
               onClick={() => setQuery("")}
-              title="Effacer"
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors p-1 rounded-md hover:bg-slate-100"
+              className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors"
+              title={t("Clear")}
             >
               <FaBackspace />
             </button>
           )}
-
-          {(query || hasTokens) && (
-            <div
-              className={`mt-2 text-xs text-slate-500 space-y-1 transition-opacity duration-300 ${
-                open ? "opacity-100" : "opacity-0"
-              }`}
-            >
-              {query && (
-                <div className="transition-transform duration-300 ease-out translate-y-0">
-                  {effectiveCount} résultat
-                  {effectiveCount > 1 ? "s" : ""} · filtre : “{query}”
-                </div>
-              )}
-              {hasTokens && (
-                <div className="flex flex-wrap gap-1.5">
-                  {Object.entries(coerced)
-                    .filter(([_, v]) => v !== "" && v != null)
-                    .map(([k, v], i) => (
-                      <span
-                        key={k}
-                        style={{ transitionDelay: `${Math.min(i, 10) * 35}ms` }}
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-200
-                          transition-all duration-300 ease-out
-                          ${
-                            listEnter
-                              ? "opacity-100 translate-y-0"
-                              : "opacity-0 translate-y-1"
-                          }`}
-                        title={`token: ${k}`}
-                      >
-                        {k}: {String(v)}
-                      </span>
-                    ))}
-                </div>
-              )}
-            </div>
-          )}
         </div>
-      </div>
 
-      {/* Contenu défilant */}
-      <div className="overflow-y-auto h-full pb-24 scrollbar-thin scrollbar-thumb-slate-300/50 scrollbar-track-transparent hover:scrollbar-thumb-slate-400/50">
-        {/* Fichiers liés */}
-        <div className="p-6">
-          <div
-            className={`flex items-center justify-between mb-5 transition-all duration-300 ${
-              listEnter ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-1"
-            }`}
-          >
-            <h3 className="font-semibold text-slate-800 flex items-center text-base">
-              <span className="mr-2.5 p-1.5 bg-gradient-to-br from-blue-500/10 to-indigo-600/10 rounded-lg">
-                <FaClock className="text-blue-600 text-sm" />
-              </span>
-              Fichiers
-              {query ? " (filtrés)" : " liés"}
-            </h3>
-            <span className="text-xs text-slate-500 bg-slate-100/60 px-2.5 py-1 rounded-full font-medium">
-              {effectiveCount}
-            </span>
-          </div>
-
-          <div className="space-y-2.5">
+        {/* SCROLLABLE CONTENT */}
+        <div className="flex-1 overflow-y-auto px-4 py-2 space-y-4 scrollbar-thin scrollbar-thumb-slate-300/50 hover:scrollbar-thumb-slate-400/50">
+          <Section title={t("Files")} icon={FaClock}>
             {sortedFiltered.length ? (
               sortedFiltered.map((f, idx) => {
                 const isActive = selectedFile?.id === f.id;
-                const title = f?.title || f?.name || f?.filename || "Sans titre";
-                const metaLeft = f?.size;
-                const metaRight = f?.date;
-
+                const title = f?.title || f?.name || t("Untitled");
                 return (
                   <div
-                    key={f.id ?? `media-${idx}`}
-                    role="button"
-                    tabIndex={0}
+                    key={f.id ?? idx}
+                    style={{ animationDelay: `${idx * 70}ms` }}
                     onClick={() => handleSelect(f)}
-                    onKeyDown={(e) => {
-                      const k = e.key?.toLowerCase();
-                      if (k === "enter" || k === " ") {
-                        e.preventDefault();
-                        handleSelect(f);
-                      }
-                    }}
-                    style={{ transitionDelay: `${Math.min(idx, 14) * 35}ms` }}
-                    className={`p-4 rounded-xl cursor-pointer flex items-center
-                      border group outline-none
-                      transition-all duration-300 ease-out will-change-transform
-                      ${
-                        listEnter
-                          ? "opacity-100 translate-y-0"
-                          : "opacity-0 translate-y-1"
-                      }
-                      ${
+                    className={`p-3 mb-2 rounded-lg cursor-pointer flex items-center border animate-fadeSlide
+                      transition-all duration-300 ${
                         isActive
-                          ? "bg-gradient-to-r from-blue-50/90 to-indigo-50/80 border-blue-300/60 shadow-lg shadow-blue-100/50 scale-[1.02]"
-                          : "bg-white/70 border-slate-200/50 hover:border-blue-300/40 hover:shadow-md hover:shadow-slate-200/50 hover:scale-[1.01] hover:bg-white/90 focus:border-blue-300/60 hover:translate-x-0.5"
+                          ? "bg-blue-50 border-blue-400 scale-[1.02]"
+                          : "bg-white border-slate-200 hover:bg-blue-50/40 hover:border-blue-300"
                       }`}
                   >
                     <div
-                      className={`w-11 h-11 ${iconBgForType?.(f.type)} rounded-xl flex items-center justify-center mr-3.5
-                        transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 shadow-sm`}
+                      className={`w-10 h-10 ${iconBgForType?.(
+                        f.type
+                      )} rounded-lg flex items-center justify-center mr-3`}
                     >
-                      {iconForType?.(f.type, "text-xl")}
+                      {iconForType?.(f.type, "text-lg")}
                     </div>
-
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-slate-800 truncate group-hover:text-slate-900 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-800 truncate">
                         <Highlight text={title} query={query} />
                       </p>
-                      <p className="text-xs text-slate-500 mt-0.5 font-normal truncate">
-                        {metaLeft ? `${metaLeft} • ` : ""}
-                        {metaRight || ""}
-                      </p>
-                      {!!(Array.isArray(f?.tags) && f.tags.length) && (
-                        <div className="mt-1 flex flex-wrap gap-1.5">
-                          {f.tags.slice(0, 4).map((t, i) => (
-                            <span
-                              key={`${t}-${i}`}
-                              style={{ transitionDelay: `${i * 25}ms` }}
-                              className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100/70 text-slate-600 border border-slate-200/60 transition-all duration-300 ease-out hover:translate-y-[-1px]"
-                            >
-                              <Highlight text={t} query={query} />
-                            </span>
-                          ))}
-                          {f.tags.length > 4 && (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border-slate-200/60 border">
-                              +{f.tags.length - 4}
-                            </span>
-                          )}
-                        </div>
-                      )}
                     </div>
-
                     {f.favorite && (
-                      <FaStar className="ml-2 text-amber-400 flex-shrink-0 drop-shadow-sm transition-transform duration-300 group-hover:scale-110" />
+                      <FaStar className="ml-2 text-amber-400 flex-shrink-0" />
                     )}
                   </div>
                 );
               })
-            ) : query ? (
-              <div className="text-sm text-slate-500 py-10 text-center bg-gradient-to-br from-slate-50/70 to-slate-100/50 rounded-2xl border border-slate-200/40 backdrop-blur-sm transition-all duration-300 ease-out">
-                <FaFile className="mx-auto mb-3 text-3xl text-slate-300" />
-                <p className="font-medium">Aucun média trouvé</p>
-                <p className="text-xs text-slate-400 mt-1 mb-4">
-                  Essayez un autre mot-clé ou effacez la recherche.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setQuery("")}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border border-slate-300/70 text-slate-700 bg-white/80 hover:bg-slate-50 hover:border-slate-400 transition-all"
-                >
-                  <FaTimes />
-                  Effacer le filtre
-                </button>
-              </div>
             ) : (
-              <div className="text-sm text-slate-500 py-16 text-center bg-gradient-to-br from-slate-50/70 to-slate-100/50 rounded-2xl border border-slate-200/40 backdrop-blur-sm transition-all duration-300 ease-out">
-                <FaFile className="mx-auto mb-3 text-3xl text-slate-300" />
-                <p className="font-medium">Aucun média lié</p>
-                <p className="text-xs text-slate-400 mt-1">
-                  Les fichiers apparaîtront ici
-                </p>
-              </div>
+              <p className="text-sm text-slate-500 text-center py-3">
+                {t("No media found.")}
+              </p>
             )}
-          </div>
-        </div>
+          </Section>
 
-        {/* Tags */}
-        <div
-          className={`p-6 border-t border-slate-200/40 bg-gradient-to-b from-transparent to-slate-50/30 transition-all duration-500
-            ${listEnter ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1"}`}
-        >
-          <div className="flex items-center justify-between mb-5">
-            <h3 className="font-semibold text-slate-800 flex items-center text-base">
-              <span className="mr-2.5 p-1.5 bg-gradient-to-br from-emerald-500/10 to-teal-600/10 rounded-lg">
-                <FaTag className="text-emerald-600 text-sm" />
-              </span>
-              Tags
-            </h3>
-            {Array.isArray(tags) && tags.length > 0 && (
-              <span className="text-xs text-slate-500 bg-slate-100/60 px-2.5 py-1 rounded-full font-medium">
-                {tags.length}
-              </span>
-            )}
-          </div>
-
-          {Array.isArray(tags) && tags.length > 0 ? (
-            TagListComponent ? (
-              <TagListComponent
-                tags={tags}
-                onAddClick={onOpenTagManager}
-                onTagClick={undefined}
-                max={10}
-              />
+          <Section title={t("Tags")} icon={FaTag}>
+            {Array.isArray(tags) && tags.length > 0 ? (
+              TagListComponent ? (
+                <TagListComponent
+                  tags={tags}
+                  onAddClick={onOpenTagManager}
+                  max={10}
+                />
+              ) : (
+                <p className="text-xs text-slate-500">{t("Tags not provided")}</p>
+              )
             ) : (
-              <div className="text-xs text-slate-500 py-4 px-4 bg-amber-50/50 rounded-xl border border-amber-200/40">
-                TagListComponent non fourni
-              </div>
-            )
-          ) : (
-            <div className="flex items-center gap-3 p-4 bg-slate-50/50 rounded-xl border border-slate-200/40">
-              <span className="text-xs text-slate-500 px-3 py-2 rounded-lg bg-white/80 border border-slate-200/40 font-medium">
-                Aucun tag
-              </span>
               <button
                 onClick={onOpenTagManager}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold border border-emerald-300/60 text-emerald-700 bg-gradient-to-r from-emerald-50/80 to-teal-50/70 hover:from-emerald-100/90 hover:to-teal-100/80 hover:border-emerald-400/70 transition-all duration-300 shadow-sm hover:shadow-md hover:scale-105"
-                title="Gérer les tags"
-                type="button"
+                className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-all"
               >
-                <FaPlus className="text-emerald-600" />
-                Ajouter
+                <FaPlus /> {t("Add tag")}
               </button>
-            </div>
-          )}
-        </div>
+            )}
+          </Section>
 
-        {/* Similaires */}
-        <SimilarList
-          items={similar}
-          loading={similarLoading}
-          onOpen={onOpenSimilar}
-          toAbsolute={toAbsolute}
-        />
+          <Section title={t("Similar")} icon={FaStar}>
+            <SimilarList
+              items={similar}
+              loading={similarLoading}
+              onOpen={onOpenSimilar}
+              toAbsolute={toAbsolute}
+            />
+          </Section>
+        </div>
+      </aside>
+
+      {/* MAIN CONTENT AREA */}
+      <div className={`ml-${open ? "80" : "12"} transition-all duration-500`}>
+        {/* Your main viewer content here */}
       </div>
 
-      {/* Bouton replier (mobile) */}
-      <button
-        onClick={toggle}
-        className="fixed top-12 right-6 p-2 rounded-xl text-slate-600 hover:text-slate-900 transition-all duration-300 bg-white/80 hover:bg-white border border-slate-200/60 hover:border-slate-300 shadow-sm hover:shadow-md hover:scale-110 active:scale-95 z-50 "
-        title="Replier"
-        aria-label="Fermer la sidebar"
-        type="button"
-      >
-        <FaTimes className="text-lg" />
-      </button>
-
-      {/* Overlay mobile — toujours monté pour animer le fade-out */}
-      <div
-        className={`fixed inset-0 bg-slate-900/20 backdrop-blur-sm -z-10 lg:hidden transition-opacity duration-300
-          ${open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
-        onClick={toggle}
-        aria-hidden="true"
-      />
-    </div>
+      {/* CSS Animation */}
+      <style>{`
+        @keyframes fadeSlide {
+          0% { opacity: 0; transform: translateY(8px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fadeSlide {
+          animation: fadeSlide 0.4s ease-out both;
+        }
+      `}</style>
+    </>
   );
 }

@@ -1,5 +1,6 @@
 // src/media-library/Visualiseur.jsx
 import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import SmartImage from "../parts/SmartImage";
@@ -49,8 +50,8 @@ import { FiCalendar, FiClock, FiTag, FiSearch, FiFilter, FiChevronDown, FiChevro
 import SeoHead from "../../../services/SeoHead";
 
 /* === nouveaux imports de viewers === */
-import PdfPreview from "./FilePreview/PdfFilePreview";
-import WordPreview from "./FilePreview/WordPreview";
+import PdfPreview from "./FilePreview/PdfFilePreviewPro";
+import WordPreviewPro from "./FilePreview/WordPreview";
 import PowerPointPreview from "./FilePreview/PowerPointPreview";
 // import MapPreview from "./FilePreview/MapPreview";
 
@@ -96,7 +97,7 @@ const primaryMediaUrl = (art) => {
   return raw ? toAbsolute(raw) : null;
 };
 
-// Image de fond “édition”
+// Image de fond "édition"
 const backgroundMediaUrl = (art) => {
   if (!art) return null;
   const cand =
@@ -332,6 +333,7 @@ function computeRights(permissions = []) {
 
 /* ---------------- Visualiseur ---------------- */
 export default function Visualiseur() {
+  const { t, i18n } = useTranslation();
   const dispatch = useDispatch();
   const unlockError = useSelector(selectAuthError);
 
@@ -356,7 +358,7 @@ export default function Visualiseur() {
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [unlockBusy, setUnlockBusy] = useState(false);
 
-  const [activeTab, setActiveTab] = useState("Aperçu");
+  const [activeTab, setActiveTab] = useState(t('visualiseur.tabs.preview'));
 
   const [fullscreen, setFullscreen] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -374,24 +376,51 @@ export default function Visualiseur() {
   const [qpOpen, setQpOpen] = useState(false);
   const [qpFile, setQpFile] = useState(null);
 
-  // État persistant pour l’ouverture/fermeture de la Sidebar
-const [sidebarOpen, setSidebarOpen] = useState(() => {
-  try {
-    return JSON.parse(localStorage.getItem("visualiseur:sidebarOpen") || "true");
-  } catch {
-    return true;
-  }
-});
-useEffect(() => {
-  try { localStorage.setItem("visualiseur:sidebarOpen", JSON.stringify(sidebarOpen)); } catch {}
-}, [sidebarOpen]);
+  // État persistant pour l'ouverture/fermeture de la Sidebar
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("visualiseur:sidebarOpen") || "true");
+    } catch {
+      return true;
+    }
+  });
+  
+  useEffect(() => {
+    try { localStorage.setItem("visualiseur:sidebarOpen", JSON.stringify(sidebarOpen)); } catch {}
+  }, [sidebarOpen]);
 
-const toggleSidebar = useCallback(() => {
-  setSidebarOpen((s) => !s);
-}, []);
+  const toggleSidebar = useCallback(() => {
+    setSidebarOpen((s) => !s);
+  }, []);
+
+  // Sélecteur de langue
+  const LanguageSelector = () => (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => i18n.changeLanguage('fr')}
+        className={`px-3 py-1 rounded-lg text-sm ${
+          i18n.language === 'fr' 
+            ? 'bg-blue-500 text-white' 
+            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+        }`}
+      >
+        FR
+      </button>
+      <button
+        onClick={() => i18n.changeLanguage('en')}
+        className={`px-3 py-1 rounded-lg text-sm ${
+          i18n.language === 'en' 
+            ? 'bg-blue-500 text-white' 
+            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+        }`}
+      >
+        EN
+      </button>
+    </div>
+  );
 
   /* ------- Actions ------- */
-    // Construit un "article-like" avec le média en tête (pour FilePreview)
+  // Construit un "article-like" avec le média en tête (pour FilePreview)
   const buildArticleWith = useCallback((m) => {
     if (!article || !m) return article;
     return {
@@ -401,16 +430,17 @@ const toggleSidebar = useCallback(() => {
       title: m.title || article.title,
     };
   }, [article]);
+  
   const openInNew = useCallback(() => {
     const m = selectedFile
       ? selectedFile
       : (primaryMediaUrl(article)
-          ? { fileUrl: primaryMediaUrl(article), title: article?.title || "Pièce jointe" }
+          ? { fileUrl: primaryMediaUrl(article), title: article?.title || t('visualiseur.preview.attachment') }
           : null);
     if (!m) return;
     setQpFile(buildArticleWith(m));
     setQpOpen(true);
-  }, [selectedFile, article, buildArticleWith]);
+  }, [selectedFile, article, buildArticleWith, t]);
 
   const downloadCurrent = () => {
     const u = selectedFile?.fileUrl || primaryMediaUrl(article);
@@ -420,25 +450,24 @@ const toggleSidebar = useCallback(() => {
     document.body.appendChild(a); a.click(); a.remove();
   };
 
-// Détermine le type à partir du mime OU de l'extension
-const typeFromMimeOrExt = (mime, url = "") => {
-  const m = (mime || "").toLowerCase();
-  const s = (url || "").toLowerCase();
+  // Détermine le type à partir du mime OU de l'extension
+  const typeFromMimeOrExt = (mime, url = "") => {
+    const m = (mime || "").toLowerCase();
+    const s = (url || "").toLowerCase();
 
-  if (m.includes("pdf") || s.endsWith(".pdf")) return "pdf";
-  if (m.includes("presentation") || /\.(pptx?|ppsx?)$/.test(s)) return "ppt";
-  if (m.includes("spreadsheet") || /\.(xlsx?|csv)$/.test(s)) return "excel";
-  if (m.includes("word") || m.includes("msword") || /\.(docx?|rtf)$/.test(s)) return "word";
-  if (m.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg|avif)$/.test(s)) return "image";
-  if (m.startsWith("video/") || /\.(mp4|webm|ogg|mov)$/i.test(s)) return "video";
-  return "other";
-};
-
+    if (m.includes("pdf") || s.endsWith(".pdf")) return "pdf";
+    if (m.includes("presentation") || /\.(pptx?|ppsx?)$/.test(s)) return "ppt";
+    if (m.includes("spreadsheet") || /\.(xlsx?|csv)$/.test(s)) return "excel";
+    if (m.includes("word") || m.includes("msword") || /\.(docx?|rtf)$/.test(s)) return "word";
+    if (m.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg|avif)$/.test(s)) return "image";
+    if (m.startsWith("video/") || /\.(mp4|webm|ogg|mov)$/i.test(s)) return "video";
+    return "other";
+  };
 
   /* ------- Unlock ------- */
   async function handleUnlock(password) {
     if (!password) {
-      dispatch(setAuthError("Merci de saisir un mot de passe."));
+      dispatch(setAuthError(t('visualiseur.enterPassword')));
       return;
     }
     setUnlockBusy(true);
@@ -461,19 +490,19 @@ const typeFromMimeOrExt = (mime, url = "") => {
       setLockedKind(null);
       setUnlockOpen(false);
       dispatch(clearAuthError());
-      document.title = art?.title || "Visualiseur";
+      document.title = art?.title || t('visualiseur.title');
     } catch (e) {
       const apiCode = e?.response?.data?.code?.toString()?.toLowerCase?.() || "";
       if (apiCode === "private") {
-        dispatch(setAuthError("Cet article est privé — aucun mot de passe ne permet d’y accéder. Demandez une autorisation à un administrateur."));
+        dispatch(setAuthError(t('visualiseur.privateAccess')));
         setLockedKind("private");
         setUnlockOpen(false);
       } else if (e.incorrectPassword) {
-        const msg = e.message || "Mot de passe invalide.";
+        const msg = e.message || t('visualiseur.incorrectPassword');
         dispatch(setAuthError(msg));
         setUnlockOpen(true);
       } else {
-        const msg = e?.response?.data?.message || "Erreur lors du déverrouillage.";
+        const msg = e?.response?.data?.message || t('visualiseur.unlockError');
         dispatch(setAuthError(msg));
       }
     } finally {
@@ -522,7 +551,7 @@ const typeFromMimeOrExt = (mime, url = "") => {
 
     if (!idOrSlug) {
       setLoading(false);
-      setErr("Identifiant/slug manquant dans l'URL.");
+      setErr(t('visualiseur.missingId'));
       return;
     }
 
@@ -546,7 +575,7 @@ const typeFromMimeOrExt = (mime, url = "") => {
         });
         if (!mounted) return;
         setArticle(art);
-        document.title = art?.title || "Visualiseur";
+        document.title = art?.title || t('visualiseur.title');
       } catch (e) {
         if (!mounted) return;
         if (e.locked) {
@@ -555,20 +584,20 @@ const typeFromMimeOrExt = (mime, url = "") => {
             setLockedKind("private");
             setUnlockOpen(false);
             setErr("");
-            dispatch(setAuthError("Accès restreint — permission requise."));
+            dispatch(setAuthError(t('visualiseur.restrictedAccess')));
           } else if (/password/.test(code) || !code) {
             setLockedKind("password");
             setUnlockOpen(true);
             setErr("");
-            dispatch(setAuthError("Mot de passe requis."));
+            dispatch(setAuthError(t('visualiseur.passwordRequired')));
           } else {
             setLockedKind("unknown");
             setUnlockOpen(true);
             setErr("");
-            dispatch(setAuthError("Accès restreint — authentification requise."));
+            dispatch(setAuthError(t('visualiseur.authRequired')));
           }
         } else {
-          setErr(e?.message || "Erreur lors du chargement");
+          setErr(e?.message || t('visualiseur.loadingError'));
           dispatch(clearAuthError());
         }
       } finally {
@@ -577,7 +606,7 @@ const typeFromMimeOrExt = (mime, url = "") => {
     })();
 
     return () => { mounted = false; };
-  }, [idOrSlug, dispatch]);
+  }, [idOrSlug, dispatch, t]);
 
   /* ------- Private guard ------- */
   useEffect(() => {
@@ -633,46 +662,43 @@ const typeFromMimeOrExt = (mime, url = "") => {
   }, [article?.id]);
 
   /* ------- Media list ------- */
+  const mediaList = useMemo(() => {
+    const list = Array.isArray(article?.media) ? article.media : [];
 
-const mediaList = useMemo(() => {
-  const list = Array.isArray(article?.media) ? article.media : [];
+    return list
+      .filter(m => !!m?.url)
+      .map(m => {
+        const url = toAbsolute(m.url);
+        const title =
+          m.name?.trim?.() ||
+          m.original_filename?.trim?.() ||
+          m.filename?.trim?.() ||
+          article?.title?.trim?.() ||
+          t('visualiseur.untitled');
 
-  return list
-    .filter(m => !!m?.url)
-    .map(m => {
-      const url = toAbsolute(m.url); // garde ton toAbsolute
-      const title =
-        m.name?.trim?.() ||
-        m.original_filename?.trim?.() ||
-        m.filename?.trim?.() ||
-        article?.title?.trim?.() ||
-        "Sans titre";
-
-      return {
-        id: m.id,
-        title,                       // <-- nom propre du média
-        type: typeFromMimeOrExt(m.mime_type, url),
-        fileUrl: url,
-        thumbnail: m.thumbnail_url ? toAbsolute(m.thumbnail_url) : url,
-        size: m.size_readable || (typeof m.size === "number" ? `${(m.size/1024/1024).toFixed(1)} Mo` : "—"),
-        date: formatDate(m.created_at || article?.published_at),
-        category: firstCategory(article),
-        favorite: !!m.is_featured,
-        tags: Array.isArray(m.tags) ? m.tags.map(t => t.name || t) : [],
-        // champs bruts utiles si besoin ailleurs
-        name: m.name,
-        filename: m.filename,
-        original_filename: m.original_filename,
-        mime_type: m.mime_type,
-      };
-    });
-}, [article]);
-
+        return {
+          id: m.id,
+          title,
+          type: typeFromMimeOrExt(m.mime_type, url),
+          fileUrl: url,
+          thumbnail: m.thumbnail_url ? toAbsolute(m.thumbnail_url) : url,
+          size: m.size_readable || (typeof m.size === "number" ? `${(m.size/1024/1024).toFixed(1)} Mo` : "—"),
+          date: formatDate(m.created_at || article?.published_at),
+          category: firstCategory(article),
+          favorite: !!m.is_featured,
+          tags: Array.isArray(m.tags) ? m.tags.map(t => t.name || t) : [],
+          name: m.name,
+          filename: m.filename,
+          original_filename: m.original_filename,
+          mime_type: m.mime_type,
+        };
+      });
+  }, [article, t]);
 
   /* ------- Default selected media ------- */
   const currentType  = selectedFile?.type || inferTypeFromUrl(primaryMediaUrl(article));
   const currentUrl   = selectedFile?.fileUrl || primaryMediaUrl(article);
-  const currentTitle = selectedFile?.title || article?.title || "Sélectionnez un fichier";
+  const currentTitle = selectedFile?.title || article?.title || t('visualiseur.selectFile');
 
   useEffect(() => {
     if (!mediaList.length) { setSelectedFile(null); return; }
@@ -684,9 +710,9 @@ const mediaList = useMemo(() => {
   useEffect(() => {
     if (!article?.id) return;
     setSelectedFile(null);
-    setActiveTab("Aperçu");
+    setActiveTab(t('visualiseur.tabs.preview'));
     try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch {}
-  }, [article?.id]);
+  }, [article?.id, t]);
 
   const shareData = useMemo(() => ({
     title: article?.title || "",
@@ -710,7 +736,7 @@ const mediaList = useMemo(() => {
   if (err) {
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center px-4">
-        <div className="text-red-500 text-center">{err}</div>
+        <div className="text-red-500 text-center">{t('visualiseur.error')}: {err}</div>
       </div>
     );
   }
@@ -730,23 +756,23 @@ const mediaList = useMemo(() => {
             }}
             title={
               isPrivateLock
-                ? "Accès restreint — vous n’avez pas la permission."
-                : "Cliquez, Entrée, P ou Ctrl+K pour entrer le mot de passe"
+                ? t('visualiseur.noPermission')
+                : t('visualiseur.shortcuts')
             }
             className="inline-flex items-center gap-3 px-5 py-3 rounded-2xl bg-white/70 border border-white/60 shadow cursor-pointer select-none"
           >
             <FaLock className="text-blue-600" />
             <span>
               {isPrivateLock
-                ? "Accès restreint — vous n’avez pas la permission de consulter cet article."
-                : "Contenu protégé — cliquez ou appuyez sur P pour entrer le mot de passe"}
+                ? t('visualiseur.noPermission')
+                : t('visualiseur.protectedContent')}
             </span>
           </div>
 
           <p className="mt-3 text-xs text-slate-500">
             {isPrivateLock
-              ? "Demandez une autorisation à un administrateur ou revenez en arrière."
-              : "Astuce : P, Entrée ou Ctrl+K rouvrent la fenêtre. Vous pouvez aussi déclencher window.visualiseur.openPassword() ou l’événement « visualiseur:openPassword »."}
+              ? t('visualiseur.askAdmin')
+              : t('visualiseur.shortcuts')}
           </p>
 
           <div className="mt-6 flex items-center justify-center gap-3">
@@ -754,14 +780,14 @@ const mediaList = useMemo(() => {
               onClick={() => navigate(-1)}
               className="px-5 py-3 rounded-xl border border-slate-300/60 text-slate-700 bg-white/80 hover:bg-white transition"
             >
-              Retour
+              {t('visualiseur.backButton')}
             </button>
             {!token && (
               <a
                 href="/auth"
                 className="px-5 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 transition"
               >
-                Se connecter
+                {t('visualiseur.login')}
               </a>
             )}
           </div>
@@ -773,7 +799,7 @@ const mediaList = useMemo(() => {
             onClose={() => { dispatch(clearAuthError()); setUnlockOpen(false); }}
             onSubmit={handleUnlock}
             defaultValue={getStoredPassword(idOrSlug)}
-            title="Déverrouiller l’article"
+            title={t('visualiseur.unlock')}
             error={unlockError}
             busy={unlockBusy}
           />
@@ -785,13 +811,20 @@ const mediaList = useMemo(() => {
   if (!article) {
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center px-4">
-        <div className="text-red-500 text-center">Article introuvable.</div>
+        <div className="text-red-500 text-center">{t('visualiseur.articleNotFound')}</div>
       </div>
     );
   }
 
   const hasHistory = Array.isArray(article.history) && article.history.length > 0;
-  const tabs = ["Aperçu", "Médias", "Métadonnées", ...(hasHistory ? ["Versions"] : []), "Statistiques", "SEO"];
+  const tabs = [
+    t('visualiseur.tabs.preview'),
+    t('visualiseur.tabs.media'),
+    t('visualiseur.tabs.metadata'),
+    ...(hasHistory ? [t('visualiseur.tabs.versions')] : []),
+    t('visualiseur.tabs.statistics'),
+    t('visualiseur.tabs.seo')
+  ];
 
   /* ---------- SEO ---------- */
   const SITE_URL =
@@ -833,47 +866,50 @@ const mediaList = useMemo(() => {
         }}
       />
 
-      {/* (AUCUN FilePreview direct ici) */}
-
       <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 font-sans px-3 sm:px-4 lg:px-6 2xl:px-10 py-4" >
         {unlockError && (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {unlockError}
           </div>
         )}
+        
+        {/* Sélecteur de langue */}
+        <div className="fixed right-3 top-24 z-50">
+          <LanguageSelector />
+        </div>
+
         {/* Bascule Sidebar (desktop) */}
-            <button
-              type="button"
-              onClick={toggleSidebar}
-              title={sidebarOpen ? "Masquer la bibliothèque" : "Afficher la bibliothèque"}
-              aria-pressed={!sidebarOpen}
-              className="hidden lg:flex items-center gap-2 fixed left-3 top-24 px-3 py-2 rounded-full border border-slate-200/70 bg-white/80 backdrop-blur hover:bg-white shadow-md hover:shadow-lg transition-all z-50"
-            >
-              {sidebarOpen ? <FaChevronLeft className="opacity-80" /> : <FaChevronRight className="opacity-80" />}
-              <span className="text-xs font-medium text-slate-700"></span>
-            </button>
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          title={sidebarOpen ? t('visualiseur.sidebar.hide') : t('visualiseur.sidebar.show')}
+          aria-pressed={!sidebarOpen}
+          className="hidden lg:flex items-center gap-2 fixed left-3 top-24 px-3 py-2 rounded-full border border-slate-200/70 bg-white/80 backdrop-blur hover:bg-white shadow-md hover:shadow-lg transition-all z-50"
+        >
+          {sidebarOpen ? <FaChevronLeft className="opacity-80" /> : <FaChevronRight className="opacity-80" />}
+          <span className="text-xs font-medium text-slate-700"></span>
+        </button>
 
         <div className="flex gap-4 lg:gap-6 xl:gap-8">
-        {sidebarOpen && (
-          <Sidebar
-            open={sidebarOpen}
-            toggle={toggleSidebar}
-            mediaCount={mediaList.length}
-            tags={article?.tags || []}
-            mediaList={mediaList}
-            selectedFile={selectedFile}
-            onSelectFile={setSelectedFile}
-            similar={similar}
-            similarLoading={similarLoading}
-            onOpenSimilar={(slugOrId) => { setSelectedFile(null); navigate(`/articles/${slugOrId}`); }}
-            onOpenTagManager={() => setTagModalOpen(true)}
-            TagListComponent={TagList}
-            iconForType={iconForType}
-            iconBgForType={iconBgForType}
-            toAbsolute={toAbsolute}
-          />
-        )}
-
+          {sidebarOpen && (
+            <Sidebar
+              open={sidebarOpen}
+              toggle={toggleSidebar}
+              mediaCount={mediaList.length}
+              tags={article?.tags || []}
+              mediaList={mediaList}
+              selectedFile={selectedFile}
+              onSelectFile={setSelectedFile}
+              similar={similar}
+              similarLoading={similarLoading}
+              onOpenSimilar={(slugOrId) => { setSelectedFile(null); navigate(`/articles/${slugOrId}`); }}
+              onOpenTagManager={() => setTagModalOpen(true)}
+              TagListComponent={TagList}
+              iconForType={iconForType}
+              iconBgForType={iconBgForType}
+              toAbsolute={toAbsolute}
+            />
+          )}
 
           {/* Main */}
           <div className="flex-1 min-w-0 flex flex-col">
@@ -881,10 +917,11 @@ const mediaList = useMemo(() => {
               <div className="sticky top-5 z-10 bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40">
                 <Toolbar
                   onBack={() => navigate(-1)}
-                  onRefresh={() => setActiveTab("Aperçu")}
+                  onRefresh={() => setActiveTab(t('visualiseur.tabs.preview'))}
                   onFullscreen={() => setFullscreen(true)}
                   onDownload={downloadCurrent}
                   shareData={shareData}
+                  global={true} 
                 />
               </div>
 
@@ -894,7 +931,7 @@ const mediaList = useMemo(() => {
                   <div className="p-5 sm:p-6 lg:p-8">
                     <Tabs list={tabs} active={activeTab} onChange={setActiveTab} />
                     <div key={article?.id} ref={previewRef} className="file-preview-container min-h-[50vh]">
-                      {activeTab === "Aperçu" && (
+                      {activeTab === t('visualiseur.tabs.preview') && (
                         <Apercu
                           article={article}
                           currentUrl={selectedFile?.fileUrl || currentUrl}
@@ -904,18 +941,18 @@ const mediaList = useMemo(() => {
                           onDownload={downloadCurrent}
                         />
                       )}
-                      {activeTab === "Médias" && (
+                      {activeTab === t('visualiseur.tabs.media') && (
                         <Medias
                           mediaList={mediaList}
                           onPreview={(m) => { setQpFile(buildArticleWith(m)); setQpOpen(true); }}
                         />
                       )}
-                      {activeTab === "Métadonnées" && (
+                      {activeTab === t('visualiseur.tabs.metadata') && (
                         <Metadonnees article={article} currentType={currentType} currentTitle={currentTitle} />
                       )}
-                      {activeTab === "Versions" && hasHistory && <Versions history={article.history} />}
-                      {activeTab === "Statistiques" && <StatsCharts article={article} />}
-                      {activeTab === "SEO" && <SeoPanel article={article} />}
+                      {activeTab === t('visualiseur.tabs.versions') && hasHistory && <Versions history={article.history} />}
+                      {activeTab === t('visualiseur.tabs.statistics') && <StatsCharts article={article} />}
+                      {activeTab === t('visualiseur.tabs.seo') && <SeoPanel article={article} />}
                     </div>
                   </div>
                 </div>
@@ -941,14 +978,14 @@ const mediaList = useMemo(() => {
           </div>
         </div>
 
-        {/* Fullscreen Modal (garde le plein écran pour la zone centrale si besoin) */}
+        {/* Fullscreen Modal */}
         {fullscreen && (
           <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center">
             <div className="relative w-full h-full flex items-center justify-center">
               <div className="max-w-7xl w-full p-6 sm:p-10 lg:p-12">
                 <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl">
                   <Tabs list={tabs} active={activeTab} onChange={setActiveTab} />
-                  {activeTab === "Aperçu" && (
+                  {activeTab === t('visualiseur.tabs.preview') && (
                     <Apercu
                       article={article}
                       currentUrl={selectedFile?.fileUrl || currentUrl}
@@ -958,22 +995,22 @@ const mediaList = useMemo(() => {
                       onDownload={downloadCurrent}
                     />
                   )}
-                  {activeTab === "Médias" && (
+                  {activeTab === t('visualiseur.tabs.media') && (
                     <Medias
                       mediaList={mediaList}
                       onPreview={(m) => { setQpFile(buildArticleWith(m)); setQpOpen(true); }}
                     />
                   )}
-                  {activeTab === "Métadonnées" && <Metadonnees article={article} currentType={currentType} currentTitle={currentTitle} />}
-                  {activeTab === "Versions" && <Versions history={article.history} />}
-                  {activeTab === "Statistiques" && <StatsCharts article={article} />}
-                  {activeTab === "SEO" && <SeoPanel article={article} />}
+                  {activeTab === t('visualiseur.tabs.metadata') && <Metadonnees article={article} currentType={currentType} currentTitle={currentTitle} />}
+                  {activeTab === t('visualiseur.tabs.versions') && <Versions history={article.history} />}
+                  {activeTab === t('visualiseur.tabs.statistics') && <StatsCharts article={article} />}
+                  {activeTab === t('visualiseur.tabs.seo') && <SeoPanel article={article} />}
                 </div>
               </div>
               <button
                 onClick={() => setFullscreen(false)}
                 className="absolute top-6 right-6 sm:top-8 sm:right-8 text-white/80 text-2xl sm:text-3xl hover:text-white transition-colors duration-300"
-                aria-label="Fermer"
+                aria-label={t('visualiseur.close')}
               >
                 <FaTimes />
               </button>
@@ -981,7 +1018,7 @@ const mediaList = useMemo(() => {
           </div>
         )}
 
-        {/* Modal d’aperçu rapide basé sur FilePreview (indépendant des Tabs) */}
+        {/* Modal d'aperçu rapide */}
         {qpOpen && qpFile && (
           <QuickPreviewModal
             file={qpFile}
@@ -1033,7 +1070,7 @@ const mediaList = useMemo(() => {
         {DEBUG_HTTP && (
           <details className="fixed bottom-8 left-8 bg-white/95 backdrop-blur-xl p-6 rounded-2xl border border-white/60 max-w-[40rem] shadow-xl">
             <summary className="text-slate-700 cursor-pointer font-medium flex items-center">
-              <FaInfoCircle className="mr-2" /> Debug
+              <FaInfoCircle className="mr-2" /> {t('visualiseur.debug')}
             </summary>
             <div className="text-xs my-3">
               <div className="mb-2 font-medium text-slate-800">Show URL</div>
@@ -1052,7 +1089,7 @@ const mediaList = useMemo(() => {
           onClose={() => { dispatch(clearAuthError()); setUnlockOpen(false); }}
           onSubmit={handleUnlock}
           defaultValue={getStoredPassword(idOrSlug)}
-          title="Déverrouiller l’article"
+          title={t('visualiseur.unlock')}
           error={unlockError}
           busy={unlockBusy}
         />
@@ -1063,6 +1100,7 @@ const mediaList = useMemo(() => {
 
 /* ---------------- Onglets ---------------- */
 function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDownload }) {
+  const { t } = useTranslation();
   const contentStr = (article?.content ?? "").toString();
   const looksHtml = /<\/?[a-z][\s\S]*>/i.test(contentStr);
   const bgUrl = backgroundMediaUrl(article);
@@ -1093,27 +1131,26 @@ function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDown
             <div className="w-24 h-24 lg:w-28 lg:h-28 bg-gradient-to-br from-blue-100 to-blue-200 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl">
               <FaFile className="text-blue-600 text-4xl lg:text-5xl" />
             </div>
-            <h3 className="text-2xl lg:3xl font-light text-slate-800 mb-3">Aucun média</h3>
-            <p className="text-slate-600 mt-2 max-w-md mx-auto">Ajoutez un média à l'article ou ouvrez l'onglet « Médias » pour explorer les fichiers disponibles.</p>
+            <h3 className="text-2xl lg:3xl font-light text-slate-800 mb-3">{t('visualiseur.preview.noMedia')}</h3>
+            <p className="text-slate-600 mt-2 max-w-md mx-auto">{t('visualiseur.preview.addMedia')}</p>
           </div>
         ) : (
            <div className="bg-white/60 border border-slate-200/40 rounded-2xl overflow-hidden backdrop-blur-sm shadow-lg">
     <FilePreview
-      // on injecte le média sélectionné en tête, comme dans la QuickPreview
       file={{
         ...article,
         title: currentTitle || article?.title,
         media: [{ url: currentUrl }, ...(article?.media || [])],
         featured_image: undefined,
       }}
-      activeTab="Aperçu"
+      activeTab={t('visualiseur.tabs.preview')}
     />
   </div>
         )}
 
         {contentStr && (
           <div className="pt-2 sm:pt-4">
-            <h3 className="text-xl lg:2xl font-light text-slate-800 mb-4 lg:mb-6">Contenu de l'article</h3>
+            <h3 className="text-xl lg:2xl font-light text-slate-800 mb-4 lg:mb-6">{t('visualiseur.preview.articleContent')}</h3>
             <div className="bg-slate-50/50 rounded-2xl p-5 sm:p-6 lg:p-8 border border-slate-200/40">
               {looksHtml ? (
                 <div className="prose prose-slate max-w-none prose-lg" dangerouslySetInnerHTML={{ __html: contentStr }} />
@@ -1129,31 +1166,32 @@ function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDown
 }
 
 function Medias({ mediaList, onPreview }) {
+  const { t } = useTranslation();
+  
   // --- Lecture seule : état UI ---
-  const [viewMode, setViewMode] = React.useState("grid"); // "grid" | "list"
+  const [viewMode, setViewMode] = React.useState("grid");
   const [filtersOpen, setFiltersOpen] = React.useState(false);
   const [q, setQ] = React.useState("");
-  const [type, setType] = React.useState("");      // "", "image","video","pdf","word","excel","ppt","other"
-  const [featured, setFeatured] = React.useState(""); // "", "1","0"
-  const [sortBy, setSortBy] = React.useState("date"); // "date" | "title" | "size"
-  const [sortDir, setSortDir] = React.useState("desc"); // "asc" | "desc"
+  const [type, setType] = React.useState("");
+  const [featured, setFeatured] = React.useState("");
+  const [sortBy, setSortBy] = React.useState("date");
+  const [sortDir, setSortDir] = React.useState("desc");
 
   // --- Dérivés ---
   const activePills = React.useMemo(() => {
     const pills = [];
-    if (q.trim())    pills.push({ id:"q", label:`Recherche: “${q.trim()}”`, clear: () => setQ("") });
-    if (type)        pills.push({ id:"type", label:`Type: ${type.toUpperCase()}`, clear: () => setType("") });
-    if (featured!=="") pills.push({ id:"featured", label:`Vedette: ${featured==="1"?"Oui":"Non"}`, clear: () => setFeatured("") });
+    if (q.trim())    pills.push({ id:"q", label:`${t('visualiseur.media.search')}: "${q.trim()}"`, clear: () => setQ("") });
+    if (type)        pills.push({ id:"type", label:`${t('visualiseur.media.type')}: ${type.toUpperCase()}`, clear: () => setType("") });
+    if (featured!=="") pills.push({ id:"featured", label:`${t('visualiseur.media.featured')}: ${featured==="1"?t('visualiseur.media.featuredYes'):t('visualiseur.media.featuredNo')}`, clear: () => setFeatured("") });
     if (sortBy!=="date" || sortDir!=="desc") {
-      const map = { date:"Date", title:"Titre", size:"Taille" };
-      pills.push({ id:"sort", label:`Tri: ${map[sortBy]} ${sortDir.toUpperCase()}`, clear: () => { setSortBy("date"); setSortDir("desc"); } });
+      const map = { date: t('visualiseur.media.sortDate'), title: t('visualiseur.media.sortTitle'), size: t('visualiseur.media.sortSize') };
+      pills.push({ id:"sort", label:`${t('visualiseur.media.sort')}: ${map[sortBy]} ${sortDir.toUpperCase()}`, clear: () => { setSortBy("date"); setSortDir("desc"); } });
     }
     return pills;
-  }, [q, type, featured, sortBy, sortDir]);
+  }, [q, type, featured, sortBy, sortDir, t]);
 
   const filtered = React.useMemo(() => {
     let arr = Array.isArray(mediaList) ? mediaList.slice() : [];
-    // filtres
     if (type) arr = arr.filter(m => (m.type || "other") === type);
     if (featured !== "") arr = arr.filter(m => (!!m.favorite) === (featured === "1"));
     const s = q.trim().toLowerCase();
@@ -1166,12 +1204,10 @@ function Medias({ mediaList, onPreview }) {
         (Array.isArray(m.tags) ? m.tags.join(" ").toLowerCase().includes(s) : false)
       );
     }
-    // tri
     arr.sort((a,b) => {
       const dir = sortDir === "asc" ? 1 : -1;
       if (sortBy === "title") return (a.title||"").localeCompare(b.title||"","fr",{sensitivity:"base"}) * dir;
       if (sortBy === "size")  return ((a.size_bytes||0) - (b.size_bytes||0)) * dir;
-      // date par défaut (string lisible en entrée => on tente Date)
       const da = new Date(a.date||0).getTime();
       const db = new Date(b.date||0).getTime();
       return (da - db) * dir;
@@ -1190,7 +1226,7 @@ function Medias({ mediaList, onPreview }) {
         <div className="w-20 h-20 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <FaImage className="text-slate-400 text-3xl" />
         </div>
-        <p>Aucun média lié à cet article.</p>
+        <p>{t('visualiseur.media.noMedia')}</p>
       </div>
     );
   }
@@ -1213,7 +1249,7 @@ function Medias({ mediaList, onPreview }) {
         </div>
         {m.favorite && (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">
-            <FiStar className="w-3 h-3" /> Vedette
+            <FiStar className="w-3 h-3" /> {t('visualiseur.media.featured')}
           </span>
         )}
       </div>
@@ -1232,20 +1268,20 @@ function Medias({ mediaList, onPreview }) {
         <button
           onClick={() => onPreview?.(m)}
           className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
-          title="Aperçu rapide"
+          title={t('visualiseur.media.preview')}
         >
           <FaEye className="inline -mt-0.5 mr-2" />
-          Aperçu
+          {t('visualiseur.media.preview')}
         </button>
         <a
           href={m.fileUrl}
           target="_blank"
           rel="noreferrer"
           className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
-          title="Ouvrir dans un onglet"
+          title={t('visualiseur.media.open')}
         >
           <FaExternalLinkAlt className="inline -mt-0.5 mr-2" />
-          Ouvrir
+          {t('visualiseur.media.open')}
         </a>
       </div>
     </div>
@@ -1266,14 +1302,14 @@ function Medias({ mediaList, onPreview }) {
         </div>
         <div className="text-[12px] text-slate-500 truncate">
           {(m.size && m.size!=="—") ? `${m.size} • ` : ""}{m.date}
-          {m.favorite && <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">Vedette</span>}
+          {m.favorite && <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">{t('visualiseur.media.featured')}</span>}
         </div>
       </div>
       <div className="flex items-center gap-2">
         <button
           onClick={() => onPreview?.(m)}
           className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
-          title="Aperçu rapide"
+          title={t('visualiseur.media.preview')}
         >
           <FaEye />
         </button>
@@ -1282,7 +1318,7 @@ function Medias({ mediaList, onPreview }) {
           target="_blank"
           rel="noreferrer"
           className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
-          title="Ouvrir dans un onglet"
+          title={t('visualiseur.media.open')}
         >
           <FaExternalLinkAlt />
         </a>
@@ -1300,7 +1336,7 @@ function Medias({ mediaList, onPreview }) {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Rechercher par titre, #id, type MIME, tag…"
+              placeholder={t('visualiseur.media.search')}
               className="w-full pl-9 pr-3 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
             />
           </div>
@@ -1308,7 +1344,7 @@ function Medias({ mediaList, onPreview }) {
           <button
             onClick={() => setFiltersOpen(o => !o)}
             className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl border-2 ${filtersOpen ? "border-blue-200 text-blue-700" : "border-slate-200 text-slate-700"} hover:bg-slate-50`}
-            title={filtersOpen ? "Masquer les filtres" : "Afficher les filtres"}
+            title={filtersOpen ? t('visualiseur.media.hideFilters') : t('visualiseur.media.showFilters')}
           >
             <FiFilter className="w-4 h-4" />
             {activePills.length > 0 && (
@@ -1324,14 +1360,14 @@ function Medias({ mediaList, onPreview }) {
           <button
             onClick={() => setViewMode("grid")}
             className={`inline-flex items-center justify-center rounded-xl border-2 px-2.5 py-2 text-sm font-semibold ${viewMode==='grid' ? "border-blue-200 text-blue-700" : "border-slate-200 text-slate-700"} hover:bg-slate-50`}
-            title="Mode grille"
+            title={t('visualiseur.media.grid')}
           >
             <FiGrid className="w-4 h-4" />
           </button>
           <button
             onClick={() => setViewMode("list")}
             className={`inline-flex items-center justify-center rounded-xl border-2 px-2.5 py-2 text-sm font-semibold ${viewMode==='list' ? "border-blue-200 text-blue-700" : "border-slate-200 text-slate-700"} hover:bg-slate-50`}
-            title="Mode liste"
+            title={t('visualiseur.media.list')}
           >
             <FiList className="w-4 h-4" />
           </button>
@@ -1350,7 +1386,7 @@ function Medias({ mediaList, onPreview }) {
             </span>
           ))}
           <button onClick={resetAll} className="ml-1 text-[11px] font-semibold underline text-blue-700">
-            Tout réinitialiser
+            {t('visualiseur.media.reset')}
           </button>
         </div>
       )}
@@ -1360,55 +1396,55 @@ function Medias({ mediaList, onPreview }) {
         <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">Type</label>
+              <label className="text-xs font-semibold text-slate-600">{t('visualiseur.media.type')}</label>
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
               >
-                <option value="">Tous</option>
-                <option value="image">Image</option>
-                <option value="video">Vidéo</option>
+                <option value="">{t('visualiseur.media.allTypes')}</option>
+                <option value="image">{t('visualiseur.media.typeImage')}</option>
+                <option value="video">{t('visualiseur.media.typeVideo')}</option>
                 <option value="pdf">PDF</option>
                 <option value="word">Word</option>
                 <option value="excel">Excel</option>
                 <option value="ppt">PowerPoint</option>
-                <option value="other">Autre</option>
+                <option value="other">{t('visualiseur.media.typeOther')}</option>
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">Vedette</label>
+              <label className="text-xs font-semibold text-slate-600">{t('visualiseur.media.featured')}</label>
               <select
                 value={featured}
                 onChange={(e) => setFeatured(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
               >
-                <option value="">Tous</option>
-                <option value="1">En vedette</option>
-                <option value="0">Non vedette</option>
+                <option value="">{t('visualiseur.media.allFeatured')}</option>
+                <option value="1">{t('visualiseur.media.featuredYes')}</option>
+                <option value="0">{t('visualiseur.media.featuredNo')}</option>
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">Tri</label>
+              <label className="text-xs font-semibold text-slate-600">{t('visualiseur.media.sort')}</label>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
               >
-                <option value="date">Date</option>
-                <option value="title">Titre</option>
-                <option value="size">Taille</option>
+                <option value="date">{t('visualiseur.media.sortDate')}</option>
+                <option value="title">{t('visualiseur.media.sortTitle')}</option>
+                <option value="size">{t('visualiseur.media.sortSize')}</option>
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">Direction</label>
+              <label className="text-xs font-semibold text-slate-600">{t('visualiseur.media.direction')}</label>
               <select
                 value={sortDir}
                 onChange={(e) => setSortDir(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
               >
-                <option value="desc">Desc</option>
-                <option value="asc">Asc</option>
+                <option value="desc">{t('visualiseur.media.desc')}</option>
+                <option value="asc">{t('visualiseur.media.asc')}</option>
               </select>
             </div>
           </div>
@@ -1418,7 +1454,7 @@ function Medias({ mediaList, onPreview }) {
       {/* Liste / Grille */}
       {filtered.length === 0 ? (
         <div className="mt-6 rounded-2xl border-2 border-slate-200 bg-white px-4 py-6 text-center text-slate-600">
-          Aucun média ne correspond aux filtres.
+          {t('visualiseur.media.noResults')}
         </div>
       ) : viewMode === "grid" ? (
         <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -1433,172 +1469,27 @@ function Medias({ mediaList, onPreview }) {
   );
 }
 
-
-/* ====== Viewers intégrés selon type + bouton "Agrandir" => modal ====== */
-// function PreviewByType({ type, url, title, onOpen, onDownload }) {
-//   if (type === "image") {
-//     const abs = toAbsolute(url);
-//     return (
-//       <div className="w-full flex flex-col">
-//         <div className="flex-1 flex items-center justify-center bg-slate-50/60 rounded-2xl border border-slate-200/40 p-6 sm:p-8 backdrop-blur-sm">
-//           <div className="w-full max-w-full max-h-[62vh] lg:max-h-[65vh]">
-//             <SmartImage
-//               src={abs}
-//               alt={title}
-//               modern="off"
-//               ratio="56.25%"
-//               rounding="rounded-2xl"
-//               className="object-contain"
-//             />
-//           </div>
-//         </div>
-//         <div className="mt-6 sm:mt-8 flex flex-wrap justify-center gap-3 sm:gap-4">
-//           <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl flex items-center shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
-//             <FaExternalLinkAlt className="mr-3" />
-//             Voir en haute résolution
-//           </button>
-//           <button onClick={onDownload} className="bg-white/80 backdrop-blur-sm text-slate-700 px-6 sm:px-8 py-3 sm:py-4 rounded-2xl border border-slate-300/60 flex items-center shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-white">
-//             <FaDownload className="mr-3" />
-//             Télécharger
-//           </button>
-//         </div>
-//       </div>
-//     );
-//   }
-
-//   if (type === "pdf") {
-//     const abs = toAbsolute(url);
-//     return (
-//       <div className="w-full">
-//         <PdfPreview file={{ title, fileUrl: abs }} height="75vh" usePdfJs />
-//         <div className="mt-4 flex justify-center">
-//           <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
-//             <FaExternalLinkAlt /> Agrandir l’aperçu
-//           </button>
-//         </div>
-//       </div>
-//     );
-//   }
-
-//   if (type === "word") {
-//     return (
-//       <div className="w-full">
-//         <WordPreview src={toAbsolute(url)} title={title} />
-//         <div className="mt-4 flex justify-center">
-//           <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
-//             <FaExternalLinkAlt /> Agrandir l’aperçu
-//           </button>
-//         </div>
-//       </div>
-//     );
-//   }
-
-//   if (type === "excel") {
-//     const abs = toAbsolute(url);
-//     const officeSrc = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(abs)}`;
-//     return (
-//       <div className="w-full">
-//         <div className="w-full h-[75vh] rounded-2xl overflow-hidden border border-slate-200/40 bg-white">
-//           <div className="px-4 py-2 border-b text-slate-700">{title || "Classeur Excel"}</div>
-//           <iframe src={officeSrc} className="w-full h-[calc(75vh-40px)]" title="Excel Viewer" />
-//         </div>
-//         <div className="mt-4 flex justify-center">
-//           <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
-//             <FaExternalLinkAlt /> Agrandir l’aperçu
-//           </button>
-//         </div>
-//       </div>
-//     );
-//   }
-
-//   if (type === "ppt") {
-//     return (
-//       <div className="w-full">
-//         <PowerPointPreview src={toAbsolute(url)} title={title} />
-//         <div className="mt-4 flex justify-center">
-//           <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
-//             <FaExternalLinkAlt /> Agrandir l’aperçu
-//           </button>
-//         </div>
-//       </div>
-//     );
-//   }
-
-//   if (type === "video") {
-//     return (
-//       <div className="w-full flex flex-col">
-//         <div className="w-full rounded-2xl overflow-hidden border border-slate-200/40 bg-black">
-//           <video
-//             src={toAbsolute(url)}
-//             className="w-full h-[62vh] lg:h-[65vh]"
-//             controls
-//             playsInline
-//           />
-//         </div>
-//         <div className="mt-6 sm:mt-8 flex justify-center">
-//           <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl flex items-center shadow-2xl transition-all">
-//             <FaPlay className="mr-3" /> Agrandir la vidéo
-//           </button>
-//         </div>
-//       </div>
-//     );
-//   }
-
-//   if (type === "map") {
-//     return (
-//       <div className="w-full">
-//         <MapPreview dataUrl={toAbsolute(url)} />
-//         <div className="mt-4 flex justify-center">
-//           <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
-//             <FaExternalLinkAlt /> Agrandir la carte
-//           </button>
-//         </div>
-//       </div>
-//     );
-//   }
-
-//   // fallback: iframe générique
-//   return (
-//     <div className="w-full flex flex-col items-center justify-center py-14 lg:py-16">
-//       <div className="text-center">
-//         <div className="w-24 h-24 lg:w-28 lg:h-28 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl">
-//           <FaFile className="text-slate-600 text-4xl lg:text-5xl" />
-//         </div>
-//         <h3 className="text-2xl lg:text-3xl font-light text-slate-800 mb-3">{title}</h3>
-//         <p className="text-slate-600 mt-2 mb-6 lg:mb-8 max-w-md mx-auto">Aperçu intégré</p>
-//         <div className="w-full max-w-4xl h-[70vh] rounded-2xl overflow-hidden border border-slate-200/40 bg-white">
-//           <iframe src={toAbsolute(url)} className="w-full h-full" title="Aperçu fichier" />
-//         </div>
-//         <div className="mt-6">
-//           <button onClick={onOpen} className="inline-flex items-center bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl shadow-xl hover:shadow-2xl transition-all">
-//             <FaExternalLinkAlt className="mr-3" /> Agrandir l’aperçu
-//           </button>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-
 function Metadonnees({ article, currentType, currentTitle }) {
+  const { t } = useTranslation();
   const tagList = Array.isArray(article?.tags) ? article.tags : [];
   const sortedTagList = useMemo(() => sortTags(tagList), [tagList]);
 
   const rows = [
-    ["Titre", article?.title || "—"],
-    ["Nom du fichier", currentTitle || "—"],
-    ["Type de média", currentType ? currentType.toUpperCase() : "—"],
-    ["Statut", article?.status || "—"],
-    ["Visibilité", article?.visibility || "—"],
-    ["Date de création", formatDate(article?.created_at)],
-    ["Dernière modification", formatDate(article?.updated_at)],
-    ["Publié le", formatDate(article?.published_at)],
-    ["Auteur", authorNameOf(article)],
-    ["Catégorie principale", firstCategory(article)],
-    ["Mots-clés (tags)", "__TAGS__"],
-    ["Lecture (min)", article?.reading_time ?? "—"],
-    ["Nombre de mots", article?.word_count ?? "—"],
-    ["ID", article?.id ?? "—"],
-    ["Slug", article?.slug ?? "—"],
+    [t('visualiseur.metadata.title'), article?.title || "—"],
+    [t('visualiseur.metadata.filename'), currentTitle || "—"],
+    [t('visualiseur.metadata.mediaType'), currentType ? currentType.toUpperCase() : "—"],
+    [t('visualiseur.metadata.status'), article?.status || "—"],
+    [t('visualiseur.metadata.visibility'), article?.visibility || "—"],
+    [t('visualiseur.metadata.creationDate'), formatDate(article?.created_at)],
+    [t('visualiseur.metadata.lastModified'), formatDate(article?.updated_at)],
+    [t('visualiseur.metadata.publishedDate'), formatDate(article?.published_at)],
+    [t('visualiseur.metadata.author'), authorNameOf(article)],
+    [t('visualiseur.metadata.mainCategory'), firstCategory(article)],
+    [t('visualiseur.metadata.tags'), "__TAGS__"],
+    [t('visualiseur.metadata.readingTime'), article?.reading_time ?? "—"],
+    [t('visualiseur.metadata.wordCount'), article?.word_count ?? "—"],
+    [t('visualiseur.metadata.id'), article?.id ?? "—"],
+    [t('visualiseur.metadata.slug'), article?.slug ?? "—"],
   ];
 
   return (
@@ -1642,6 +1533,8 @@ function Metadonnees({ article, currentType, currentTitle }) {
 }
 
 function Versions({ history }) {
+  const { t } = useTranslation();
+  
   return (
     <div className="w-full h-full overflow-auto">
       <div className="space-y-4 max-h-[100vh] overflow-y-auto pr-2">
@@ -1651,7 +1544,7 @@ function Versions({ history }) {
               <div>
                 <h4 className="font-medium text-slate-800 capitalize flex items-center text-lg">
                   <FaHistory className="mr-3 text-slate-500" />
-                  {h.action || "changement"}
+                  {h.action || t('visualiseur.change')}
                 </h4>
                 <p className="text-sm text-slate-500 mt-2">{formatDate(h.created_at)} {h.ip_address ? `• ${h.ip_address}` : ""}</p>
               </div>
@@ -1670,6 +1563,8 @@ function Versions({ history }) {
 }
 
 function StatsCharts({ article }) {
+  const { t } = useTranslation();
+  
   const views     = Number(article.view_count || 0);
   const shares    = Number(article.share_count || 0);
   const comments  = Number(article.comment_count || 0);
@@ -1677,10 +1572,10 @@ function StatsCharts({ article }) {
   const avgRating = Math.max(0, Math.min(5, Number(article.rating_average || 0)));
 
   const engagementData = [
-    { name: "Vues", value: views, icon: <FaEye /> },
-    { name: "Partages", value: shares, icon: <FaShareAlt /> },
-    { name: "Commentaires", value: comments, icon: <FaComment /> },
-    { name: "Notes", value: ratings, icon: <FaStar /> },
+    { name: t('visualiseur.statistics.views'), value: views, icon: <FaEye /> },
+    { name: t('visualiseur.statistics.shares'), value: shares, icon: <FaShareAlt /> },
+    { name: t('visualiseur.statistics.comments'), value: comments, icon: <FaComment /> },
+    { name: t('visualiseur.statistics.ratings'), value: ratings, icon: <FaStar /> },
   ].filter(d => d.value > 0);
 
   const tagsBarData = (article.tags || []).map(t => ({
@@ -1689,7 +1584,7 @@ function StatsCharts({ article }) {
   })).filter(d => d.usage > 0);
 
   const actionsCount = (article.history || []).reduce((acc, h) => {
-    const k = (h.action || "autre").toLowerCase();
+    const k = (h.action || t('visualiseur.other')).toLowerCase();
     acc[k] = (acc[k] || 0) + 1;
     return acc;
   }, {});
@@ -1702,29 +1597,29 @@ function StatsCharts({ article }) {
 
       <div className="mb-8 lg:mb-10">
         <h1 className="text-2xl lg:3xl font-light text-slate-800 mb-2 leading-tight">
-          Statistiques de l'article
+          {t('visualiseur.statistics.title')}
         </h1>
         <div className="h-[3px] w-16 lg:w-20 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full" />
       </div>
 
       <div className="flex flex-wrap gap-3 sm:gap-4 lg:gap-5 mb-8 lg:mb-12 text-base leading-tight">
         <div className="flex-1 min-w-[140px] sm:min-w-[160px] md:min-w-[180px] xl:min-w-[200px]">
-          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm" label="Vues" value={views} icon={<FaEye />} color="blue" />
+          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm" label={t('visualiseur.statistics.views')} value={views} icon={<FaEye />} color="blue" />
         </div>
         <div className="flex-1 min-w-[140px] sm:min-w-[160px] md:min-w-[180px] xl:min-w-[200px]">
-          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm" label="Partages" value={shares} icon={<FaShareAlt />} color="green" />
+          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm" label={t('visualiseur.statistics.shares')} value={shares} icon={<FaShareAlt />} color="green" />
         </div>
         <div className="flex-1 min-w-[140px] sm:min-w-[160px] md:min-w-[180px] xl:min-w-[200px]">
-          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm" label="Commentaires" value={comments} icon={<FaComment />} color="blue" />
+          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm" label={t('visualiseur.statistics.comments')} value={comments} icon={<FaComment />} color="blue" />
         </div>
         <div className="flex-1 min-w-[140px] sm:min-w-[160px] md:min-w-[180px] xl:min-w-[200px]">
-          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm" label="Note moyenne" value={avgRating?.toFixed(2)} suffix="/5" icon={<FaStar />} color="orange" />
+          <KpiCard className="p-3 sm:p-4 rounded-xl shadow-sm" label={t('visualiseur.statistics.averageRating')} value={avgRating?.toFixed(2)} suffix="/5" icon={<FaStar />} color="orange" />
         </div>
       </div>
 
       <div className="flex flex-wrap gap-3 lg:gap-4">
         <div className="flex-1 basis-full xl:basis-1/3 min-w-[240px]">
-          <ChartCard className="p-4 sm:p-5 rounded-xl shadow-sm" title="Engagement" subtitle="Répartition des interactions" icon={<FaChartBar />}>
+          <ChartCard className="p-4 sm:p-5 rounded-xl shadow-sm" title={t('visualiseur.statistics.engagement')} subtitle={t('visualiseur.statistics.engagementSubtitle')} icon={<FaChartBar />}>
             {engagementData.length ? (
               <div className="h-56 md:h-64 xl:h-72 2xl:h-[24rem] flex items-center justify-center">
                 <ResponsiveContainer width="100%" height="100%">
@@ -1749,19 +1644,19 @@ function StatsCharts({ article }) {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <EmptyChart message="Aucune donnée d'engagement disponible" />
+              <EmptyChart message={t('visualiseur.statistics.noEngagementData')} />
             )}
           </ChartCard>
         </div>
 
         <div className="flex-1 basis-full xl:basis-1/3 min-w-[240px]">
           <ChartCard className="p-4 sm:p-5 rounded-xl shadow-sm"
-            title={engagementData.length ? 'Tags populaires' : 'Historique'}
-            subtitle={engagementData.length ? 'Usage global des tags' : 'Actions effectuées'}
+            title={engagementData.length ? t('visualiseur.statistics.popularTags') : t('visualiseur.statistics.history')}
+            subtitle={engagementData.length ? t('visualiseur.statistics.tagUsage') : t('visualiseur.statistics.actions')}
             icon={engagementData.length ? <FaTag /> : <FaHistory />}>
             <div className="h-56 md:h-64 xl:h-72 2xl:h-[24rem]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={(article.tags || []).length ? (article.tags || []).map(t => ({ name: t.name, usage: Number(t.usage_count || 0) })) : Object.entries((article.history || []).reduce((acc, h) => { const k = (h.action || "autre").toLowerCase(); acc[k] = (acc[k] || 0) + 1; return acc; }, {})).map(([k, v]) => ({ name: k, count: v }))} margin={{ top: 16, right: 16, left: 12, bottom: 52 }}>
+                <BarChart data={(article.tags || []).length ? (article.tags || []).map(t => ({ name: t.name, usage: Number(t.usage_count || 0) })) : Object.entries((article.history || []).reduce((acc, h) => { const k = (h.action || t('visualiseur.other')).toLowerCase(); acc[k] = (acc[k] || 0) + 1; return acc; }, {})).map(([k, v]) => ({ name: k, count: v }))} margin={{ top: 16, right: 16, left: 12, bottom: 52 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" opacity={0.6} />
                   <XAxis
                     dataKey="name"
@@ -1792,13 +1687,13 @@ function StatsCharts({ article }) {
         </div>
 
         <div className="flex-1 basis-full xl:basis-1/3 min-w-[240px]">
-          <ChartCard className="p-4 sm:p-5 rounded-xl shadow-sm" title="Qualité" subtitle="Note moyenne attribuée" icon={<FaStar />}>
+          <ChartCard className="p-4 sm:p-5 rounded-xl shadow-sm" title={t('visualiseur.statistics.quality')} subtitle={t('visualiseur.statistics.averageScore')} icon={<FaStar />}>
             <div className="h-56 md:h-64 xl:h-72 2xl:h-[24rem] flex flex-col items-center justify-center">
               {avgRating > 0 ? (
                 <>
                   <div className="relative w-36 h-36 md:w-40 md:h-40 xl:w-44 xl:h-44 mb-4">
                     <ResponsiveContainer width="100%" height="100%">
-                      <RadialBarChart innerRadius="62%" outerRadius="88%" data={[{ name: 'Note', value: (avgRating / 5) * 100 }]} startAngle={90} endAngle={-270}>
+                      <RadialBarChart innerRadius="62%" outerRadius="88%" data={[{ name: t('visualiseur.statistics.rating'), value: (avgRating / 5) * 100 }]} startAngle={90} endAngle={-270}>
                         <RadialBar dataKey="value" minAngle={12} clockWise background={{ fill: '#e2e8f0' }} fill="#fbbf24" cornerRadius={6} />
                       </RadialBarChart>
                     </ResponsiveContainer>
@@ -1806,7 +1701,7 @@ function StatsCharts({ article }) {
                       <div className="text-2xl md:text-3xl font-light text-slate-800">
                         {avgRating.toFixed(1)}
                       </div>
-                      <div className="text-xs text-slate-500">sur 5</div>
+                      <div className="text-xs text-slate-500">{t('visualiseur.statistics.outOf5')}</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
@@ -1814,12 +1709,12 @@ function StatsCharts({ article }) {
                       <FaStar key={i} className={i < Math.round(avgRating) ? 'text-yellow-400' : 'text-gray-200'} size={14} />
                     ))}
                     <span className="ml-2 text-xs sm:text-sm text-slate-600">
-                      ({ratings} {ratings <= 1 ? 'note' : 'notes'})
+                      ({ratings} {ratings <= 1 ? t('visualiseur.statistics.rating') : t('visualiseur.statistics.rating_plural')})
                     </span>
                   </div>
                 </>
               ) : (
-                <EmptyChart message="Aucune note disponible" />
+                <EmptyChart message={t('visualiseur.statistics.noRatingData')} />
               )}
             </div>
           </ChartCard>
@@ -1834,6 +1729,8 @@ function DetailsPanel({
   selectedFile, me, token, rights, onOpenRating, onOpenRatingEdit,
   ratingAverage, ratingCount, myRating, ratingLoaded
 }) {
+  const { t } = useTranslation();
+  
   const initialTopLevelApproved = useMemo(() => {
     if (Array.isArray(article?.approved_comments)) {
       return article.approved_comments.filter(c => c?.parent_id == null);
@@ -1862,7 +1759,7 @@ function DetailsPanel({
     <aside className="shrink-0 w-full sm:w-[20rem] lg:w-[22rem] xl:w-[24rem] 2xl:w-[26rem] p-6 lg:p-8">
       <h2 className="text-2xl font-light text-slate-800 mb-6 lg:mb-8 flex items-center">
         <FaInfoCircle className="mr-3 text-blue-600" />
-        Détails du fichier
+        {t('visualiseur.details.title')}
       </h2>
 
       <div className="relative overflow-hidden rounded-3xl border border-slate-200/60 bg-white/70 backdrop-blur-sm mb-6">
@@ -1876,7 +1773,7 @@ function DetailsPanel({
 
         <div className="min-w-0">
             <h3 className="text-base font-semibold text-slate-900 truncate leading-tight">
-              {currentTitle || "Sans titre"}
+              {currentTitle || t('visualiseur.untitled')}
             </h3>
             <p className="text-[11px] font-medium text-slate-500/80 mt-0.5 leading-snug">
               {formatDate(article?.created_at)} • {firstCategory(article)}
@@ -1910,7 +1807,7 @@ function DetailsPanel({
             )}
             <div className="min-w-0">
               <div className="text-sm font-medium text-slate-900 truncate">{name}</div>
-              <div className="text-xs text-slate-500 truncate">Auteur</div>
+              <div className="text-xs text-slate-500 truncate">{t('visualiseur.details.author')}</div>
             </div>
           </div>
 
@@ -1918,7 +1815,7 @@ function DetailsPanel({
             <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
               <dt className="flex items-center gap-2 text-slate-500">
                 <FiCalendar className="w-4 h-4" />
-                <span>Date de création</span>
+                <span>{t('visualiseur.details.creationDate')}</span>
               </dt>
               <dd className="mt-0.5 ml-6 font-medium text-slate-900">
                 {formatDate(article?.created_at)}
@@ -1927,7 +1824,7 @@ function DetailsPanel({
             <div className="rounded-lg border border-slate-200/60 bg-white/60 p-3">
               <dt className="flex items-center gap-2 text-slate-500">
                 <FiClock className="w-4 h-4" />
-                <span>Dernière modification</span>
+                <span>{t('visualiseur.details.lastModified')}</span>
               </dt>
               <dd className="mt-0.5 ml-6 font-medium text-slate-900">
                 {formatDate(article?.updated_at)}
@@ -1938,7 +1835,7 @@ function DetailsPanel({
           <div className="mt-4 flex gap-4 items-center justify-start">
             <div className="flex items-center gap-2 text-slate-500 text-[13px]">
               <FiTag className="w-4 h-4" />
-              <span>Catégorie</span>
+              <span>{t('visualiseur.details.category')}</span>
             </div>
             <span className="inline-flex items-center rounded-full bg-indigo-50 text-blue-700 ring-1 ring-indigo-200 px-2.5 py-1 text-[11px] font-semibold">
               {firstCategory(article)}
@@ -1968,14 +1865,14 @@ function DetailsPanel({
               {(Number(ratingAverage || 0)).toFixed(1)}
             </span>
             <span className="text-xs text-slate-400">
-              ({Number(ratingCount || 0)} {Number(ratingCount || 0) <= 1 ? "note" : "notes"})
+              ({Number(ratingCount || 0)} {Number(ratingCount || 0) <= 1 ? t('visualiseur.statistics.rating') : t('visualiseur.statistics.rating_plural')})
             </span>
           </div>
 
           {article?.allow_rating !== false && (
             <RateButton
               onClick={ratingLoaded && typeof myRating === "number" ? onOpenRatingEdit : onOpenRating}
-              label={ratingLoaded && typeof myRating === "number" ? "Modifier" : "Noter"}
+              label={ratingLoaded && typeof myRating === "number" ? t('visualiseur.details.editRating') : t('visualiseur.details.rate')}
             />
           )}
         </div>

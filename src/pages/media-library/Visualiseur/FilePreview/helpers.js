@@ -1,4 +1,4 @@
-// helpers.js
+// src/media-library/parts/Visualiseur/FilePreview/helpers.js
 export function toAbsolute(u) {
   if (!u) return u;
   const s = String(u).trim();
@@ -11,11 +11,8 @@ export function toAbsolute(u) {
 export function pickPrimaryMedia(file) {
   if (!file) return { url: "", mime: "" };
 
-  // Priorité : media[0], sinon featured_image/string
   const fromMedia =
-    Array.isArray(file.media) && file.media.length
-      ? file.media[0]
-      : null;
+    Array.isArray(file.media) && file.media.length ? file.media[0] : null;
 
   const url =
     (fromMedia && (fromMedia.url || fromMedia.fileUrl)) ||
@@ -38,29 +35,30 @@ export function guessKind(media, file) {
   const url = (media?.url || "").toLowerCase();
   const mime = (media?.mime || "").toLowerCase();
 
-  // GeoJSON
-  if (url.endsWith(".geojson") || mime.includes("geo+json") || /geojson=1/.test(url)) {
+  // HTML (ajout)
+  if (mime.includes("text/html") || /\.(x?html?)($|\?|\#)/i.test(url)) {
+    return "html";
+  }
+
+  // GeoJSON (ajout)
+  if (mime.includes("geo+json") || /\.geojson($|\?|\#)/i.test(url)) {
     return "geojson";
   }
 
   // Shapefile zippé
-  if (url.endsWith(".zip") && !mime) {
-    // on suppose un shapefile quand c'est un zip déclaré "map"
-    // (si tu veux être strict, regarde un flag côté backend)
-    return "shapefile";
-  }
-  if (mime.includes("zip") && /shp|shx|dbf/.test(url)) return "shapefile";
+  if (url.endsWith(".zip") && !mime) return "shapefile";
+  if (mime.includes("zip") && /(?:\/|\.)(shp|shx|dbf)(?:$|\?|\#)/i.test(url)) return "shapefile";
 
   // Documents
   if (mime.includes("pdf") || url.endsWith(".pdf")) return "pdf";
-  if (mime.includes("presentation") || /\.(pptx?|ppsx?)$/.test(url)) return "powerpoint";
-  if (mime.includes("spreadsheet") || /\.(xlsx?|csv)$/.test(url)) return "excel";
-  if (mime.includes("msword") || mime.includes("word") || /\.(docx?|rtf)$/.test(url)) return "word";
+  if (mime.includes("presentation") || /\.(pptx?|ppsx?)($|\?|\#)/i.test(url)) return "powerpoint";
+  if (mime.includes("spreadsheet") || /\.(xlsx?|csv)($|\?|\#)/i.test(url)) return "excel";
+  if (mime.includes("msword") || mime.includes("word") || /\.(docx?|rtf)($|\?|\#)/i.test(url)) return "word";
 
   // Médias
-  if (mime.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg|avif)$/.test(url)) return "image";
-  if (mime.startsWith("video/") || /\.(mp4|webm|ogg|mov)$/i.test(url)) return "video";
-  if (mime.startsWith("audio/") || /\.(mp3|wav|ogg|m4a|flac)$/i.test(url)) return "audio";
+  if (mime.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg|avif)($|\?|\#)/i.test(url)) return "image";
+  if (mime.startsWith("video/") || /\.(mp4|webm|ogg|mov)($|\?|\#)/i.test(url)) return "video";
+  if (mime.startsWith("audio/") || /\.(mp3|wav|ogg|m4a|flac)($|\?|\#)/i.test(url)) return "audio";
 
   // "article" si pas de média mais contenu texte
   const hasContent = (file?.content || "").toString().trim().length > 0;

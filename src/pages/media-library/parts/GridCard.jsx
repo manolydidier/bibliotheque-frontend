@@ -377,22 +377,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
                   <FaEye size={24} />
                 </Link>
 
-                {/* Partage (icône) */}
-                <div
-                  className={cls(overlayBtnClass, "hover:text-purple-600 hover:shadow-purple-200/50")}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <ShareButton
-                    variant="icon"
-                    title={item.title}
-                    excerpt={item.excerpt}
-                    url={shareUrl}
-                    articleId={item.id}
-                    channels={["email", "emailAuto", "facebook", "whatsapp", "whatsappNumber"]}
-                    emailEndpoint="/share/email"
-                    defaultWhatsNumber="33612345678"
-                  />
-                </div>
+              
 
                 {/* 🔒 Bouton pour rouvrir la modale mot de passe */}
                 {isPwdProtected(item.visibility) && (
@@ -438,6 +423,8 @@ export default function GridCard({ item, routeBase, onOpen }) {
               channels={["email", "emailAuto", "facebook", "whatsapp", "whatsappNumber"]}
               emailEndpoint="/share/email"
               defaultWhatsNumber="33612345678"
+                     global={false} 
+
             />
           </div>
 
