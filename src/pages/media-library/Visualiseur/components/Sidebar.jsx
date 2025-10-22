@@ -1,5 +1,5 @@
-// src/media-library/Sidebar.jsx
-import React, { useMemo, useState, useCallback } from "react";
+// src/media-library/components/Sidebar.jsx
+import React, { useMemo, useState, useCallback, useEffect } from "react";
 import {
   FaFolderOpen,
   FaSearch,
@@ -109,7 +109,6 @@ function matchesQuery(media, rawQuery) {
   if (tk.type) {
     const t = normalize(tk.type);
     const mtype = normalize(media?.type || "");
-    // mapping simple
     const map = {
       pdf: "pdf",
       word: "word",
@@ -127,7 +126,6 @@ function matchesQuery(media, rawQuery) {
     if (Boolean(media.is_active) !== tk.is_active) return false;
   }
 
-  // supporte indifféremment is_featured/favorite
   const isFeatured = media?.is_featured ?? media?.favorite ?? false;
   if (tk.is_featured != null) {
     if (Boolean(isFeatured) !== tk.is_featured) return false;
@@ -144,7 +142,9 @@ function matchesQuery(media, rawQuery) {
       media?.title || media?.name || ""
     }`.toLowerCase();
     const urlish = `${media?.fileUrl || media?.url || ""}`.toLowerCase();
-    const ends = new RegExp(`\\.${ext}(\\s|$)`).test(nameish) || urlish.endsWith(`.${ext}`);
+    const ends =
+      new RegExp(`\\.${ext}(\\s|$)`).test(nameish) ||
+      urlish.endsWith(`.${ext}`);
     if (!ends) return false;
   }
 
@@ -172,7 +172,7 @@ function matchesQuery(media, rawQuery) {
 }
 
 /* =========================================================
-   Sidebar avec recherche enrichie
+   Sidebar avec recherche enrichie + animations
    ========================================================= */
 export default function Sidebar({
   open,
@@ -193,16 +193,37 @@ export default function Sidebar({
 }) {
   const [query, setQuery] = useState("");
 
+  /** État dédié aux entrées animées (stagger) */
+  const [listEnter, setListEnter] = useState(false);
+  useEffect(() => {
+    // relance l’animation liste à chaque ouverture / changement de recherche
+    let raf1, raf2;
+    if (open) {
+      setListEnter(false);
+      raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => setListEnter(true));
+      });
+    } else {
+      setListEnter(false);
+    }
+    return () => {
+      if (raf1) cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    };
+  }, [open, query]);
+
   /** Liste triée + filtrée */
   const sortedFiltered = useMemo(() => {
     const list = Array.isArray(mediaList) ? mediaList.slice() : [];
-    // tri sur title/name/filename
     list.sort((a, b) => {
-      const aa = normalize(a?.title || a?.name || a?.filename || a?.original_name || "");
-      const bb = normalize(b?.title || b?.name || b?.filename || b?.original_name || "");
+      const aa = normalize(
+        a?.title || a?.name || a?.filename || a?.original_name || ""
+      );
+      const bb = normalize(
+        b?.title || b?.name || b?.filename || b?.original_name || ""
+      );
       return aa.localeCompare(bb, "fr");
     });
-    // filtre (tokens + texte libre)
     return list.filter((m) => matchesQuery(m, query));
   }, [mediaList, query]);
 
@@ -225,14 +246,32 @@ export default function Sidebar({
 
   return (
     <div
-      className={`sidebar pt-4 overflow-auto w-72 lg:w-80 bg-gradient-to-br from-white/80 via-white/75 to-slate-50/80 backdrop-blur-2xl shadow-[0_8px_32px_0_rgba(31,38,135,0.15)] border-r border-white/50 flex-shrink-0 transition-all duration-500 ease-in-out ${
-        open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-      } lg:block fixed lg:relative inset-y-0 left-0 z-40`}
+      className={`sidebar pt-4 overflow-auto w-72 lg:w-80
+        bg-gradient-to-br from-white/80 via-white/75 to-slate-50/80
+        backdrop-blur-2xl shadow-[0_8px_32px_0_rgba(31,38,135,0.15)]
+        border-r border-white/50 flex-shrink-0
+        transition-[transform,opacity] duration-500 ease-[cubic-bezier(.2,.7,.2,1)]
+        will-change-transform
+        ${
+          open
+            ? "translate-x-0 opacity-100 pointer-events-auto"
+            : "-translate-x-full lg:translate-x-0 opacity-0 lg:opacity-100 pointer-events-none lg:pointer-events-auto"
+        }
+        lg:block  lg:relative inset-y-0 left-0 z-40`}
     >
-      {/* Header */}
-      <div className="p-6 border-b border-slate-200/40 sticky top-0 bg-gradient-to-r from-white/80 to-slate-50/80 backdrop-blur-2xl z-10 shadow-sm">
+      {/* Header (fade + slight slide) */}
+      <div
+        className={`p-6 border-b border-slate-200/40 sticky top-0
+          bg-gradient-to-r from-white/80 to-slate-50/80 backdrop-blur-2xl z-10 shadow-sm
+          transition-all duration-500 ease-out
+          ${
+            open
+              ? "opacity-100 translate-y-0"
+              : "opacity-0 -translate-y-1 lg:opacity-100 lg:translate-y-0"
+          }`}
+      >
         <h2 className="text-2xl font-light text-slate-800 flex items-center tracking-tight">
-          <div className="mr-3 p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg">
+          <div className="mr-3 p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg transition-transform duration-300 group-hover:rotate-1">
             <FaFolderOpen className="text-white text-lg" />
           </div>
           <span className="flex-1">
@@ -267,20 +306,32 @@ export default function Sidebar({
           )}
 
           {(query || hasTokens) && (
-            <div className="mt-2 text-xs text-slate-500 space-y-1">
+            <div
+              className={`mt-2 text-xs text-slate-500 space-y-1 transition-opacity duration-300 ${
+                open ? "opacity-100" : "opacity-0"
+              }`}
+            >
               {query && (
-                <div>
-                  {effectiveCount} résultat{effectiveCount > 1 ? "s" : ""} · filtre : “{query}”
+                <div className="transition-transform duration-300 ease-out translate-y-0">
+                  {effectiveCount} résultat
+                  {effectiveCount > 1 ? "s" : ""} · filtre : “{query}”
                 </div>
               )}
               {hasTokens && (
                 <div className="flex flex-wrap gap-1.5">
                   {Object.entries(coerced)
                     .filter(([_, v]) => v !== "" && v != null)
-                    .map(([k, v]) => (
+                    .map(([k, v], i) => (
                       <span
                         key={k}
-                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-200"
+                        style={{ transitionDelay: `${Math.min(i, 10) * 35}ms` }}
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-200
+                          transition-all duration-300 ease-out
+                          ${
+                            listEnter
+                              ? "opacity-100 translate-y-0"
+                              : "opacity-0 translate-y-1"
+                          }`}
                         title={`token: ${k}`}
                       >
                         {k}: {String(v)}
@@ -297,7 +348,11 @@ export default function Sidebar({
       <div className="overflow-y-auto h-full pb-24 scrollbar-thin scrollbar-thumb-slate-300/50 scrollbar-track-transparent hover:scrollbar-thumb-slate-400/50">
         {/* Fichiers liés */}
         <div className="p-6">
-          <div className="flex items-center justify-between mb-5">
+          <div
+            className={`flex items-center justify-between mb-5 transition-all duration-300 ${
+              listEnter ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-1"
+            }`}
+          >
             <h3 className="font-semibold text-slate-800 flex items-center text-base">
               <span className="mr-2.5 p-1.5 bg-gradient-to-br from-blue-500/10 to-indigo-600/10 rounded-lg">
                 <FaClock className="text-blue-600 text-sm" />
@@ -331,20 +386,30 @@ export default function Sidebar({
                         handleSelect(f);
                       }
                     }}
-                    className={`p-4 rounded-xl cursor-pointer flex items-center transition-all duration-300 border group outline-none ${
-                      isActive
-                        ? "bg-gradient-to-r from-blue-50/90 to-indigo-50/80 border-blue-300/60 shadow-lg shadow-blue-100/50 scale-[1.02]"
-                        : "bg-white/70 border-slate-200/50 hover:border-blue-300/40 hover:shadow-md hover:shadow-slate-200/50 hover:scale-[1.01] hover:bg-white/90 focus:border-blue-300/60"
-                    }`}
+                    style={{ transitionDelay: `${Math.min(idx, 14) * 35}ms` }}
+                    className={`p-4 rounded-xl cursor-pointer flex items-center
+                      border group outline-none
+                      transition-all duration-300 ease-out will-change-transform
+                      ${
+                        listEnter
+                          ? "opacity-100 translate-y-0"
+                          : "opacity-0 translate-y-1"
+                      }
+                      ${
+                        isActive
+                          ? "bg-gradient-to-r from-blue-50/90 to-indigo-50/80 border-blue-300/60 shadow-lg shadow-blue-100/50 scale-[1.02]"
+                          : "bg-white/70 border-slate-200/50 hover:border-blue-300/40 hover:shadow-md hover:shadow-slate-200/50 hover:scale-[1.01] hover:bg-white/90 focus:border-blue-300/60 hover:translate-x-0.5"
+                      }`}
                   >
                     <div
-                      className={`w-11 h-11 ${iconBgForType?.(f.type)} rounded-xl flex items-center justify-center mr-3.5 transition-all duration-300 group-hover:scale-110 group-hover:rotate-3 shadow-sm`}
+                      className={`w-11 h-11 ${iconBgForType?.(f.type)} rounded-xl flex items-center justify-center mr-3.5
+                        transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 shadow-sm`}
                     >
                       {iconForType?.(f.type, "text-xl")}
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-slate-800 truncate group-hover:text-slate-900">
+                      <p className="text-sm font-medium text-slate-800 truncate group-hover:text-slate-900 transition-colors">
                         <Highlight text={title} query={query} />
                       </p>
                       <p className="text-xs text-slate-500 mt-0.5 font-normal truncate">
@@ -356,13 +421,14 @@ export default function Sidebar({
                           {f.tags.slice(0, 4).map((t, i) => (
                             <span
                               key={`${t}-${i}`}
-                              className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100/70 text-slate-600 border border-slate-200/60"
+                              style={{ transitionDelay: `${i * 25}ms` }}
+                              className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100/70 text-slate-600 border border-slate-200/60 transition-all duration-300 ease-out hover:translate-y-[-1px]"
                             >
                               <Highlight text={t} query={query} />
                             </span>
                           ))}
                           {f.tags.length > 4 && (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-200/60">
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border-slate-200/60 border">
                               +{f.tags.length - 4}
                             </span>
                           )}
@@ -371,13 +437,13 @@ export default function Sidebar({
                     </div>
 
                     {f.favorite && (
-                      <FaStar className="ml-2 text-amber-400 flex-shrink-0 drop-shadow-sm" />
+                      <FaStar className="ml-2 text-amber-400 flex-shrink-0 drop-shadow-sm transition-transform duration-300 group-hover:scale-110" />
                     )}
                   </div>
                 );
               })
             ) : query ? (
-              <div className="text-sm text-slate-500 py-10 text-center bg-gradient-to-br from-slate-50/70 to-slate-100/50 rounded-2xl border border-slate-200/40 backdrop-blur-sm">
+              <div className="text-sm text-slate-500 py-10 text-center bg-gradient-to-br from-slate-50/70 to-slate-100/50 rounded-2xl border border-slate-200/40 backdrop-blur-sm transition-all duration-300 ease-out">
                 <FaFile className="mx-auto mb-3 text-3xl text-slate-300" />
                 <p className="font-medium">Aucun média trouvé</p>
                 <p className="text-xs text-slate-400 mt-1 mb-4">
@@ -393,17 +459,22 @@ export default function Sidebar({
                 </button>
               </div>
             ) : (
-              <div className="text-sm text-slate-500 py-16 text-center bg-gradient-to-br from-slate-50/70 to-slate-100/50 rounded-2xl border border-slate-200/40 backdrop-blur-sm">
+              <div className="text-sm text-slate-500 py-16 text-center bg-gradient-to-br from-slate-50/70 to-slate-100/50 rounded-2xl border border-slate-200/40 backdrop-blur-sm transition-all duration-300 ease-out">
                 <FaFile className="mx-auto mb-3 text-3xl text-slate-300" />
                 <p className="font-medium">Aucun média lié</p>
-                <p className="text-xs text-slate-400 mt-1">Les fichiers apparaîtront ici</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Les fichiers apparaîtront ici
+                </p>
               </div>
             )}
           </div>
         </div>
 
         {/* Tags */}
-        <div className="p-6 border-t border-slate-200/40 bg-gradient-to-b from-transparent to-slate-50/30">
+        <div
+          className={`p-6 border-t border-slate-200/40 bg-gradient-to-b from-transparent to-slate-50/30 transition-all duration-500
+            ${listEnter ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1"}`}
+        >
           <div className="flex items-center justify-between mb-5">
             <h3 className="font-semibold text-slate-800 flex items-center text-base">
               <span className="mr-2.5 p-1.5 bg-gradient-to-br from-emerald-500/10 to-teal-600/10 rounded-lg">
@@ -461,21 +532,21 @@ export default function Sidebar({
       {/* Bouton replier (mobile) */}
       <button
         onClick={toggle}
-        className="absolute top-6 right-6 p-2 rounded-xl text-slate-600 hover:text-slate-900 lg:hidden transition-all duration-300 bg-white/80 hover:bg-white border border-slate-200/60 hover:border-slate-300 shadow-sm hover:shadow-md hover:scale-110 active:scale-95"
+        className="fixed top-12 right-6 p-2 rounded-xl text-slate-600 hover:text-slate-900 transition-all duration-300 bg-white/80 hover:bg-white border border-slate-200/60 hover:border-slate-300 shadow-sm hover:shadow-md hover:scale-110 active:scale-95 z-50 "
         title="Replier"
         aria-label="Fermer la sidebar"
+        type="button"
       >
         <FaTimes className="text-lg" />
       </button>
 
-      {/* Overlay mobile */}
-      {open && (
-        <div
-          className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm -z-10 lg:hidden transition-opacity duration-300"
-          onClick={toggle}
-          aria-hidden="true"
-        />
-      )}
+      {/* Overlay mobile — toujours monté pour animer le fade-out */}
+      <div
+        className={`fixed inset-0 bg-slate-900/20 backdrop-blur-sm -z-10 lg:hidden transition-opacity duration-300
+          ${open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
+        onClick={toggle}
+        aria-hidden="true"
+      />
     </div>
   );
 }

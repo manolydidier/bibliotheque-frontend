@@ -6,9 +6,21 @@ import {
   FiUpload, FiEdit3, FiTrash2, FiImage, FiRefreshCw, FiStar,
   FiToggleLeft, FiToggleRight, FiAlertTriangle, FiX, FiGrid, FiList,
   FiSearch, FiFilter, FiChevronDown, FiChevronUp, FiRotateCcw, FiCheckSquare,
-  FiSquare, FiCornerDownLeft, FiLink
+  FiSquare, FiCornerDownLeft, FiLink, FiExternalLink, FiEye, FiVideo, FiMusic,
+  FiFile, FiFileText, FiArchive
 } from "react-icons/fi";
 import { useSearchParams, useLocation } from "react-router-dom";
+
+/* =========================================================
+   Portal util (placé en haut pour éviter toute surprise)
+   ========================================================= */
+const ModalPortal = ({ children }) => {
+  const target =
+    (typeof document !== "undefined" &&
+      (document.getElementById("modal-root") || document.body)) ||
+    null;
+  return target ? createPortal(children, target) : null;
+};
 
 /* =========================================================
    AXIOS LOCAL
@@ -24,9 +36,12 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("tokenGuard");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-
+  try {
+    const token =
+      (typeof localStorage !== "undefined" && localStorage.getItem("tokenGuard")) ||
+      null;
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+  } catch {}
   if (config.data instanceof FormData) {
     delete config.headers["Content-Type"];
   } else {
@@ -83,76 +98,184 @@ const http = {
 /* =========================================================
    URL Helpers — affichage via VITE_API_BASE_STORAGE
    ========================================================= */
-// Base publique pour SERVIR les médias (ex: http://127.0.0.1:8000)
 const RAW_STORAGE_BASE =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_STORAGE) ||
   (typeof process !== 'undefined' && process.env?.VITE_API_BASE_STORAGE) ||
   "";
-
 const ABS_STORAGE_BASE = (() => {
   let base = (RAW_STORAGE_BASE || "").trim();
   if (!base) {
-    // Derive depuis l'API si l'ENV de storage n'est pas défini
-    // ex: http://127.0.0.1:8000/api  ->  http://127.0.0.1:8000
     if (API_BASE_URL) base = API_BASE_URL.replace(/\/api(?:\/.*)?$/i, "");
   }
   try { return base.replace(/\/+$/, ""); } catch { return ""; }
 })();
 
-console.log("ABS_STORAGE_BASE =", ABS_STORAGE_BASE);
-
-// URL absolue ? (http/https, blob: pour previews, data: uri)
 const isAbsoluteLike = (u = "") =>
   /^https?:\/\//i.test(u) || /^blob:/i.test(u) || /^data:/i.test(u);
 
-// Normalise les chemins “app relatifs” vers /storage/...
 const fixMediaPath = (u) => {
   if (!u) return u;
   let s = String(u).trim();
   if (isAbsoluteLike(s)) return s;
-
-  // nettoie les / en début
   s = s.replace(/^\/+/, '');
-
-  // Si déjà sous /storage, on garde
   if (s.startsWith('storage/')) return s;
-
-  // Dossiers fréquents côté Laravel storage:public
   if (s.startsWith('articles/') || s.startsWith('thumbnails/') || s.startsWith('uploads/')) {
     return `storage/${s}`;
   }
-  return s; // on renvoie tel quel, toAbsoluteMedia fera le préfixe base
+  return s;
 };
 
-// Construit une URL absolue pour <img src=...>, <video src=...>
 const toAbsoluteMedia = (u) => {
   if (!u) return null;
   const s = String(u).trim();
-  if (isAbsoluteLike(s)) return s; // http(s) | blob: | data:
+  if (isAbsoluteLike(s)) return s;
   const fixed = fixMediaPath(s);
   const rel = fixed.replace(/^\/+/, '');
   return ABS_STORAGE_BASE ? `${ABS_STORAGE_BASE}/${rel}` : `/${rel}`;
 };
 
-// Helpers type
 const isImageMime = (mt = "") => /^image\//i.test(mt);
+const isVideoMime = (mt = "") => /^video\//i.test(mt);
+const isAudioMime = (mt = "") => /^audio\//i.test(mt);
+const isPdfMime   = (mt = "") => /^application\/pdf$/i.test(mt);
 const looksLikeImagePath = (u = "") => /\.(png|jpe?g|webp|gif|avif|bmp|svg)$/i.test(u || "");
 
-// Helpers médias (PRIORITÉ AUX *PATH* plutôt qu'aux *URL*)
 const mediaHref = (m) => toAbsoluteMedia(m?.path ?? m?.url ?? "");
 const mediaThumb = (m) => {
-  const mt = m?.mime_type || "";
+  const mt = m?.mime_type || m?.mime || "";
   const rawThumb = m?.thumbnail_path ?? m?.thumbnail_url ?? "";
-  const rawFull = m?.path ?? m?.url ?? "";
-
-  // Si on a un thumbnail de type image, on le prend
-  if (rawThumb && looksLikeImagePath(rawThumb)) return toAbsoluteMedia(rawThumb);
-
-  // Sinon si c'est une image, on affiche le fichier principal
+  const rawFull  = m?.path ?? m?.url ?? "";
+  if (rawThumb) return toAbsoluteMedia(rawThumb);
+  if (looksLikeImagePath(rawFull)) return toAbsoluteMedia(rawFull);
   if (isImageMime(mt) && rawFull) return toAbsoluteMedia(rawFull);
-
-  // Sinon pas d'aperçu image (PDF/vidéo etc.)
   return null;
+};
+
+/* =========================================================
+   Helpers "type" (icônes & étiquettes) — Feather uniquement
+   ========================================================= */
+const getExt = (m) => {
+  const n = (m?.name || "").toLowerCase();
+  const p = (m?.path || m?.url || "").toLowerCase();
+  const s = n || p;
+  const match = s.match(/\.([a-z0-9]+)(?:\?.*)?$/i);
+  return match ? match[1] : "";
+};
+
+const mediaKind = (m) => {
+  const mt = (m?.mime_type || m?.mime || "").toLowerCase();
+  const ext = getExt(m);
+  if (isImageMime(mt) || ["png","jpg","jpeg","webp","gif","svg","bmp","avif"].includes(ext)) return "image";
+  if (isVideoMime(mt) || ["mp4","webm","ogg","mov","m4v","avi","mkv"].includes(ext)) return "video";
+  if (isAudioMime(mt) || ["mp3","wav","ogg","m4a","aac","flac"].includes(ext)) return "audio";
+  if (isPdfMime(mt) || ext === "pdf") return "pdf";
+  if (["doc","docx","rtf"].includes(ext)) return "word";
+  if (["xls","xlsx"].includes(ext)) return "excel";
+  if (["ppt","pptx"].includes(ext)) return "ppt";
+  if (["csv"].includes(ext)) return "csv";
+  if (["zip","rar","7z"].includes(ext)) return "zip";
+  if (["txt","md"].includes(ext)) return "text";
+  return "file";
+};
+
+const kindMeta = (kind) => {
+  // Feather only: on évite tout import "bs"
+  const icons = {
+    image: FiImage,
+    video: FiVideo,
+    audio: FiMusic,
+    pdf: FiFileText,
+    word: FiFileText,
+    excel: FiFileText,
+    ppt: FiFileText,
+    csv: FiFileText,
+    zip: FiArchive,
+    text: FiFileText,
+    file: FiFile,
+  };
+  const labels = {
+    image: "Image", video: "Vidéo", audio: "Audio", pdf: "PDF",
+    word: "Word", excel: "Excel", ppt: "PPT", csv: "CSV",
+    zip: "ZIP", text: "Texte", file: "Document"
+  };
+  const colors = {
+    image: "bg-blue-50 border-blue-200 text-blue-800",
+    video: "bg-violet-50 border-violet-200 text-violet-800",
+    audio: "bg-amber-50 border-amber-200 text-amber-800",
+    pdf: "bg-rose-50 border-rose-200 text-rose-800",
+    word: "bg-sky-50 border-sky-200 text-sky-800",
+    excel: "bg-emerald-50 border-emerald-200 text-emerald-800",
+    ppt: "bg-orange-50 border-orange-200 text-orange-800",
+    csv: "bg-teal-50 border-teal-200 text-teal-800",
+    zip: "bg-slate-50 border-slate-200 text-slate-700",
+    text: "bg-slate-50 border-slate-200 text-slate-700",
+    file: "bg-slate-50 border-slate-200 text-slate-700",
+  };
+  const Icon = icons[kind] || FiFile;
+  return { label: labels[kind] || "Document", Icon, cls: colors[kind] || "bg-slate-50 border-slate-200 text-slate-700" };
+};
+
+const TypeChip = ({ kind, className = "" }) => {
+  const { label, Icon, cls } = kindMeta(kind);
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold border ${cls} ${className}`}>
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+    </span>
+  );
+};
+
+/* =========================================================
+   Fallback covers (extension/kind) + onError helper
+   ========================================================= */
+const COVERS_BASE =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_MEDIA_COVERS_BASE) ||
+  '/covers';
+
+const COVER_BY_EXT = {
+  // images
+  png: 'image.png', jpg: 'image.png', jpeg: 'image.png', webp: 'image.png', gif: 'image.png', svg: 'image.png', bmp: 'image.png', avif: 'image.png',
+  // vidéo
+  mp4: 'video.png', webm: 'video.png', ogg: 'video.png', mov: 'video.png', m4v: 'video.png', avi: 'video.png', mkv: 'video.png',
+  // audio
+  mp3: 'audio.png', wav: 'audio.png', m4a: 'audio.png', aac: 'audio.png', flac: 'audio.png',
+  // documents
+  pdf: 'pdf.png',
+  doc: 'word.png', docx: 'word.png', rtf: 'word.png',
+  xls: 'excel.png', xlsx: 'excel.png',
+  ppt: 'ppt.png', pptx: 'ppt.png',
+  csv: 'csv.png',
+  txt: 'text.png', md: 'text.png',
+  zip: 'zip.png', rar: 'zip.png', '7z': 'zip.png'
+};
+
+const COVER_BY_KIND = {
+  image: 'image.png',
+  video: 'video.png',
+  audio: 'audio.png',
+  pdf: 'pdf.png',
+  word: 'word.png',
+  excel: 'excel.png',
+  ppt: 'ppt.png',
+  csv: 'csv.png',
+  zip: 'zip.png',
+  text: 'text.png',
+  file: 'file.png',
+};
+
+const coverForMedia = (m) => {
+  const ext = getExt(m);
+  if (ext && COVER_BY_EXT[ext]) return `${COVERS_BASE}/${COVER_BY_EXT[ext]}`;
+  const kind = mediaKind(m);
+  if (COVER_BY_KIND[kind]) return `${COVERS_BASE}/${COVER_BY_KIND[kind]}`;
+  return `${COVERS_BASE}/file.png`;
+};
+
+const onImgErrorToCover = (m) => (e) => {
+  const el = e?.currentTarget;
+  if (!el) return;
+  el.onerror = null; // évite boucle
+  el.src = coverForMedia(m);
 };
 
 /* =========================================================
@@ -218,6 +341,97 @@ const Toast = ({ open, kind = "success", msg = "" }) => {
 };
 
 /* =========================================================
+   Modal universel de visualisation
+   ========================================================= */
+const ViewerModal = ({ open, media, onClose }) => {
+  const src = media ? mediaHref(media) : "";
+  const mt  = (media?.mime_type || media?.mime || "").toLowerCase();
+  const name = media?.name || "";
+  const size = media?.size;
+
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose?.();
+    if (open) document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open || !media) return null;
+
+  const header = (
+    <div className="flex items-center justify-between gap-2">
+      <div className="min-w-0">
+        <div className="font-bold text-slate-900 truncate">{name || "(fichier)"}</div>
+        <div className="text-xs text-slate-500 truncate">{mt || "document"}{size ? ` • ${fmtBytes(size)}` : ""}</div>
+      </div>
+      <div className="flex items-center gap-2">
+        <a
+          href={src}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="px-3 py-1.5 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold inline-flex items-center gap-2"
+          title="Ouvrir dans un nouvel onglet"
+        >
+          <FiExternalLink /> Ouvrir
+        </a>
+        <a
+          href={src}
+          download
+          className="px-3 py-1.5 rounded-xl border-2 border-blue-200 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold"
+        >
+          Télécharger
+        </a>
+        <button
+          onClick={onClose}
+          className="px-3 py-1.5 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold"
+        >
+          Fermer
+        </button>
+      </div>
+    </div>
+  );
+
+  const body = (() => {
+    if (isImageMime(mt)) {
+      const imgSrc = mediaThumb(media) || src || coverForMedia(media);
+      return (
+        <img
+          src={imgSrc}
+          alt={name || "aperçu"}
+          className="w-full h-auto max-h-[78vh] object-contain rounded-xl"
+          onError={onImgErrorToCover(media)}
+        />
+      );
+    }
+    if (isVideoMime(mt)) return <video src={src} controls className="w-full max-h-[78vh] rounded-xl" />;
+    if (isAudioMime(mt)) {
+      return (
+        <div className="w-full rounded-xl bg-slate-50 border border-slate-200 p-4">
+          <audio src={src} controls className="w-full" />
+        </div>
+      );
+    }
+    if (isPdfMime(mt)) return <iframe src={src} title={name || "PDF"} className="w-full h-[78vh] rounded-xl bg-white" />;
+    return (
+      <div className="w-full h-[50vh] rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-slate-600">
+        Aucun aperçu disponible pour ce type. Utilisez “Ouvrir” ou “Télécharger”.
+      </div>
+    );
+  })();
+
+  return (
+    <ModalPortal>
+      <div className="fixed inset-0 z-[100050] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative z-[100051] w-full max-w-6xl rounded-3xl bg-white border border-slate-200 shadow-2xl p-5 space-y-4">
+          {header}
+          {body}
+        </div>
+      </div>
+    </ModalPortal>
+  );
+};
+
+/* =========================================================
    Dialog de confirmation
    ========================================================= */
 const ConfirmDialog = ({ open, title, message, onConfirm, onCancel, danger = false }) => {
@@ -254,7 +468,6 @@ const ConfirmDialog = ({ open, title, message, onConfirm, onCancel, danger = fal
               <p className="text-sm text-slate-600 leading-relaxed">{message}</p>
             </div>
           </div>
-
           <div className="flex items-center justify-end gap-2 pt-2">
             <button
               onClick={onCancel}
@@ -278,32 +491,6 @@ const ConfirmDialog = ({ open, title, message, onConfirm, onCancel, danger = fal
 };
 
 /* =========================================================
-   Lightbox
-   ========================================================= */
-const Lightbox = ({ open, src, alt, onClose }) => {
-  useEffect(() => {
-    const onKey = (e) => e.key === "Escape" && onClose?.();
-    if (open) document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-[10050] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div className="relative max-w-6xl w-full" onClick={(e) => e.stopPropagation()}>
-        <button
-          onClick={onClose}
-          className="absolute -top-4 right-0 translate-y-[-100%] px-3 py-1.5 rounded-xl bg-white/90 border border-slate-200 text-slate-900 font-semibold shadow"
-        >
-          Fermer
-        </button>
-        <img src={src} alt={alt || "Image"} className="w-full h-auto rounded-2xl shadow-2xl" />
-      </div>
-    </div>
-  );
-};
-
-/* =========================================================
    Modal Upload
    ========================================================= */
 const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
@@ -318,6 +505,9 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
   const [err, setErr] = useState("");
 
   const dropRef = useRef(null);
+  const revokeIfBlob = (url) => {
+    try { if (url && typeof url === "string" && url.startsWith("blob:")) URL.revokeObjectURL(url); } catch {}
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -346,10 +536,13 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
 
   useEffect(() => {
     if (!open) {
+      revokeIfBlob(preview);
       setFile(null); setPreview(""); setName(""); setAlt(""); setCaption("");
       setIsFeatured(false); setSubmitting(false); setProgress(0); setErr("");
     }
   }, [open]);
+
+  useEffect(() => () => revokeIfBlob(preview), [preview]);
 
   const onPick = (f) => {
     const maxSize = 100 * 1024 * 1024;
@@ -360,17 +553,15 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
     setFile(f);
     setErr("");
     try { setName((v) => v || f.name.replace(/\.[^.]+$/, "")); } catch {}
-    setPreview(URL.createObjectURL(f));
+    setPreview((old) => { revokeIfBlob(old); return URL.createObjectURL(f); });
   };
 
   const submit = async () => {
     setErr("");
     if (!file) { setErr("Choisissez un fichier."); return; }
-
     try {
       setSubmitting(true);
       setProgress(0);
-
       const fd = new FormData();
       fd.append("file", file, file.name);
       fd.append("article_id", String(articleId));
@@ -378,12 +569,11 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
       if (alt) fd.append("alt_text[fr]", alt);
       if (caption) fd.append("caption[fr]", caption);
       fd.append("is_featured", isFeatured ? "1" : "0");
-
       const res = await http.upload(fd, (pe) => {
-        const pct = Math.round((pe.loaded * 100) / pe.total);
+        const denom = (pe.total || pe.loaded || 1);
+        const pct = Math.round((pe.loaded * 100) / denom);
         setProgress(pct);
       });
-
       onUploaded?.(res?.data?.data || res?.data);
       onClose?.();
     } catch (e) {
@@ -415,7 +605,33 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
 
           <div ref={dropRef} className="rounded-2xl border-2 border-dashed border-slate-300 p-6 bg-slate-50/60 text-center">
             {preview ? (
-              <img src={toAbsoluteMedia(preview)} alt="Preview" className="mx-auto max-h-64 rounded-xl" />
+              (() => {
+                const mt = file?.type || "";
+                if (isImageMime(mt)) return <img src={preview} alt="Preview" className="mx-auto max-h-64 rounded-xl" onError={(e)=>{ e.currentTarget.src = `${COVERS_BASE}/image.png`; }} />;
+                if (isVideoMime(mt)) return <video src={preview} controls className="mx-auto max-h-64 rounded-xl" />;
+                if (isPdfMime(mt)) return <iframe src={preview} title="Aperçu PDF" className="mx-auto w-full h-64 rounded-xl bg-white" />;
+                if (isAudioMime(mt)) {
+                  return (
+                    <div className="mx-auto max-w-xl rounded-xl bg-slate-50 border border-slate-200 p-3">
+                      <audio src={preview} controls className="w-full" />
+                    </div>
+                  );
+                }
+                return (
+                  <div className="text-slate-600">
+                    <FiFile className="w-8 h-8 mx-auto mb-3" />
+                    <div className="font-semibold">Aucun aperçu visuel</div>
+                    <a
+                      href={preview}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-semibold mt-2"
+                    >
+                      Ouvrir
+                    </a>
+                  </div>
+                );
+              })()
             ) : (
               <div className="text-slate-600">
                 <FiUpload className="w-8 h-8 mx-auto mb-3" />
@@ -429,7 +645,7 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
                 Choisir un fichier
                 <input
                   type="file"
-                  accept="image/*,video/*,audio/*,application/pdf"
+                  accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.zip,.txt,.md,.rtf"
                   className="sr-only"
                   disabled={submitting}
                   onChange={(e) => e.target.files?.[0] && onPick(e.target.files[0])}
@@ -509,7 +725,6 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
             <FiAlertTriangle className="w-4 h-4" />
             {err}
           </p>}
-
           <div className="flex items-center justify-end gap-2 pt-2">
             <button
               onClick={onClose}
@@ -593,8 +808,7 @@ const EditModal = ({ open, media, onClose, onSaved }) => {
 
   if (!open || !media) return null;
 
-  const isImg = isImageMime(media.mime_type);
-  const imgThumb = mediaThumb(media);
+  const imgThumb = mediaThumb(media) || coverForMedia(media);
 
   return (
     <ModalPortal>
@@ -610,33 +824,18 @@ const EditModal = ({ open, media, onClose, onSaved }) => {
               Fermer
             </button>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-1">
               <div className="w-full rounded-xl border overflow-hidden bg-slate-50 flex items-center justify-center p-2">
-                {imgThumb ? (
-                  <img
-                    src={imgThumb}
-                    alt={media.alt_text?.fr || media.alt_text?.[0] || media.name}
-                    className="w-full h-auto object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-40 flex flex-col items-center justify-center text-slate-600">
-                    <div className="text-sm font-semibold truncate px-4 text-center">{media.name || "(fichier)"}</div>
-                    <div className="text-xs mt-1">{media.mime_type || "document"}</div>
-                    <a
-                      href={mediaHref(media)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-semibold"
-                    >
-                      Ouvrir
-                    </a>
-                  </div>
-                )}
+                <img
+                  src={imgThumb}
+                  alt={media.alt_text?.fr || media.alt_text?.[0] || media.name || "aperçu"}
+                  className="w-full h-auto object-cover"
+                  onError={onImgErrorToCover(media)}
+                />
               </div>
               <div className="text-xs text-slate-500 mt-2">
-                {media.mime_type} • {fmtBytes(media.size)}
+                {(media.mime_type || media.mime) || "document"} • {fmtBytes(media.size)}
               </div>
             </div>
             <div className="md:col-span-2 space-y-2">
@@ -664,7 +863,6 @@ const EditModal = ({ open, media, onClose, onSaved }) => {
                   />
                 </div>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <label className="text-sm font-semibold text-slate-700">Ordre</label>
@@ -696,9 +894,7 @@ const EditModal = ({ open, media, onClose, onSaved }) => {
               </div>
             </div>
           </div>
-
           {err && <p className="text-sm text-rose-600">{err}</p>}
-
           <div className="flex items-center justify-end gap-2 pt-2">
             <button onClick={onClose} className="px-4 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold">
               Annuler
@@ -723,20 +919,17 @@ const EditModal = ({ open, media, onClose, onSaved }) => {
    Composant principal
    ========================================================= */
 const ArticleMediaManager = ({ articleId }) => {
-  // Données
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // UI states
   const [uploadOpen, setUploadOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [current, setCurrent] = useState(null);
 
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [lightboxSrc, setLightboxSrc] = useState("");
-  const [lightboxAlt, setLightboxAlt] = useState("");
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerMedia, setViewerMedia] = useState(null);
 
   const [viewMode, setViewMode] = useState("grid");
   const [selectMode, setSelectMode] = useState(false);
@@ -757,10 +950,8 @@ const ArticleMediaManager = ({ articleId }) => {
     }
   };
 
-  // Corbeille
   const [trashMode, setTrashMode] = useState(false);
 
-  // Filtres (accordéon)
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [type, setType] = useState("");
@@ -769,13 +960,8 @@ const ArticleMediaManager = ({ articleId }) => {
   const [sortBy, setSortBy] = useState("sort_order");
   const [sortDir, setSortDir] = useState("asc");
 
-  // Confirm & Toast
   const [confirmDialog, setConfirmDialog] = useState({
-    open: false,
-    title: "",
-    message: "",
-    onConfirm: null,
-    danger: false
+    open: false, title: "", message: "", onConfirm: null, danger: false
   });
 
   const [toast, setToast] = useState({ open: false, kind: "success", msg: "" });
@@ -787,10 +973,10 @@ const ArticleMediaManager = ({ articleId }) => {
   };
   useEffect(() => () => toastTimer.current && clearTimeout(toastTimer.current), []);
 
-  /* ----------- URL <-> Filtres ----------- */
   const [urlSearchParams, setUrlSearchParams] = useSearchParams();
   const location = useLocation();
 
+  // init depuis l'URL une seule fois
   useEffect(() => {
     const p = Object.fromEntries(urlSearchParams.entries());
     if (p.type) setType(p.type);
@@ -801,8 +987,7 @@ const ArticleMediaManager = ({ articleId }) => {
     if (p.sort_dir) setSortDir(p.sort_dir === "desc" ? "desc" : "asc");
     if (p.view === "list" || p.view === "grid") setViewMode(p.view);
     if (p.trash === "1") setTrashMode(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); 
 
   useEffect(() => {
     const p = new URLSearchParams();
@@ -826,20 +1011,17 @@ const ArticleMediaManager = ({ articleId }) => {
   const copyShareUrl = async () => {
     try {
       await navigator.clipboard.writeText(shareUrl);
+      showToast("Lien copié ✅");
     } catch {
       showToast("Impossible de copier le lien", "error");
-      return;
     }
-    showToast("Lien copié ✅");
   };
 
-  /* ----------- LOAD ----------- */
   const load = async () => {
-    if (!articleId) return;
+    if (!articleId) { setItems([]); setLoading(false); return; }
     try {
       setLoading(true);
       setErr("");
-
       const params = {
         ...(type ? { type: type.toUpperCase() } : {}),
         ...(isActive !== "" ? { is_active: isActive === "1" } : {}),
@@ -849,7 +1031,6 @@ const ArticleMediaManager = ({ articleId }) => {
         sort_dir: sortDir,
         per_page: 9999,
       };
-
       let res;
       if (trashMode) {
         res = await http.listTrashedByArticle(articleId, params);
@@ -872,23 +1053,17 @@ const ArticleMediaManager = ({ articleId }) => {
 
   useEffect(() => { load(); }, [articleId, refreshKey, type, isActive, isFeatured, sortBy, sortDir, trashMode, search]);
 
-  /* ----------- Derived data ----------- */
   const filteredItems = useMemo(() => {
     const s = search.trim().toLowerCase();
     if (!s) return items;
     return items.filter((it) =>
       (it.name || '').toLowerCase().includes(s) ||
       String(it.id || '').includes(s) ||
-      (it.mime_type || '').toLowerCase().includes(s)
+      ((it.mime_type || it.mime || '')).toLowerCase().includes(s)
     );
   }, [items, search]);
 
-  /* ----------- Actions ----------- */
-  const onUploaded = () => {
-    showToast("Média téléversé ✅");
-    setRefreshKey((k) => k + 1);
-  };
-
+  const onUploaded = () => { showToast("Média téléversé ✅"); setRefreshKey((k) => k + 1); };
   const askEdit = (m) => {
     setConfirmDialog({
       open: true,
@@ -902,12 +1077,7 @@ const ArticleMediaManager = ({ articleId }) => {
       }
     });
   };
-
-  const onSaved = () => {
-    showToast("Média mis à jour ✅");
-    setRefreshKey((k) => k + 1);
-  };
-
+  const onSaved = () => { showToast("Média mis à jour ✅"); setRefreshKey((k) => k + 1); };
   const askDelete = (m) => {
     setConfirmDialog({
       open: true,
@@ -928,45 +1098,26 @@ const ArticleMediaManager = ({ articleId }) => {
       }
     });
   };
-
   const doToggleActive = async (m) => {
     try {
       const res = await http.toggleActive(m.id);
       const upd = res?.data?.data || res?.data;
       setItems((arr) => arr.map((it) => (it.id === m.id ? { ...it, ...upd } : it)));
       showToast(`Média ${m.is_active ? "désactivé" : "activé"} ✅`);
-    } catch {
-      showToast("Erreur statut actif", "error");
-    }
+    } catch { showToast("Erreur statut actif", "error"); }
   };
-
   const doToggleFeatured = async (m) => {
     try {
       const res = await http.toggleFeatured(m.id);
       const upd = res?.data?.data || res?.data;
       setItems((arr) => arr.map((it) => (it.id === m.id ? { ...it, ...upd } : it)));
       showToast(`Média ${m.is_featured ? "retiré de" : "mis en"} vedette ✅`);
-    } catch {
-      showToast("Erreur statut vedette", "error");
-    }
+    } catch { showToast("Erreur statut vedette", "error"); }
   };
-
-  const openLightbox = (m) => {
-    const src = mediaThumb(m) || mediaHref(m);
-    setLightboxSrc(src || "");
-    setLightboxAlt(m.alt_text?.fr || m.alt_text?.[0] || m.name || "");
-    setLightboxOpen(true);
-  };
-
+  const openViewer = (m) => { setViewerMedia(m); setViewerOpen(true); };
   const doRestore = async (id) => {
-    try {
-      await http.restore(id);
-      showToast("Média restauré ✅");
-      setRefreshKey((k) => k + 1);
-      setSelected((s) => { const n = new Set(s); n.delete(id); return n; });
-    } catch {
-      showToast("Restauration impossible", "error");
-    }
+    try { await http.restore(id); showToast("Média restauré ✅"); setRefreshKey((k) => k + 1); setSelected((s)=>{const n=new Set(s); n.delete(id); return n;}); }
+    catch { showToast("Restauration impossible", "error"); }
   };
   const doForceDelete = async (id) => {
     setConfirmDialog({
@@ -976,14 +1127,8 @@ const ArticleMediaManager = ({ articleId }) => {
       danger: true,
       onConfirm: async () => {
         setConfirmDialog(prev => ({ ...prev, open: false }));
-        try {
-          await http.forceDelete(id);
-          showToast("Supprimé définitivement ✅");
-          setRefreshKey((k) => k + 1);
-          setSelected((s) => { const n = new Set(s); n.delete(id); return n; });
-        } catch {
-          showToast("Suppression définitive impossible", "error");
-        }
+        try { await http.forceDelete(id); showToast("Supprimé définitivement ✅"); setRefreshKey((k)=>k+1); setSelected((s)=>{const n=new Set(s); n.delete(id); return n;}); }
+        catch { showToast("Suppression définitive impossible", "error"); }
       }
     });
   };
@@ -992,8 +1137,7 @@ const ArticleMediaManager = ({ articleId }) => {
     const ids = Array.from(selected);
     if (!ids.length) return;
     setConfirmDialog({
-      open: true,
-      title: active ? "Activer la sélection" : "Désactiver la sélection",
+      open: true, title: active ? "Activer la sélection" : "Désactiver la sélection",
       message: `${ids.length} élément(s) seront ${active ? "activés" : "désactivés"}.`,
       danger: !active,
       onConfirm: async () => {
@@ -1002,16 +1146,10 @@ const ArticleMediaManager = ({ articleId }) => {
           for (const id of ids) {
             const m = items.find(x => x.id === id);
             if (!m) continue;
-            if (!!m.is_active !== active) {
-              await http.toggleActive(id);
-            }
+            if (!!m.is_active !== active) await http.toggleActive(id);
           }
-          showToast("Statut mis à jour ✅");
-          clearSelection();
-          setRefreshKey(k => k + 1);
-        } catch {
-          showToast("Échec sur au moins un élément", "error");
-        }
+          showToast("Statut mis à jour ✅"); clearSelection(); setRefreshKey(k => k + 1);
+        } catch { showToast("Échec sur au moins un élément", "error"); }
       }
     });
   };
@@ -1020,8 +1158,7 @@ const ArticleMediaManager = ({ articleId }) => {
     const ids = Array.from(selected);
     if (!ids.length) return;
     setConfirmDialog({
-      open: true,
-      title: featured ? "Mettre en vedette" : "Retirer la vedette",
+      open: true, title: featured ? "Mettre en vedette" : "Retirer la vedette",
       message: `${ids.length} élément(s) seront ${featured ? "mis" : "retirés"} en vedette.`,
       danger: false,
       onConfirm: async () => {
@@ -1030,16 +1167,10 @@ const ArticleMediaManager = ({ articleId }) => {
           for (const id of ids) {
             const m = items.find(x => x.id === id);
             if (!m) continue;
-            if (!!m.is_featured !== featured) {
-              await http.toggleFeatured(id);
-            }
+            if (!!m.is_featured !== featured) await http.toggleFeatured(id);
           }
-          showToast("Vedette mise à jour ✅");
-          clearSelection();
-          setRefreshKey(k => k + 1);
-        } catch {
-          showToast("Échec sur au moins un élément", "error");
-        }
+          showToast("Vedette mise à jour ✅"); clearSelection(); setRefreshKey(k => k + 1);
+        } catch { showToast("Échec sur au moins un élément", "error"); }
       }
     });
   };
@@ -1048,20 +1179,14 @@ const ArticleMediaManager = ({ articleId }) => {
     const ids = Array.from(selected);
     if (!ids.length) return;
     setConfirmDialog({
-      open: true,
-      title: "Supprimer la sélection",
+      open: true, title: "Supprimer la sélection",
       message: `${ids.length} élément(s) iront dans la corbeille.`,
       danger: true,
       onConfirm: async () => {
         setConfirmDialog(prev => ({ ...prev, open: false }));
-        try {
-          for (const id of ids) { await http.destroy(id); }
-          showToast("Sélection supprimée ✅");
-          clearSelection();
-          setRefreshKey(k => k + 1);
-        } catch {
-          showToast("Échec sur au moins un élément", "error");
-        }
+        try { for (const id of ids) await http.destroy(id);
+          showToast("Sélection supprimée ✅"); clearSelection(); setRefreshKey(k => k + 1);
+        } catch { showToast("Échec sur au moins un élément", "error"); }
       }
     });
   };
@@ -1070,20 +1195,14 @@ const ArticleMediaManager = ({ articleId }) => {
     const ids = Array.from(selected);
     if (!ids.length) return;
     setConfirmDialog({
-      open: true,
-      title: "Restaurer la sélection",
+      open: true, title: "Restaurer la sélection",
       message: `${ids.length} élément(s) seront restaurés.`,
       danger: false,
       onConfirm: async () => {
         setConfirmDialog(prev => ({ ...prev, open: false }));
-        try {
-          for (const id of ids) { await http.restore(id); }
-          showToast("Sélection restaurée ✅");
-          clearSelection();
-          setRefreshKey(k => k + 1);
-        } catch {
-          showToast("Échec sur au moins un élément", "error");
-        }
+        try { for (const id of ids) await http.restore(id);
+          showToast("Sélection restaurée ✅"); clearSelection(); setRefreshKey(k => k + 1);
+        } catch { showToast("Échec sur au moins un élément", "error"); }
       }
     });
   };
@@ -1092,20 +1211,14 @@ const ArticleMediaManager = ({ articleId }) => {
     const ids = Array.from(selected);
     if (!ids.length) return;
     setConfirmDialog({
-      open: true,
-      title: "Suppression DÉFINITIVE",
+      open: true, title: "Suppression DÉFINITIVE",
       message: `${ids.length} élément(s) seront supprimés de manière irréversible.`,
       danger: true,
       onConfirm: async () => {
         setConfirmDialog(prev => ({ ...prev, open: false }));
-        try {
-          for (const id of ids) { await http.forceDelete(id); }
-          showToast("Sélection supprimée définitivement ✅");
-          clearSelection();
-          setRefreshKey(k => k + 1);
-        } catch {
-          showToast("Échec sur au moins un élément", "error");
-        }
+        try { for (const id of ids) await http.forceDelete(id);
+          showToast("Sélection supprimée définitivement ✅"); clearSelection(); setRefreshKey(k => k + 1);
+        } catch { showToast("Échec sur au moins un élément", "error"); }
       }
     });
   };
@@ -1131,7 +1244,6 @@ const ArticleMediaManager = ({ articleId }) => {
             </div>
           </div>
         </div>
-
         <div className="flex items-center gap-2">
           {trashMode ? (
             <IconBtn
@@ -1150,7 +1262,6 @@ const ArticleMediaManager = ({ articleId }) => {
               <FiTrash2 className="w-4 h-4" />
             </IconBtn>
           )}
-
           <IconBtn
             title="Rafraîchir"
             onClick={() => setRefreshKey((k) => k + 1)}
@@ -1158,7 +1269,6 @@ const ArticleMediaManager = ({ articleId }) => {
           >
             <FiRefreshCw className="w-4 h-4" />
           </IconBtn>
-
           {!trashMode && (
             <IconBtn
               title="Ajouter un média"
@@ -1192,12 +1302,8 @@ const ArticleMediaManager = ({ articleId }) => {
   );
 
   const resetAllFilters = () => {
-    setType("");
-    setIsActive("");
-    setIsFeatured("");
-    setSearch("");
-    setSortBy("sort_order");
-    setSortDir("asc");
+    setType(""); setIsActive(""); setIsFeatured(""); setSearch("");
+    setSortBy("sort_order"); setSortDir("asc");
   };
 
   const activePills = useMemo(() => {
@@ -1206,15 +1312,9 @@ const ArticleMediaManager = ({ articleId }) => {
       const map = { image: "Image", video: "Vidéo", audio: "Audio", document: "Document" };
       pills.push({ id: "type", label: `Type: ${map[type] || type}`, clear: () => setType("") });
     }
-    if (isActive !== "") {
-      pills.push({ id: "is_active", label: `Actif: ${isActive === "1" ? "Oui" : "Non"}`, clear: () => setIsActive("") });
-    }
-    if (isFeatured !== "") {
-      pills.push({ id: "is_featured", label: `Vedette: ${isFeatured === "1" ? "Oui" : "Non"}`, clear: () => setIsFeatured("") });
-    }
-    if (search.trim()) {
-      pills.push({ id: "q", label: `Recherche: “${search.trim()}”`, clear: () => setSearch("") });
-    }
+    if (isActive !== "") pills.push({ id: "is_active", label: `Actif: ${isActive === "1" ? "Oui" : "Non"}`, clear: () => setIsActive("") });
+    if (isFeatured !== "") pills.push({ id: "is_featured", label: `Vedette: ${isFeatured === "1" ? "Oui" : "Non"}`, clear: () => setIsFeatured("") });
+    if (search.trim()) pills.push({ id: "q", label: `Recherche: “${search.trim()}”`, clear: () => setSearch("") });
     if (sortBy !== "sort_order" || sortDir !== "asc") {
       const map = { sort_order: "Ordre", name: "Nom", created_at: "Création", size: "Taille" };
       pills.push({
@@ -1240,7 +1340,6 @@ const ArticleMediaManager = ({ articleId }) => {
             className="w-full pl-9 pr-3 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
           />
         </div>
-
         <IconBtn
           title={filtersOpen ? "Masquer les filtres" : "Afficher les filtres"}
           onClick={() => setFiltersOpen(o => !o)}
@@ -1253,14 +1352,9 @@ const ArticleMediaManager = ({ articleId }) => {
                 {activeFiltersCount}
               </span>
             )}
-            {filtersOpen ? (
-              <FiChevronUp className="w-4 h-4 ml-1" />
-            ) : (
-              <FiChevronDown className="w-4 h-4 ml-1" />
-            )}
+            {filtersOpen ? <FiChevronUp className="w-4 h-4 ml-1" /> : <FiChevronDown className="w-4 h-4 ml-1" />}
           </div>
         </IconBtn>
-
         <IconBtn
           title="Copier le lien de cette vue (filtres inclus)"
           onClick={copyShareUrl}
@@ -1269,7 +1363,6 @@ const ArticleMediaManager = ({ articleId }) => {
           <FiLink className="w-4 h-4" />
         </IconBtn>
       </div>
-
       <div className="flex items-center gap-2">
         <IconBtn
           title="Mode grille"
@@ -1285,7 +1378,6 @@ const ArticleMediaManager = ({ articleId }) => {
         >
           <FiList className="w-4 h-4" />
         </IconBtn>
-
         <IconBtn
           title={selectMode ? "Quitter la multi-sélection" : "Activer la multi-sélection"}
           onClick={() => { setSelectMode(v => !v); if (selectMode) clearSelection(); }}
@@ -1302,11 +1394,7 @@ const ArticleMediaManager = ({ articleId }) => {
       <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
         <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-600">Type</label>
-          <select
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
-          >
+          <select value={type} onChange={(e) => setType(e.target.value)} className="w-full px-3 py-2 rounded-xl border-2 border-slate-200">
             <option value="">Tous</option>
             <option value="image">Image</option>
             <option value="video">Vidéo</option>
@@ -1314,54 +1402,34 @@ const ArticleMediaManager = ({ articleId }) => {
             <option value="document">Document</option>
           </select>
         </div>
-
         <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-600">Actif</label>
-          <select
-            value={isActive}
-            onChange={(e) => setIsActive(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
-          >
+          <select value={isActive} onChange={(e) => setIsActive(e.target.value)} className="w-full px-3 py-2 rounded-xl border-2 border-slate-200">
             <option value="">Tous</option>
             <option value="1">Actifs</option>
             <option value="0">Inactifs</option>
           </select>
         </div>
-
         <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-600">Vedette</label>
-          <select
-            value={isFeatured}
-            onChange={(e) => setIsFeatured(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
-          >
+          <select value={isFeatured} onChange={(e) => setIsFeatured(e.target.value)} className="w-full px-3 py-2 rounded-xl border-2 border-slate-200">
             <option value="">Tous</option>
             <option value="1">En vedette</option>
             <option value="0">Non vedette</option>
           </select>
         </div>
-
         <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-600">Tri par</label>
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
-          >
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="w-full px-3 py-2 rounded-xl border-2 border-slate-200">
             <option value="sort_order">Ordre</option>
             <option value="name">Nom</option>
             <option value="created_at">Création</option>
             <option value="size">Taille</option>
           </select>
         </div>
-
         <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-600">Direction</label>
-          <select
-            value={sortDir}
-            onChange={(e) => setSortDir(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
-          >
+          <select value={sortDir} onChange={(e) => setSortDir(e.target.value)} className="w-full px-3 py-2 rounded-xl border-2 border-slate-200">
             <option value="asc">Asc</option>
             <option value="desc">Desc</option>
           </select>
@@ -1369,6 +1437,177 @@ const ArticleMediaManager = ({ articleId }) => {
       </div>
     </div>
   );
+
+  const renderCard = (m) => {
+    const thumb = mediaThumb(m) || coverForMedia(m);
+    const kind = mediaKind(m);
+    return (
+      <div key={m.id} className={`rounded-2xl border ${isSelected(m.id) ? "border-blue-400 ring-2 ring-blue-200" : "border-slate-200"} bg-white p-4 flex flex-col`}>
+        <div className="relative rounded-xl overflow-hidden bg-slate-100 border mb-3 aspect-square flex items-center justify-center">
+          {thumb ? (
+            <img
+              src={thumb}
+              alt={m.alt_text?.fr || m.alt_text?.[0] || m.name || "aperçu"}
+              className="w-full h-full object-cover"
+              onError={onImgErrorToCover(m)}
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center text-slate-600 p-4 text-center">
+              {React.createElement(kindMeta(kind).Icon, { className: "w-10 h-10 opacity-80 mb-2" })}
+              <span className="text-xs font-medium">{m.name?.split('.').slice(0, -1).join('.') || "(sans nom)"}</span>
+            </div>
+          )}
+          <button
+            onClick={() => openViewer(m)}
+            className="absolute inset-0 bg-black/20 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center"
+            title="Aperçu"
+          >
+            <div className="bg-white/90 rounded-full p-2 shadow-lg">
+              <FiEye className="w-5 h-5 text-slate-800" />
+            </div>
+          </button>
+          <div className="absolute top-2 left-2 flex flex-col gap-1.5">
+            <TypeChip kind={kind} />
+            {m.is_featured && (
+              <Badge className="bg-amber-50 border-amber-200 text-amber-700">
+                <FiStar className="mr-1" /> Vedette
+              </Badge>
+            )}
+          </div>
+          {!m.is_active && (
+            <Badge className="absolute top-2 right-2 bg-slate-100 border-slate-300 text-slate-700">
+              Inactif
+            </Badge>
+          )}
+          {selectMode && (
+            <button
+              title={isSelected(m.id) ? "Désélectionner" : "Sélectionner"}
+              onClick={(e) => { e.stopPropagation(); toggleSelect(m.id); }}
+              className={`absolute bottom-2 left-2 w-9 h-9 rounded-xl border-2 bg-white/90 flex items-center justify-center ${isSelected(m.id) ? "border-blue-400 text-blue-700" : "border-slate-300 text-slate-600"}`}
+            >
+              {isSelected(m.id) ? <FiCheckSquare /> : <FiSquare />}
+            </button>
+          )}
+        </div>
+        <div className="flex-1 min-h-0">
+          <div className="font-semibold text-slate-800 truncate" title={m.name}>
+            {m.name || "(sans nom)"}
+          </div>
+          <div className="text-xs text-slate-500 mt-1">
+            {(m.mime_type || m.mime) || "document"} • {fmtBytes(m.size)}
+            {m.dimensions?.width && m.dimensions?.height ? ` • ${m.dimensions.width}×${m.dimensions.height}` : ""}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1">
+            <Badge className="bg-slate-50 border-slate-200 text-slate-700">#{m.id}</Badge>
+            <Badge className="bg-slate-50 border-slate-200 text-slate-700">ordre {m.sort_order ?? 0}</Badge>
+          </div>
+        </div>
+        <div className="mt-3 flex justify-center gap-1">
+          <TinyIconBtn title="Modifier" onClick={() => askEdit(m)} className="border-slate-200 text-slate-700">
+            <FiEdit3 />
+          </TinyIconBtn>
+          <TinyIconBtn title={m.is_active ? "Désactiver" : "Activer"} onClick={() => doToggleActive(m)} className="border-slate-200 text-slate-700">
+            {m.is_active ? <FiToggleRight /> : <FiToggleLeft />}
+          </TinyIconBtn>
+          <TinyIconBtn title={m.is_featured ? "Retirer vedette" : "Mettre vedette"} onClick={() => doToggleFeatured(m)} className="border-slate-200 text-slate-700">
+            <FiStar className={m.is_featured ? "" : "opacity-50"} />
+          </TinyIconBtn>
+          {!trashMode ? (
+            <TinyIconBtn title="Supprimer" onClick={() => askDelete(m)} className="border-rose-200 text-rose-700">
+              <FiTrash2 />
+            </TinyIconBtn>
+          ) : (
+            <>
+              <TinyIconBtn title="Restaurer" onClick={() => doRestore(m.id)} className="border-blue-200 text-blue-700">
+                <FiRotateCcw />
+              </TinyIconBtn>
+              <TinyIconBtn title="Supprimer définitivement" onClick={() => doForceDelete(m.id)} className="border-rose-200 text-rose-700">
+                <FiTrash2 />
+              </TinyIconBtn>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderRow = (m) => {
+    const thumb = mediaThumb(m) || coverForMedia(m);
+    const kind = mediaKind(m);
+    return (
+      <div key={m.id} className={`flex items-center gap-3 rounded-2xl border ${isSelected(m.id) ? "border-blue-400 ring-2 ring-blue-200" : "border-slate-200"} bg-white p-3`}>
+        {selectMode ? (
+          <button
+            title={isSelected(m.id) ? "Désélectionner" : "Sélectionner"}
+            onClick={() => toggleSelect(m.id)}
+            className={`w-9 h-9 rounded-xl border-2 flex items-center justify-center ${isSelected(m.id) ? "border-blue-400 text-blue-700" : "border-slate-300 text-slate-600"}`}
+          >
+            {isSelected(m.id) ? <FiCheckSquare /> : <FiSquare />}
+          </button>
+        ) : null}
+        <div
+          className="w-16 h-16 rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center cursor-pointer"
+          title="Aperçu"
+          onClick={() => openViewer(m)}
+        >
+          {thumb ? (
+            <img
+              src={thumb}
+              alt={m.name || "aperçu"}
+              className="w-full h-full object-cover"
+              onError={onImgErrorToCover(m)}
+            />
+          ) : (
+            React.createElement(kindMeta(kind).Icon, { className: "w-6 h-6 text-slate-500" })
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <div className="font-semibold text-slate-800 truncate" title={m.name}>
+              {m.name || "(sans nom)"}
+            </div>
+            <TypeChip kind={kind} />
+          </div>
+          <div className="text-[12px] text-slate-500 truncate">
+            #{m.id} • {(m.mime_type || m.mime) || "document"} • {fmtBytes(m.size)}
+            {m.dimensions?.width && m.dimensions?.height ? ` • ${m.dimensions.width}×${m.dimensions.height}` : ""}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {m.is_featured && <Badge className="bg-amber-50 border-amber-200 text-amber-700"><FiStar className="mr-1" />Vedette</Badge>}
+            {!m.is_active && <Badge className="bg-slate-100 border-slate-300 text-slate-700">Inactif</Badge>}
+            <Badge className="bg-slate-50 border-slate-200 text-slate-700">ordre {m.sort_order ?? 0}</Badge>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {!trashMode ? (
+            <>
+              <TinyIconBtn title="Modifier" onClick={() => askEdit(m)} className="border-slate-200 text-slate-700">
+                <FiEdit3 />
+              </TinyIconBtn>
+              <TinyIconBtn title={m.is_active ? "Désactiver" : "Activer"} onClick={() => doToggleActive(m)} className="border-slate-200 text-slate-700">
+                {m.is_active ? <FiToggleRight /> : <FiToggleLeft />}
+              </TinyIconBtn>
+              <TinyIconBtn title={m.is_featured ? "Retirer vedette" : "Mettre vedette"} onClick={() => doToggleFeatured(m)} className="border-slate-200 text-slate-700">
+                <FiStar className={m.is_featured ? "" : "opacity-50"} />
+              </TinyIconBtn>
+              <TinyIconBtn title="Supprimer" onClick={() => askDelete(m)} className="border-rose-200 text-rose-700">
+                <FiTrash2 />
+              </TinyIconBtn>
+            </>
+          ) : (
+            <>
+              <TinyIconBtn title="Restaurer" onClick={() => doRestore(m.id)} className="border-blue-200 text-blue-700">
+                <FiRotateCcw />
+              </TinyIconBtn>
+              <TinyIconBtn title="Supprimer définitivement" onClick={() => doForceDelete(m.id)} className="border-rose-200 text-rose-700">
+                <FiTrash2 />
+              </TinyIconBtn>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const bulkBar = selectedCount > 0 && (
     <div className="sticky top-[64px] z-[30] mt-4 rounded-2xl border-2 border-blue-200 bg-blue-50/70 backdrop-blur p-3 flex items-center justify-between">
@@ -1383,7 +1622,6 @@ const ArticleMediaManager = ({ articleId }) => {
         >
           {selected.size === filteredItems.length ? <FiSquare className="w-4 h-4" /> : <FiCheckSquare className="w-4 h-4" />}
         </IconBtn>
-
         {!trashMode ? (
           <>
             <IconBtn title="Activer" onClick={() => bulkToggleActive(true)} className="border-blue-200 text-blue-700"><FiToggleRight className="w-4 h-4" /></IconBtn>
@@ -1403,212 +1641,19 @@ const ArticleMediaManager = ({ articleId }) => {
     </div>
   );
 
-  const renderCard = (m) => {
-    const isImg = isImageMime(m.mime_type);
-    const thumb = mediaThumb(m);
-
-    return (
-      <div key={m.id} className={`rounded-2xl border ${isSelected(m.id) ? "border-blue-400 ring-2 ring-blue-200" : "border-slate-200"} bg-white p-4 flex flex-col`}>
-        <div className="relative group rounded-xl overflow-hidden bg-slate-100 border mb-3 flex items-center justify-center">
-          {thumb ? (
-            <img
-              src={thumb}
-              alt={m.alt_text?.fr || m.alt_text?.[0] || m.name}
-              className={`w-full h-44 object-cover ${isImg ? "cursor-zoom-in" : "cursor-default"}`}
-              onClick={() => isImg && openLightbox(m)}
-              title={isImg ? "Agrandir" : m.mime_type}
-            />
-          ) : (
-            <div className="h-44 w-full flex flex-col items-center justify-center text-slate-600">
-              <div className="text-sm font-semibold truncate px-4 text-center">{m.name || "(fichier)"}</div>
-              <div className="text-xs mt-1">{m.mime_type || "document"}</div>
-              <a
-                href={mediaHref(m)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-semibold"
-                title="Ouvrir dans un nouvel onglet"
-              >
-                Ouvrir
-              </a>
-            </div>
-          )}
-
-          {m.is_featured && (
-            <Badge className="absolute top-2 left-2 bg-amber-50 border-amber-200 text-amber-700">
-              <FiStar className="mr-1" /> Vedette
-            </Badge>
-          )}
-          {!m.is_active && (
-            <Badge className="absolute top-2 right-2 bg-slate-100 border-slate-300 text-slate-700">
-              Inactif
-            </Badge>
-          )}
-
-          {selectMode && (
-            <button
-              title={isSelected(m.id) ? "Désélectionner" : "Sélectionner"}
-              onClick={(e) => { e.stopPropagation(); toggleSelect(m.id); }}
-              className={`absolute bottom-2 left-2 w-9 h-9 rounded-xl border-2 bg-white/90 flex items-center justify-center ${isSelected(m.id) ? "border-blue-400 text-blue-700" : "border-slate-300 text-slate-600"}`}
-            >
-              {isSelected(m.id) ? <FiCheckSquare /> : <FiSquare />}
-            </button>
-          )}
-        </div>
-
-        <div className="flex-1 min-h-0">
-          <div className="font-semibold text-slate-800 truncate" title={m.name}>
-            {m.name || "(sans nom)"}
-          </div>
-          <div className="text-xs text-slate-500 mt-1">
-            {m.mime_type} • {fmtBytes(m.size)}
-            {m.dimensions?.width && m.dimensions?.height ? ` • ${m.dimensions.width}×${m.dimensions.height}` : ""}
-          </div>
-          <div className="mt-2 flex flex-wrap gap-1">
-            <Badge className="bg-slate-50 border-slate-200 text-slate-700">#{m.id}</Badge>
-            <Badge className="bg-slate-50 border-slate-200 text-slate-700">ordre {m.sort_order ?? 0}</Badge>
-          </div>
-        </div>
-
-        <div className="mt-3 grid grid-cols-4 gap-2">
-          {!trashMode ? (
-            <>
-              <TinyIconBtn title="Modifier" onClick={() => askEdit(m)} className="border-blue-200 text-blue-700">
-                <FiEdit3 />
-              </TinyIconBtn>
-              <TinyIconBtn title={m.is_active ? "Désactiver" : "Activer"} onClick={() => doToggleActive(m)} className="border-blue-200 text-blue-700">
-                {m.is_active ? <FiToggleRight /> : <FiToggleLeft />}
-              </TinyIconBtn>
-              <TinyIconBtn title={m.is_featured ? "Retirer vedette" : "Mettre vedette"} onClick={() => doToggleFeatured(m)} className="border-blue-200 text-blue-700">
-                <FiStar className={m.is_featured ? "" : "opacity-50"} />
-              </TinyIconBtn>
-              <TinyIconBtn title="Supprimer" onClick={() => askDelete(m)} className="border-rose-200 text-rose-700">
-                <FiTrash2 />
-              </TinyIconBtn>
-            </>
-          ) : (
-            <>
-              <TinyIconBtn title="Restaurer" onClick={() => doRestore(m.id)} className="border-blue-200 text-blue-700">
-                <FiRotateCcw />
-              </TinyIconBtn>
-              <div className="opacity-40 pointer-events-none" />
-              <div className="opacity-40 pointer-events-none" />
-              <TinyIconBtn title="Supprimer définitivement" onClick={() => doForceDelete(m.id)} className="border-rose-200 text-rose-700">
-                <FiTrash2 />
-              </TinyIconBtn>
-            </>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const renderRow = (m) => {
-    const isImg = isImageMime(m.mime_type);
-    const thumb = mediaThumb(m);
-
-    return (
-      <div key={m.id} className={`flex items-center gap-3 rounded-2xl border ${isSelected(m.id) ? "border-blue-400 ring-2 ring-blue-200" : "border-slate-200"} bg-white p-3`}>
-        {selectMode ? (
-          <button
-            title={isSelected(m.id) ? "Désélectionner" : "Sélectionner"}
-            onClick={() => toggleSelect(m.id)}
-            className={`w-9 h-9 rounded-xl border-2 flex items-center justify-center ${isSelected(m.id) ? "border-blue-400 text-blue-700" : "border-slate-300 text-slate-600"}`}
-          >
-            {isSelected(m.id) ? <FiCheckSquare /> : <FiSquare />}
-          </button>
-        ) : null}
-
-        <div
-          className="w-16 h-16 rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center"
-          title={isImg ? "Agrandir" : m.mime_type}
-        >
-          {thumb ? (
-            <img
-              src={thumb}
-              alt={m.name}
-              className="w-full h-full object-cover cursor-pointer"
-              onClick={() => isImg && openLightbox(m)}
-            />
-          ) : (
-            <a
-              href={mediaHref(m)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-2 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-[11px] font-semibold"
-            >
-              Ouvrir
-            </a>
-          )}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="font-semibold text-slate-800 truncate" title={m.name}>
-            {m.name || "(sans nom)"}
-          </div>
-          <div className="text-[12px] text-slate-500 truncate">
-            #{m.id} • {m.mime_type} • {fmtBytes(m.size)}{m.dimensions?.width && m.dimensions?.height ? ` • ${m.dimensions.width}×${m.dimensions.height}` : ""}
-          </div>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {m.is_featured && <Badge className="bg-amber-50 border-amber-200 text-amber-700"><FiStar className="mr-1" />Vedette</Badge>}
-            {!m.is_active && <Badge className="bg-slate-100 border-slate-300 text-slate-700">Inactif</Badge>}
-            <Badge className="bg-slate-50 border-slate-200 text-slate-700">ordre {m.sort_order ?? 0}</Badge>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {!trashMode ? (
-            <>
-              <TinyIconBtn title="Modifier" onClick={() => askEdit(m)} className="border-blue-200 text-blue-700">
-                <FiEdit3 />
-              </TinyIconBtn>
-              <TinyIconBtn title={m.is_active ? "Désactiver" : "Activer"} onClick={() => doToggleActive(m)} className="border-blue-200 text-blue-700">
-                {m.is_active ? <FiToggleRight /> : <FiToggleLeft />}
-              </TinyIconBtn>
-              <TinyIconBtn title={m.is_featured ? "Retirer vedette" : "Mettre vedette"} onClick={() => doToggleFeatured(m)} className="border-blue-200 text-blue-700">
-                <FiStar className={m.is_featured ? "" : "opacity-50"} />
-              </TinyIconBtn>
-              <TinyIconBtn title="Supprimer" onClick={() => askDelete(m)} className="border-rose-200 text-rose-700">
-                <FiTrash2 />
-              </TinyIconBtn>
-            </>
-          ) : (
-            <>
-              <TinyIconBtn title="Restaurer" onClick={() => doRestore(m.id)} className="border-blue-200 text-blue-700">
-                <FiRotateCcw />
-              </TinyIconBtn>
-              <TinyIconBtn title="Supprimer définitivement" onClick={() => doForceDelete(m.id)} className="border-rose-200 text-rose-700">
-                <FiTrash2 />
-              </TinyIconBtn>
-            </>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="w-full">
       {header}
+      <div className="mt-1" />
       {toolbar}
-
       {activeFiltersCount > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          {activePills.map(p => (
-            <FilterPill key={p.id} label={p.label} onClear={p.clear} />
-          ))}
-          <button
-            onClick={resetAllFilters}
-            className="ml-1 text-[11px] font-semibold underline text-blue-700"
-          >
-            Tout réinitialiser
-          </button>
+          {activePills.map(p => (<FilterPill key={p.id} label={p.label} onClear={p.clear} />))}
+          <button onClick={resetAllFilters} className="ml-1 text-[11px] font-semibold underline text-blue-700">Tout réinitialiser</button>
         </div>
       )}
-
       {filtersBlock}
       {bulkBar}
-
       {loading ? (
         <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {new Array(6).fill(0).map((_, i) => (
@@ -1648,10 +1693,10 @@ const ArticleMediaManager = ({ articleId }) => {
           {filteredItems.map(renderRow)}
         </div>
       )}
-
+      {/* Modaux */}
       <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onUploaded={onUploaded} articleId={articleId} />
       <EditModal open={editOpen} media={current} onClose={() => setEditOpen(false)} onSaved={onSaved} />
-      <Lightbox open={lightboxOpen} src={lightboxSrc} alt={lightboxAlt} onClose={() => setLightboxOpen(false)} />
+      <ViewerModal open={viewerOpen} media={viewerMedia} onClose={() => setViewerOpen(false)} />
       <ConfirmDialog
         open={confirmDialog.open}
         title={confirmDialog.title}
@@ -1666,11 +1711,3 @@ const ArticleMediaManager = ({ articleId }) => {
 };
 
 export default ArticleMediaManager;
-
-/* =========================================================
-   Portal util
-   ========================================================= */
-const ModalPortal = ({ children }) => {
-  const target = (typeof document !== 'undefined' && (document.getElementById("modal-root") || document.body)) || null;
-  return target ? createPortal(children, target) : null;
-};

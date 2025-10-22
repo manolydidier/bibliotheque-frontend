@@ -1,52 +1,82 @@
-// src/pages/media-library/Visualiseur/FilePreview/WordPreview.jsx
-import { useEffect, useState } from "react";
-import * as mammoth from "mammoth/mammoth.browser";
-import { fetchArrayBufferWithFallback } from "@/utils/fileFetch";
+// src/media-library/parts/Visualiseur/FilePreview/WordPreview.jsx
+import React, { useEffect, useRef, useState } from "react";
+import { ensureCorsSafe, fetchArrayBufferWithFallback, isLikelyPublicHttp } from "@/utils/fileFetch";
+// npm i docx-preview
+import { renderAsync } from "docx-preview"; // https://github.com/VolodymyrBaydalka/docxjs
 
 export default function WordPreview({ src, title }) {
-  const [html, setHtml] = useState("");
-  const [state, setState] = useState("idle");
+  const containerRef = useRef(null);
+  const [mode, setMode] = useState("auto"); // auto | office | local
   const [err, setErr] = useState("");
 
   useEffect(() => {
-    let alive = true;
+    let cancelled = false;
+    setErr("");
+
+    // Si l’URL a l’air publique (https, pas localhost/127, pas réseau privé) => on préfère Office
+    if (isLikelyPublicHttp(src)) {
+      setMode("office");
+      return;
+    }
+
+    // Sinon rendu local via docx-preview
+    setMode("local");
+
     (async () => {
-      if (!src) return;
-      setState("loading"); setErr("");
       try {
-        const ab = await fetchArrayBufferWithFallback(src);
-        const result = await mammoth.convertToHtml(
-          { arrayBuffer: ab },
-          { convertImage: mammoth.images.inline(el => el.read("base64").then(b64 => `data:${el.contentType};base64,${b64}`)) }
-        );
-        if (!alive) return;
-        setHtml(result.value || ""); setState("ok");
-      } catch (e) { if (!alive) return; setErr(e.message || "Erreur"); setState("err"); }
+        const safe = ensureCorsSafe(src); // proxifie si besoin
+        const buf = await fetchArrayBufferWithFallback(safe, { timeoutMs: 60000 });
+        if (cancelled) return;
+
+        // Nettoie avant rendu
+        const el = containerRef.current;
+        if (!el) return;
+        el.innerHTML = "";
+
+        await renderAsync(buf, el, undefined, {
+          // options docx-preview (facultatif)
+          className: "docx", // classe CSS racine
+          inWrapper: true,
+          ignoreHeight: false,
+          ignoreWidth: false,
+          ignoreFonts: false,
+          breakPages: true,
+          useBase64URL: false,
+          useMathMLPolyfill: false,
+        });
+      } catch (e) {
+        if (!cancelled) setErr(e?.message || String(e));
+      }
     })();
-    return () => { alive = false; };
+
+    return () => { cancelled = true; };
   }, [src]);
 
-  if (!src) return <div className="text-sm text-slate-500">Aucun document Word.</div>;
-
-  return (
-    <div className="w-full h-[75vh] rounded-2xl overflow-hidden border border-slate-200/40 bg-white flex flex-col">
-      <div className="px-4 py-2 border-b text-slate-700 flex items-center justify-between">
-        <span className="truncate">{title || "Document Word"}</span>
-        <a href={src} download className="text-sm px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded">Télécharger</a>
+  if (mode === "office") {
+    const officeSrc = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(src)}`;
+    return (
+      <div className="w-full h-[75vh] rounded-2xl overflow-hidden border border-slate-200/40 bg-white">
+        <div className="px-4 py-2 border-b text-slate-700">{title || "Document Word"}</div>
+        <iframe
+          src={officeSrc}
+          className="w-full h-[calc(75vh-40px)]"
+          title={title || "Word Viewer"}
+          allowFullScreen
+        />
       </div>
+    );
+  }
 
-      {state === "loading" && <div className="flex-1 grid place-items-center text-slate-500">Chargement…</div>}
-      {state === "err" && (
-        <div className="flex-1 grid place-items-center p-6 text-center">
-          <div className="text-slate-600 mb-2">Impossible d'afficher l’aperçu.</div>
-          <div className="text-xs text-slate-400 mb-4">{err}</div>
-          <a href={src} download className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Télécharger le document</a>
+  // mode local (docx-preview)
+  return (
+    <div className="w-full h-[75vh] rounded-2xl overflow-auto border border-slate-200/40 bg-white">
+      <div className="px-4 py-2 border-b text-slate-700">{title || "Document Word"}</div>
+      {err ? (
+        <div className="p-4 text-sm text-red-600">
+          Impossible d’afficher le .docx en local : {err}
         </div>
-      )}
-      {state === "ok" && (
-        <div className="flex-1 overflow-auto px-8 py-6">
-          <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: html }} />
-        </div>
+      ) : (
+        <div ref={containerRef} className="p-4 docx-wrapper" />
       )}
     </div>
   );

@@ -357,7 +357,7 @@ export default function Visualiseur() {
   const [unlockBusy, setUnlockBusy] = useState(false);
 
   const [activeTab, setActiveTab] = useState("Aperçu");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+
   const [fullscreen, setFullscreen] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [similar, setSimilar] = useState([]);
@@ -373,6 +373,22 @@ export default function Visualiseur() {
   // Aperçu rapide (modal indépendant des Tabs)
   const [qpOpen, setQpOpen] = useState(false);
   const [qpFile, setQpFile] = useState(null);
+
+  // État persistant pour l’ouverture/fermeture de la Sidebar
+const [sidebarOpen, setSidebarOpen] = useState(() => {
+  try {
+    return JSON.parse(localStorage.getItem("visualiseur:sidebarOpen") || "true");
+  } catch {
+    return true;
+  }
+});
+useEffect(() => {
+  try { localStorage.setItem("visualiseur:sidebarOpen", JSON.stringify(sidebarOpen)); } catch {}
+}, [sidebarOpen]);
+
+const toggleSidebar = useCallback(() => {
+  setSidebarOpen((s) => !s);
+}, []);
 
   /* ------- Actions ------- */
     // Construit un "article-like" avec le média en tête (pour FilePreview)
@@ -819,17 +835,29 @@ const mediaList = useMemo(() => {
 
       {/* (AUCUN FilePreview direct ici) */}
 
-      <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 font-sans px-3 sm:px-4 lg:px-6 2xl:px-10 py-4">
+      <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 font-sans px-3 sm:px-4 lg:px-6 2xl:px-10 py-4" >
         {unlockError && (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {unlockError}
           </div>
         )}
+        {/* Bascule Sidebar (desktop) */}
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              title={sidebarOpen ? "Masquer la bibliothèque" : "Afficher la bibliothèque"}
+              aria-pressed={!sidebarOpen}
+              className="hidden lg:flex items-center gap-2 fixed left-3 top-24 px-3 py-2 rounded-full border border-slate-200/70 bg-white/80 backdrop-blur hover:bg-white shadow-md hover:shadow-lg transition-all z-50"
+            >
+              {sidebarOpen ? <FaChevronLeft className="opacity-80" /> : <FaChevronRight className="opacity-80" />}
+              <span className="text-xs font-medium text-slate-700"></span>
+            </button>
 
         <div className="flex gap-4 lg:gap-6 xl:gap-8">
+        {sidebarOpen && (
           <Sidebar
             open={sidebarOpen}
-            toggle={() => setSidebarOpen(s => !s)}
+            toggle={toggleSidebar}
             mediaCount={mediaList.length}
             tags={article?.tags || []}
             mediaList={mediaList}
@@ -843,8 +871,9 @@ const mediaList = useMemo(() => {
             iconForType={iconForType}
             iconBgForType={iconBgForType}
             toAbsolute={toAbsolute}
-             
           />
+        )}
+
 
           {/* Main */}
           <div className="flex-1 min-w-0 flex flex-col">
@@ -1170,7 +1199,7 @@ function Medias({ mediaList, onPreview }) {
   const Card = ({ m }) => (
     <div
       key={m.id ?? m.fileUrl}
-      className="rounded-2xl border border-slate-200/60 bg-white/70 backdrop-blur-sm p-4 hover:shadow-xl transition-all duration-300"
+      className="rounded-2xl border border-slate-200/60 bg-white/70 backdrop-blur-sm p-4 hover:shadow-xl transition-all duration-300 w-64"
     >
       <div className="flex items-center gap-3">
         <div className={`w-12 h-12 ${iconBgForType(m.type)} rounded-xl flex items-center justify-center`}>
@@ -1392,7 +1421,7 @@ function Medias({ mediaList, onPreview }) {
           Aucun média ne correspond aux filtres.
         </div>
       ) : viewMode === "grid" ? (
-        <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
+        <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {filtered.map(m => <Card key={m.id ?? m.fileUrl} m={m} />)}
         </div>
       ) : (
@@ -1406,149 +1435,149 @@ function Medias({ mediaList, onPreview }) {
 
 
 /* ====== Viewers intégrés selon type + bouton "Agrandir" => modal ====== */
-function PreviewByType({ type, url, title, onOpen, onDownload }) {
-  if (type === "image") {
-    const abs = toAbsolute(url);
-    return (
-      <div className="w-full flex flex-col">
-        <div className="flex-1 flex items-center justify-center bg-slate-50/60 rounded-2xl border border-slate-200/40 p-6 sm:p-8 backdrop-blur-sm">
-          <div className="w-full max-w-full max-h-[62vh] lg:max-h-[65vh]">
-            <SmartImage
-              src={abs}
-              alt={title}
-              modern="off"
-              ratio="56.25%"
-              rounding="rounded-2xl"
-              className="object-contain"
-            />
-          </div>
-        </div>
-        <div className="mt-6 sm:mt-8 flex flex-wrap justify-center gap-3 sm:gap-4">
-          <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl flex items-center shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
-            <FaExternalLinkAlt className="mr-3" />
-            Voir en haute résolution
-          </button>
-          <button onClick={onDownload} className="bg-white/80 backdrop-blur-sm text-slate-700 px-6 sm:px-8 py-3 sm:py-4 rounded-2xl border border-slate-300/60 flex items-center shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-white">
-            <FaDownload className="mr-3" />
-            Télécharger
-          </button>
-        </div>
-      </div>
-    );
-  }
+// function PreviewByType({ type, url, title, onOpen, onDownload }) {
+//   if (type === "image") {
+//     const abs = toAbsolute(url);
+//     return (
+//       <div className="w-full flex flex-col">
+//         <div className="flex-1 flex items-center justify-center bg-slate-50/60 rounded-2xl border border-slate-200/40 p-6 sm:p-8 backdrop-blur-sm">
+//           <div className="w-full max-w-full max-h-[62vh] lg:max-h-[65vh]">
+//             <SmartImage
+//               src={abs}
+//               alt={title}
+//               modern="off"
+//               ratio="56.25%"
+//               rounding="rounded-2xl"
+//               className="object-contain"
+//             />
+//           </div>
+//         </div>
+//         <div className="mt-6 sm:mt-8 flex flex-wrap justify-center gap-3 sm:gap-4">
+//           <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl flex items-center shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+//             <FaExternalLinkAlt className="mr-3" />
+//             Voir en haute résolution
+//           </button>
+//           <button onClick={onDownload} className="bg-white/80 backdrop-blur-sm text-slate-700 px-6 sm:px-8 py-3 sm:py-4 rounded-2xl border border-slate-300/60 flex items-center shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-white">
+//             <FaDownload className="mr-3" />
+//             Télécharger
+//           </button>
+//         </div>
+//       </div>
+//     );
+//   }
 
-  if (type === "pdf") {
-    const abs = toAbsolute(url);
-    return (
-      <div className="w-full">
-        <PdfPreview file={{ title, fileUrl: abs }} height="75vh" usePdfJs />
-        <div className="mt-4 flex justify-center">
-          <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
-            <FaExternalLinkAlt /> Agrandir l’aperçu
-          </button>
-        </div>
-      </div>
-    );
-  }
+//   if (type === "pdf") {
+//     const abs = toAbsolute(url);
+//     return (
+//       <div className="w-full">
+//         <PdfPreview file={{ title, fileUrl: abs }} height="75vh" usePdfJs />
+//         <div className="mt-4 flex justify-center">
+//           <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
+//             <FaExternalLinkAlt /> Agrandir l’aperçu
+//           </button>
+//         </div>
+//       </div>
+//     );
+//   }
 
-  if (type === "word") {
-    return (
-      <div className="w-full">
-        <WordPreview src={toAbsolute(url)} title={title} />
-        <div className="mt-4 flex justify-center">
-          <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
-            <FaExternalLinkAlt /> Agrandir l’aperçu
-          </button>
-        </div>
-      </div>
-    );
-  }
+//   if (type === "word") {
+//     return (
+//       <div className="w-full">
+//         <WordPreview src={toAbsolute(url)} title={title} />
+//         <div className="mt-4 flex justify-center">
+//           <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
+//             <FaExternalLinkAlt /> Agrandir l’aperçu
+//           </button>
+//         </div>
+//       </div>
+//     );
+//   }
 
-  if (type === "excel") {
-    const abs = toAbsolute(url);
-    const officeSrc = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(abs)}`;
-    return (
-      <div className="w-full">
-        <div className="w-full h-[75vh] rounded-2xl overflow-hidden border border-slate-200/40 bg-white">
-          <div className="px-4 py-2 border-b text-slate-700">{title || "Classeur Excel"}</div>
-          <iframe src={officeSrc} className="w-full h-[calc(75vh-40px)]" title="Excel Viewer" />
-        </div>
-        <div className="mt-4 flex justify-center">
-          <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
-            <FaExternalLinkAlt /> Agrandir l’aperçu
-          </button>
-        </div>
-      </div>
-    );
-  }
+//   if (type === "excel") {
+//     const abs = toAbsolute(url);
+//     const officeSrc = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(abs)}`;
+//     return (
+//       <div className="w-full">
+//         <div className="w-full h-[75vh] rounded-2xl overflow-hidden border border-slate-200/40 bg-white">
+//           <div className="px-4 py-2 border-b text-slate-700">{title || "Classeur Excel"}</div>
+//           <iframe src={officeSrc} className="w-full h-[calc(75vh-40px)]" title="Excel Viewer" />
+//         </div>
+//         <div className="mt-4 flex justify-center">
+//           <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
+//             <FaExternalLinkAlt /> Agrandir l’aperçu
+//           </button>
+//         </div>
+//       </div>
+//     );
+//   }
 
-  if (type === "ppt") {
-    return (
-      <div className="w-full">
-        <PowerPointPreview src={toAbsolute(url)} title={title} />
-        <div className="mt-4 flex justify-center">
-          <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
-            <FaExternalLinkAlt /> Agrandir l’aperçu
-          </button>
-        </div>
-      </div>
-    );
-  }
+//   if (type === "ppt") {
+//     return (
+//       <div className="w-full">
+//         <PowerPointPreview src={toAbsolute(url)} title={title} />
+//         <div className="mt-4 flex justify-center">
+//           <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
+//             <FaExternalLinkAlt /> Agrandir l’aperçu
+//           </button>
+//         </div>
+//       </div>
+//     );
+//   }
 
-  if (type === "video") {
-    return (
-      <div className="w-full flex flex-col">
-        <div className="w-full rounded-2xl overflow-hidden border border-slate-200/40 bg-black">
-          <video
-            src={toAbsolute(url)}
-            className="w-full h-[62vh] lg:h-[65vh]"
-            controls
-            playsInline
-          />
-        </div>
-        <div className="mt-6 sm:mt-8 flex justify-center">
-          <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl flex items-center shadow-2xl transition-all">
-            <FaPlay className="mr-3" /> Agrandir la vidéo
-          </button>
-        </div>
-      </div>
-    );
-  }
+//   if (type === "video") {
+//     return (
+//       <div className="w-full flex flex-col">
+//         <div className="w-full rounded-2xl overflow-hidden border border-slate-200/40 bg-black">
+//           <video
+//             src={toAbsolute(url)}
+//             className="w-full h-[62vh] lg:h-[65vh]"
+//             controls
+//             playsInline
+//           />
+//         </div>
+//         <div className="mt-6 sm:mt-8 flex justify-center">
+//           <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl flex items-center shadow-2xl transition-all">
+//             <FaPlay className="mr-3" /> Agrandir la vidéo
+//           </button>
+//         </div>
+//       </div>
+//     );
+//   }
 
-  if (type === "map") {
-    return (
-      <div className="w-full">
-        <MapPreview dataUrl={toAbsolute(url)} />
-        <div className="mt-4 flex justify-center">
-          <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
-            <FaExternalLinkAlt /> Agrandir la carte
-          </button>
-        </div>
-      </div>
-    );
-  }
+//   if (type === "map") {
+//     return (
+//       <div className="w-full">
+//         <MapPreview dataUrl={toAbsolute(url)} />
+//         <div className="mt-4 flex justify-center">
+//           <button onClick={onOpen} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow">
+//             <FaExternalLinkAlt /> Agrandir la carte
+//           </button>
+//         </div>
+//       </div>
+//     );
+//   }
 
-  // fallback: iframe générique
-  return (
-    <div className="w-full flex flex-col items-center justify-center py-14 lg:py-16">
-      <div className="text-center">
-        <div className="w-24 h-24 lg:w-28 lg:h-28 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl">
-          <FaFile className="text-slate-600 text-4xl lg:text-5xl" />
-        </div>
-        <h3 className="text-2xl lg:text-3xl font-light text-slate-800 mb-3">{title}</h3>
-        <p className="text-slate-600 mt-2 mb-6 lg:mb-8 max-w-md mx-auto">Aperçu intégré</p>
-        <div className="w-full max-w-4xl h-[70vh] rounded-2xl overflow-hidden border border-slate-200/40 bg-white">
-          <iframe src={toAbsolute(url)} className="w-full h-full" title="Aperçu fichier" />
-        </div>
-        <div className="mt-6">
-          <button onClick={onOpen} className="inline-flex items-center bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl shadow-xl hover:shadow-2xl transition-all">
-            <FaExternalLinkAlt className="mr-3" /> Agrandir l’aperçu
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+//   // fallback: iframe générique
+//   return (
+//     <div className="w-full flex flex-col items-center justify-center py-14 lg:py-16">
+//       <div className="text-center">
+//         <div className="w-24 h-24 lg:w-28 lg:h-28 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl">
+//           <FaFile className="text-slate-600 text-4xl lg:text-5xl" />
+//         </div>
+//         <h3 className="text-2xl lg:text-3xl font-light text-slate-800 mb-3">{title}</h3>
+//         <p className="text-slate-600 mt-2 mb-6 lg:mb-8 max-w-md mx-auto">Aperçu intégré</p>
+//         <div className="w-full max-w-4xl h-[70vh] rounded-2xl overflow-hidden border border-slate-200/40 bg-white">
+//           <iframe src={toAbsolute(url)} className="w-full h-full" title="Aperçu fichier" />
+//         </div>
+//         <div className="mt-6">
+//           <button onClick={onOpen} className="inline-flex items-center bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl shadow-xl hover:shadow-2xl transition-all">
+//             <FaExternalLinkAlt className="mr-3" /> Agrandir l’aperçu
+//           </button>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
 
 function Metadonnees({ article, currentType, currentTitle }) {
   const tagList = Array.isArray(article?.tags) ? article.tags : [];
