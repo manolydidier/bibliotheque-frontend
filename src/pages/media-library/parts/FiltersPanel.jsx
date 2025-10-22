@@ -1,11 +1,13 @@
 // ------------------------------
 // File: src/media-library/parts/FiltersPanel.jsx
-// Improved + robust
+// Improved + robust + i18n
 // - Normalise les props options (categories/tags/authors) quel que soit le shape
 // - Evite filters undefined via défaut interne
 // - SUPPRIME TOUS LES CHIFFRES D'AFFICHAGE (pills, chips, badge total)
+// - Support i18n complet
 // ------------------------------
 import { useEffect, useState, useCallback, useMemo, useRef, useLayoutEffect } from "react";
+import { useTranslation } from 'react-i18next';
 import {
   FaFilter, FaSearch, FaThLarge, FaTable, FaDownload, FaTimes, FaSave, FaBookmark,
   FaHistory, FaStar, FaEye, FaChevronDown, FaRocket, FaTag, FaCalendar, FaThumbsUp,
@@ -16,13 +18,6 @@ import { cls } from "../shared/utils/format";
 /* -------------------------------------------
    Constants
 ------------------------------------------- */
-const SEARCH_HINTS = [
-  'Ex : ia startup after:2024-01-01',
-  'Ex : author:"Auteur #12" tag:mobile',
-  'Ex : category:"Intelligence Artificielle" rating>4',
-  'Astuce : tape "/" pour focaliser',
-];
-
 const ANIMATION_DELAYS = {
   TYPEWRITER_END: 900,
   TYPEWRITER_START: 400,
@@ -369,15 +364,25 @@ const InputWithIcon = ({ icon, onChange, label, ...props }) => (
 ------------------------------------------- */
 export default function FiltersPanel({
   search, setSearch,
-  filters: rawFilters = DEFAULT_FILTERS,       // ← valeur par défaut robuste
+  filters: rawFilters = DEFAULT_FILTERS,
   setFilters,
   view, setView,
   perPage, setPerPage,
-  loadMode, setLoadMode, // (optionnel)
+  loadMode, setLoadMode,
   authorsOptions = [],
   categoriesOptions = [],
   tagsOptions = [],
 }) {
+  const { t, i18n } = useTranslation();
+
+  // Search hints avec i18n
+  const SEARCH_HINTS = useMemo(() => [
+    t('filters.searchHints.example1'),
+    t('filters.searchHints.example2'),
+    t('filters.searchHints.example3'),
+    t('filters.searchHints.tip'),
+  ], [t]);
+
   // Normalise options (peu importe la forme)
   const safeAuthors    = useMemo(() => normalizeOptionsList(authorsOptions, "authors"), [authorsOptions]);
   const safeCategories = useMemo(() => normalizeOptionsList(categoriesOptions, "categories"), [categoriesOptions]);
@@ -469,16 +474,16 @@ export default function FiltersPanel({
   const handleApplyFilters = useCallback(() => {
     setFilters(normalizeFilters(localFilters));
     setActiveMenu(null);
-    showToast("Filtres appliqués", "success");
-  }, [localFilters, setFilters, normalizeFilters, showToast]);
+    showToast(t('filters.toasts.filtersApplied'), "success");
+  }, [localFilters, setFilters, normalizeFilters, showToast, t]);
 
   const handleResetFilters = useCallback(() => {
     const empty = normalizeFilters(DEFAULT_FILTERS);
     setLocalFilters(empty);
     setFilters(empty);
     setActiveMenu(null);
-    showToast("Filtres réinitialisés", "success");
-  }, [setFilters, normalizeFilters, showToast]);
+    showToast(t('filters.toasts.filtersReset'), "success");
+  }, [setFilters, normalizeFilters, showToast, t]);
 
   const handleSearch = useCallback(() => {
     setSearch(searchQuery);
@@ -489,27 +494,30 @@ export default function FiltersPanel({
 
   const generateSuggestedName = useCallback(() => {
     const parts = [];
-    if (localFilters.featuredOnly) parts.push("vedettes");
-    if (localFilters.stickyOnly) parts.push("épinglés");
-    if (localFilters.unreadOnly) parts.push("non lus");
-    if (localFilters.dateFrom || localFilters.dateTo) parts.push("période");
-    if (localFilters.ratingMin > 0 || localFilters.ratingMax < 5) parts.push("note");
-    const base = parts.length ? parts.join(" • ") : "Filtre personnalisé";
+    if (localFilters.featuredOnly) parts.push(t('filters.suggestedNames.featured'));
+    if (localFilters.stickyOnly) parts.push(t('filters.suggestedNames.pinned'));
+    if (localFilters.unreadOnly) parts.push(t('filters.suggestedNames.unread'));
+    if (localFilters.dateFrom || localFilters.dateTo) parts.push(t('filters.suggestedNames.period'));
+    if (localFilters.ratingMin > 0 || localFilters.ratingMax < 5) parts.push(t('filters.suggestedNames.rating'));
+    const base = parts.length ? parts.join(' • ') : t('filters.suggestedNames.custom');
     return base.length > 32 ? base.slice(0, 32) + "…" : base;
-  }, [localFilters]);
+  }, [localFilters, t]);
 
   const handleSaveFilter = useCallback((name) => {
     const trimmed = String(name || "").trim();
     if (!trimmed) return false;
     const ok = saveFilter(trimmed, normalizeFilters(localFilters));
-    showToast(ok ? `Filtre "${trimmed}" sauvegardé` : "Erreur lors de la sauvegarde", ok ? "success" : "error");
+    showToast(
+      ok ? t('filters.toasts.filterSaved', { name: trimmed }) : t('filters.toasts.saveError'),
+      ok ? "success" : "error"
+    );
     return ok;
-  }, [localFilters, saveFilter, normalizeFilters, showToast]);
+  }, [localFilters, saveFilter, normalizeFilters, showToast, t]);
 
   // Helpers render options (SANS compter)
   const renderOptionChips = (options, type) => {
     if (!options.length) {
-      return <div className="text-sm text-slate-500">Aucun {type} disponible</div>;
+      return <div className="text-sm text-slate-500">{t('filters.noOptions', { type: t(`filters.types.${type}`) })}</div>;
     }
     return (
       <div className="flex flex-wrap gap-2">
@@ -568,18 +576,18 @@ export default function FiltersPanel({
                 "focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300",
                 isSearchFocused ? "shadow-[inset_0_0_0_1px_rgba(59,130,246,.2)]" : "shadow-none"
               )}
-              aria-label="Recherche d'articles"
+              aria-label={t('filters.search.ariaLabel')}
               autoComplete="off"
             />
             {!searchQuery.length && (
               <div className="pointer-events-none absolute left-10 right-20 top-1/2 -translate-y-1/2 text-slate-400 text-sm select-none">
                 <span className="inline-flex items-center gap-2">
                   <span className="whitespace-nowrap">
-                    {animatedHint || "Tapez pour rechercher…"}
+                    {animatedHint || t('filters.search.placeholder')}
                     <span className="ml-0.5 inline-block w-[1px] h-[1.2em] align-middle bg-slate-400 animate-caret-blink" />
                   </span>
                   <span className="hidden sm:inline text-[11px] px-2 py-0.5 rounded bg-slate-100 border border-slate-200">
-                    Astuce : « / » pour focus
+                    {t('filters.search.tip')}
                   </span>
                 </span>
               </div>
@@ -596,7 +604,7 @@ export default function FiltersPanel({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => { setIsHistoryPinned((p) => !p); setShowSearchHistory((p) => !p); }}
-                title={isHistoryPinned ? "Masquer l'historique" : "Afficher l'historique"}
+                title={isHistoryPinned ? t('filters.search.hideHistory') : t('filters.search.showHistory')}
                 className={cls(
                   "h-8 w-8 rounded-lg border inline-flex items-center justify-center transition-all duration-200",
                   "active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200",
@@ -613,7 +621,7 @@ export default function FiltersPanel({
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => setSearchQuery("")}
                   className="h-8 w-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 inline-flex items-center justify-center transition-all duration-200 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
-                  title="Effacer la recherche"
+                  title={t('filters.search.clear')}
                 >
                   <FaTimes />
                 </button>
@@ -625,7 +633,7 @@ export default function FiltersPanel({
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={handleSearch}
                   className="h-8 px-3 rounded-lg bg-blue-600 text-white font-medium inline-flex items-center gap-2 transition-all duration-200 hover:bg-blue-700 hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
-                  title="Lancer la recherche"
+                  title={t('filters.search.execute')}
                 >
                   <FaRocket />
                 </button>
@@ -637,12 +645,12 @@ export default function FiltersPanel({
                 <div className="bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
                   <div className="px-3 py-2 text-xs text-slate-600 border-b border-slate-100 flex items-center justify-between">
                     <span className="inline-flex items-center gap-2">
-                      <FaHistory aria-hidden="true" /> Recherches récentes
+                      <FaHistory aria-hidden="true" /> {t('filters.search.recentSearches')}
                     </span>
                     <button
                       onClick={clearHistory}
                       className="text-red-500 hover:text-red-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-200 rounded"
-                      title="Effacer l'historique"
+                      title={t('filters.search.clearHistory')}
                     >
                       <FaTrash />
                     </button>
@@ -677,8 +685,8 @@ export default function FiltersPanel({
           <div className="flex items-center gap-3">
             <div className="flex bg-white rounded-xl border border-slate-200 p-1" role="tablist">
               {[
-                { key: "grid", icon: FaThLarge, label: "Vue grille" },
-                { key: "list", icon: FaTable, label: "Vue liste" },
+                { key: "grid", icon: FaThLarge, label: t('filters.view.grid') },
+                { key: "list", icon: FaTable, label: t('filters.view.list') },
               ].map(({ key, icon: Icon, label }) => (
                 <button
                   key={key}
@@ -699,12 +707,12 @@ export default function FiltersPanel({
             </div>
 
             <label className="relative">
-              <span className="sr-only">Éléments par page</span>
+              <span className="sr-only">{t('filters.itemsPerPage')}</span>
               <select
                 value={perPage}
                 onChange={(e) => setPerPage(Number(e.target.value))}
                 className="h-10 px-3 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition-all appearance-none cursor-pointer"
-                title="Éléments par page"
+                title={t('filters.itemsPerPage')}
               >
                 {[12, 24, 48, 96].map((count) => (
                   <option key={count} value={count}>{count}/page</option>
@@ -720,20 +728,19 @@ export default function FiltersPanel({
                 "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200",
                 isExpanded ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-700 border-slate-200 hover:bg-blue-50 hover:border-blue-300"
               )}
-              title="Afficher/Masquer les filtres"
+              title={t('filters.toggleFilters')}
               aria-expanded={isExpanded}
               aria-controls="filters-panel"
             >
               <FaFilter aria-hidden="true" />
-              <span>Filtres</span>
-              {/* (Plus de badge de nombre de filtres actifs) */}
+              <span>{t('filters.filters')}</span>
             </button>
 
             <button
               type="button"
               onClick={() => window.dispatchEvent(new CustomEvent("articlelib:export"))}
               className="h-10 w-10 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center transition-transform active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
-              title="Exporter en CSV"
+              title={t('filters.export')}
             >
               <FaDownload aria-hidden="true" />
             </button>
@@ -760,44 +767,44 @@ export default function FiltersPanel({
                   style={{ scrollbarWidth: "none" }}
                 >
                   <Pill
-                    label="Catégories"
+                    label={t('filters.categories')}
                     icon={<FaTag />}
                     open={activeMenu === "categories"}
                     onToggle={() => setActiveMenu(activeMenu === "categories" ? null : "categories")}
                   />
                   <Pill
-                    label="Tags"
+                    label={t('filters.tags')}
                     icon={<FaTag />}
                     open={activeMenu === "tags"}
                     onToggle={() => setActiveMenu(activeMenu === "tags" ? null : "tags")}
                   />
                   <Pill
-                    label="Auteurs"
+                    label={t('filters.authors')}
                     icon={<FaUser />}
                     open={activeMenu === "authors"}
                     onToggle={() => setActiveMenu(activeMenu === "authors" ? null : "authors")}
                   />
                   <Pill
-                    label="Options"
+                    label={t('filters.options')}
                     icon={<FaFilter />}
                     open={activeMenu === "options"}
                     onToggle={() => setActiveMenu(activeMenu === "options" ? null : "options")}
                   />
                   <Pill
-                    label="Période"
+                    label={t('filters.dates')}
                     icon={<FaCalendar />}
                     open={activeMenu === "dates"}
                     onToggle={() => setActiveMenu(activeMenu === "dates" ? null : "dates")}
                   />
                   <Pill
-                    label="Note"
+                    label={t('filters.rating')}
                     icon={<FaThumbsUp />}
                     open={activeMenu === "rating"}
                     onToggle={() => setActiveMenu(activeMenu === "rating" ? null : "rating")}
                   />
 
                   <Pill
-                    label="Sauvegardes"
+                    label={t('filters.saved')}
                     icon={<FaBookmark />}
                     open={activeMenu === "saved"}
                     onToggle={() => setActiveMenu(activeMenu === "saved" ? null : "saved")}
@@ -808,19 +815,19 @@ export default function FiltersPanel({
                       type="button"
                       onClick={handleResetFilters}
                       className="h-10 px-3 rounded-xl border inline-flex items-center gap-2 transition-colors bg-white text-slate-700 border-slate-200 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
-                      title="Réinitialiser tous les filtres"
+                      title={t('filters.resetAll')}
                     >
                       <FaEraser aria-hidden="true" />
-                      <span>Tout réinitialiser</span>
+                      <span>{t('filters.resetAll')}</span>
                     </button>
                     <button
                       type="button"
                       onClick={handleApplyFilters}
                       className="h-10 px-4 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 inline-flex items-center gap-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
-                      title="Appliquer les filtres sélectionnés"
+                      title={t('filters.apply')}
                     >
                       <FaRocket aria-hidden="true" />
-                      <span>Appliquer</span>
+                      <span>{t('filters.apply')}</span>
                     </button>
                   </div>
                 </div>
@@ -830,7 +837,7 @@ export default function FiltersPanel({
               <div className="px-6 pb-6 space-y-3">
                 <FilterSection
                   visible={activeMenu === "categories"}
-                  title="Catégories"
+                  title={t('filters.categories')}
                   onClear={localFilters.categories.length ? () => setLocalFilters(p => ({ ...p, categories: [] })) : undefined}
                 >
                   {renderOptionChips(safeCategories, 'categories')}
@@ -838,7 +845,7 @@ export default function FiltersPanel({
 
                 <FilterSection
                   visible={activeMenu === "tags"}
-                  title="Tags"
+                  title={t('filters.tags')}
                   onClear={localFilters.tags.length ? () => setLocalFilters(p => ({ ...p, tags: [] })) : undefined}
                 >
                   {renderOptionChips(safeTags, 'tags')}
@@ -846,7 +853,7 @@ export default function FiltersPanel({
 
                 <FilterSection
                   visible={activeMenu === "authors"}
-                  title="Auteurs"
+                  title={t('filters.authors')}
                   onClear={localFilters.authors.length ? () => setLocalFilters(p => ({ ...p, authors: [] })) : undefined}
                 >
                   {renderOptionChips(safeAuthors, 'authors')}
@@ -854,7 +861,7 @@ export default function FiltersPanel({
 
                 <FilterSection
                   visible={activeMenu === "options"}
-                  title="Options rapides"
+                  title={t('filters.quickOptions')}
                   onClear={
                     (localFilters.featuredOnly || localFilters.stickyOnly || localFilters.unreadOnly)
                       ? () => setLocalFilters(p => ({ ...p, featuredOnly: false, stickyOnly: false, unreadOnly: false }))
@@ -866,40 +873,40 @@ export default function FiltersPanel({
                       active={localFilters.featuredOnly}
                       onClick={() => setLocalFilters(prev => ({ ...prev, featuredOnly: !prev.featuredOnly }))}
                       icon={<FaStar />}
-                      label="Vedettes uniquement"
+                      label={t('filters.featuredOnly')}
                     />
                     <ToggleButton
                       active={localFilters.stickyOnly}
                       onClick={() => setLocalFilters(prev => ({ ...prev, stickyOnly: !prev.stickyOnly }))}
                       icon={<FaThumbtack />}
-                      label="Épinglés uniquement"
+                      label={t('filters.pinnedOnly')}
                     />
                     <ToggleButton
                       active={localFilters.unreadOnly}
                       onClick={() => setLocalFilters(prev => ({ ...prev, unreadOnly: !prev.unreadOnly }))}
                       icon={<FaEye />}
-                      label="Non lus uniquement"
+                      label={t('filters.unreadOnly')}
                     />
                   </div>
                 </FilterSection>
 
                 <FilterSection
                   visible={activeMenu === "dates"}
-                  title="Période"
+                  title={t('filters.dates')}
                   onClear={(localFilters.dateFrom || localFilters.dateTo) ? () => setLocalFilters(p => ({ ...p, dateFrom: "", dateTo: "" })) : undefined}
                 >
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <InputWithIcon
                       icon={<FaCalendar />}
                       type="date"
-                      label="Date de début"
+                      label={t('filters.startDate')}
                       value={localFilters.dateFrom}
                       onChange={(value) => setLocalFilters(prev => ({ ...prev, dateFrom: value }))}
                     />
                     <InputWithIcon
                       icon={<FaCalendar />}
                       type="date"
-                      label="Date de fin"
+                      label={t('filters.endDate')}
                       value={localFilters.dateTo}
                       onChange={(value) => setLocalFilters(prev => ({ ...prev, dateTo: value }))}
                     />
@@ -908,7 +915,7 @@ export default function FiltersPanel({
 
                 <FilterSection
                   visible={activeMenu === "rating"}
-                  title="Note moyenne"
+                  title={t('filters.rating')}
                   onClear={(localFilters.ratingMin > 0 || localFilters.ratingMax < 5) ? () => setLocalFilters(p => ({ ...p, ratingMin: 0, ratingMax: 5 })) : undefined}
                 >
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -918,8 +925,8 @@ export default function FiltersPanel({
                       min="0"
                       max="5"
                       step="0.1"
-                      placeholder="Note minimale"
-                      label="Note minimale"
+                      placeholder={t('filters.minRating')}
+                      label={t('filters.minRating')}
                       value={localFilters.ratingMin}
                       onChange={(value) => setLocalFilters(prev => ({
                         ...prev,
@@ -932,8 +939,8 @@ export default function FiltersPanel({
                       min="0"
                       max="5"
                       step="0.1"
-                      placeholder="Note maximale"
-                      label="Note maximale"
+                      placeholder={t('filters.maxRating')}
+                      label={t('filters.maxRating')}
                       value={localFilters.ratingMax}
                       onChange={(value) => setLocalFilters(prev => ({
                         ...prev,
@@ -945,22 +952,22 @@ export default function FiltersPanel({
 
                 <FilterSection
                   visible={activeMenu === "saved"}
-                  title="Filtres sauvegardés"
+                  title={t('filters.savedFilters')}
                   action={
                     <button
                       type="button"
                       onClick={() => { setSaveModalName(generateSuggestedName()); setShowSaveModal(true); }}
                       className="h-9 px-3 rounded-lg bg-blue-600 text-white inline-flex items-center gap-2 hover:bg-blue-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
-                      title="Sauvegarder les filtres actuels"
+                      title={t('filters.saveCurrent')}
                     >
                       <FaSave aria-hidden="true" />
-                      <span>Sauvegarder l'état actuel</span>
+                      <span>{t('filters.saveCurrent')}</span>
                     </button>
                   }
                 >
                   {savedFilters.length === 0 ? (
                     <div className="text-sm text-slate-500">
-                      Aucun filtre sauvegardé. Configurez vos filtres puis cliquez sur "Sauvegarder l'état actuel".
+                      {t('filters.noSavedFilters')}
                     </div>
                   ) : (
                     <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
@@ -974,22 +981,22 @@ export default function FiltersPanel({
                                 setLocalFilters(cleaned);
                                 setFilters(cleaned);
                                 setActiveMenu(null);
-                                showToast(`Filtre "${sf.name}" chargé`, "success");
+                                showToast(t('filters.toasts.filterLoaded', { name: sf.name }), "success");
                               }}
                               className="text-left text-sm text-slate-800 hover:text-slate-900 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 rounded"
-                              title={`Charger le filtre: ${sf.name}`}
+                              title={t('filters.loadFilter', { name: sf.name })}
                             >
                               <div className="font-medium truncate">{sf.name}</div>
                               <div className="text-xs text-slate-500">
-                                Créé le {new Date(sf.createdAt).toLocaleDateString()}
+                                {t('filters.createdOn')} {new Date(sf.createdAt).toLocaleDateString()}
                               </div>
                             </button>
                           </div>
                           <button
                             type="button"
-                            onClick={() => { deleteFilter(sf.id); showToast("Filtre supprimé", "success"); }}
+                            onClick={() => { deleteFilter(sf.id); showToast(t('filters.toasts.filterDeleted'), "success"); }}
                             className="text-red-500 hover:text-red-700 transition-colors p-1 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-red-200"
-                            title={`Supprimer le filtre: ${sf.name}`}
+                            title={t('filters.deleteFilter', { name: sf.name })}
                           >
                             <FaTrash />
                           </button>
@@ -1023,6 +1030,8 @@ export default function FiltersPanel({
 ------------------------------------------- */
 
 function FilterSection({ visible, title, children, onClear, action }) {
+  const { t } = useTranslation();
+  
   if (!visible) return null;
   return (
     <div className="transition-all origin-top opacity-100 translate-y-0 scale-[1]">
@@ -1036,10 +1045,10 @@ function FilterSection({ visible, title, children, onClear, action }) {
                 type="button"
                 onClick={onClear}
                 className="text-sm inline-flex items-center gap-2 text-slate-700 hover:text-slate-900 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 rounded px-2 py-1"
-                title={`Réinitialiser ${title.toLowerCase()}`}
+                title={t('filters.resetSection', { section: title.toLowerCase() })}
               >
                 <FaEraser aria-hidden="true" />
-                <span>Réinitialiser</span>
+                <span>{t('filters.reset')}</span>
               </button>
             )}
           </div>
@@ -1051,6 +1060,7 @@ function FilterSection({ visible, title, children, onClear, action }) {
 }
 
 function SaveModal({ initialValue = "", onSave, onClose }) {
+  const { t } = useTranslation();
   const [name, setName] = useState(initialValue);
   const modalRef = useRef(null);
   const inputRef = useRef(null);
@@ -1089,20 +1099,20 @@ function SaveModal({ initialValue = "", onSave, onClose }) {
             type="button"
             onClick={onClose}
             className="absolute right-2 top-2 h-8 w-8 rounded-full text-slate-500 hover:bg-slate-100 inline-flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
-            aria-label="Fermer la modal"
+            aria-label={t('common.close')}
           >
             <FaTimes />
           </button>
 
           <div className="space-y-4 pt-2">
             <div>
-              <h2 id="save-modal-title" className="text-base font-semibold text-slate-900">Sauvegarder le filtre</h2>
-              <p className="text-sm text-slate-500 mt-1">Donnez un nom descriptif à cette configuration de filtres.</p>
+              <h2 id="save-modal-title" className="text-base font-semibold text-slate-900">{t('filters.saveModal.title')}</h2>
+              <p className="text-sm text-slate-500 mt-1">{t('filters.saveModal.description')}</p>
             </div>
 
             <div>
               <label htmlFor="filter-name" className="block text-sm font-medium text-slate-700 mb-1">
-                Nom du filtre
+                {t('filters.saveModal.filterName')}
               </label>
               <input
                 id="filter-name"
@@ -1110,7 +1120,7 @@ function SaveModal({ initialValue = "", onSave, onClose }) {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Ex: Articles IA récents"
+                placeholder={t('filters.saveModal.placeholder')}
                 className="w-full h-10 px-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition-all"
                 maxLength={50}
               />
@@ -1122,7 +1132,7 @@ function SaveModal({ initialValue = "", onSave, onClose }) {
                 onClick={onClose}
                 className="h-9 px-3 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
               >
-                Annuler
+                {t('common.cancel')}
               </button>
               <button
                 type="submit"
@@ -1134,7 +1144,7 @@ function SaveModal({ initialValue = "", onSave, onClose }) {
                 )}
               >
                 <FaSave className="text-xs" aria-hidden="true" />
-                <span>Sauvegarder</span>
+                <span>{t('common.save')}</span>
               </button>
             </div>
           </div>

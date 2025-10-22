@@ -1,5 +1,5 @@
 // src/pages/auth/AuthPage.jsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faUserPlus, faSignInAlt, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
 import { useDispatch, useSelector } from 'react-redux';
@@ -45,7 +45,8 @@ const GoogleIcon = () => (
   </svg>
 );
 
-/* Messages UI utilitaires */
+/* ================== Messages UI utilitaires ================== */
+// ⬇️ Étendu: close + drag supportés via props (closable, draggable, onClose, onDragHandleMouseDown, style)
 const ErrorMessage = ({ id, children, visible }) => visible ? (
   <div id={id} className="field-pop error" role="alert">{children}</div>
 ) : null;
@@ -54,15 +55,71 @@ const SuccessMessage = ({ id, children, visible }) => visible ? (
   <div id={id} className="field-pop success" role="status">{children}</div>
 ) : null;
 
-const HintMessage = ({ id, type = 'hint', children, visible, placement = 'bottom' }) => visible ? (
-  <div id={id} role="status" className={`field-pop ${type} ${placement}`}>{children}</div>
-) : null;
+// forwardRef pour permettre le drag depuis le parent
+const HintMessage = React.forwardRef(
+  (
+    {
+      id,
+      type = 'hint',
+      children,
+      visible,
+      placement = 'bottom',
+      closable = false,
+      onClose,
+      draggable = false,
+      onDragHandleMouseDown,
+      style
+    },
+    ref
+  ) => visible ? (
+    <div
+      id={id}
+      ref={ref}
+      role="status"
+      className={`field-pop ${type} ${placement || ''} ${draggable ? 'is-draggable' : ''}`}
+      style={style}
+      onKeyDown={(e)=>{ if (closable && (e.key === 'Escape' || e.key === 'Esc')) onClose?.(); }}
+      tabIndex={-1}
+    >
+      {closable && (
+        <button
+          type="button"
+          aria-label="Fermer"
+          title="Fermer"
+          onClick={onClose}
+          style={{
+            position:'absolute', top:6, right:6, width:28, height:28,
+            border:'none', borderRadius:6, cursor:'pointer', fontSize:16,
+            background:'rgba(0,0,0,0.08)'
+          }}
+        >
+          ×
+        </button>
+      )}
+      {draggable && (
+        <div
+          role="button"
+          aria-label="Déplacer (maintenir)"
+          title="Déplacer (maintenir)"
+          onMouseDown={onDragHandleMouseDown}
+          style={{
+            position:'absolute', left:6, top:6, padding:'4px 6px',
+            cursor:'grab', userSelect:'none', fontWeight:600, letterSpacing:1
+          }}
+        >
+          ⋮⋮
+        </div>
+      )}
+      {children}
+    </div>
+  ) : null
+);
 
 const InlineError = ({ id, children, visible }) => visible ? (
   <div id={id} className="inline-error" role="alert">{children}</div>
 ) : null;
 
-/* Password helpers */
+/* ================== Password helpers ================== */
 const PasswordStrength = ({ value = '' }) => {
   const tests = [(v)=>v.length>=8,(v)=>/[A-Z]/.test(v)&&/[a-z]/.test(v),(v)=>/\d/.test(v),(v)=>/[^A-Za-z0-9]/.test(v)];
   const score = tests.reduce((a,t)=>a+(t(value)?1:0),0);
@@ -89,7 +146,7 @@ const PasswordHints = ({ value = '' }) => {
   </ul>;
 };
 
-/* Utils */
+/* ================== Utils ================== */
 const slugify = (s='') =>
   s.normalize('NFD').replace(/[\u0300-\u036f]/g,'')
    .toLowerCase().replace(/[^a-z0-9\s]/g,'').trim().replace(/\s+/g,'');
@@ -118,6 +175,12 @@ const AuthPage = () => {
   const [uniqueStatus, setUniqueStatus] = useState({ email:'idle', username:'idle' });
   const [uniqueMsg, setUniqueMsg] = useState({ email:'', username:'' });
   const [uSuggest, setUSuggest] = useState('');
+
+  // NEW — contrôle de la bulle d’aide pour éviter qu’elle ne cache le champ confirm
+  const [pwHintsOpen, setPwHintsOpen] = useState(true);
+  const [pwHintFloating, setPwHintFloating] = useState(false);
+  const [pwHintPos, setPwHintPos] = useState({ left: 0, top: 0 });
+  const pwHintRef = useRef(null);
 
   // OTP modal & pending payloads
   const [otpOpen, setOtpOpen] = useState(false);
@@ -181,9 +244,16 @@ const AuthPage = () => {
     setUniqueStatus({ email:'idle', username:'idle' });
     setUniqueMsg({ email:'', username:'' });
     setUSuggest('');
+    // reset de la bulle
+    setPwHintsOpen(true);
+    setPwHintFloating(false);
   };
 
-  const handleFocus = (e)=>setFocusField(e.target.name);
+  const handleFocus = (e)=>{
+    setFocusField(e.target.name);
+    // Si on revient sur le champ password, on ré-ouvre la bulle
+    if(e.target.name === 'password') setPwHintsOpen(true);
+  };
   const handleBlur  = ()=>setFocusField(null);
 
   const handleChange = (e)=>{
@@ -324,6 +394,36 @@ const AuthPage = () => {
   };
   const showEmailHint = !isLoginActive && !!formData.email && (['checking','taken','error'].includes(uniqueStatus.email));
   const showUsernameHint = !isLoginActive && !!formData.username && (['checking','taken','error'].includes(uniqueStatus.username));
+
+  // NEW — gestion du drag de la bulle
+  const startPwHintDrag = useCallback((e) => {
+    const el = pwHintRef.current;
+    if (!el) return;
+    e.preventDefault();
+
+    // passer en mode flottant au 1er déplacement
+    const rect = el.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const offsetX = startX - rect.left;
+    const offsetY = startY - rect.top;
+
+    setPwHintFloating(true);
+    setPwHintPos({ left: rect.left, top: rect.top });
+
+    const onMove = (ev) => {
+      setPwHintPos({
+        left: Math.max(8, ev.clientX - offsetX),
+        top:  Math.max(8, ev.clientY - offsetY),
+      });
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, []);
 
   return (
     <>
@@ -547,10 +647,41 @@ const AuthPage = () => {
                         <FontAwesomeIcon icon={showPassword.register ? faEyeSlash : faEye} />
                       </button>
                       <ErrorMessage id="err-pass" visible={!!errors.password}>{errors.password}</ErrorMessage>
-                      <HintMessage id="pw-pop" type="info" visible={!errors.password && (focusField==='password'||!!formData.password)} placement="right">
-                        {caps.register && <div className="helper-text warning">Verr. Maj activée</div>}
-                        <PasswordStrength value={formData.password} />
-                        <PasswordHints value={formData.password} />
+
+                      {/* ⬇️ Bulle d’aide modifiée: fermable + draggable pour ne pas couvrir confirmPassword */}
+                      <HintMessage
+                        ref={pwHintRef}
+                        id="pw-pop"
+                        type="info"
+                        visible={!errors.password && pwHintsOpen && (focusField==='password'||!!formData.password)}
+                        placement={pwHintFloating ? '' : 'right'}
+                        closable
+                        onClose={()=>setPwHintsOpen(false)}
+                        draggable
+                        onDragHandleMouseDown={startPwHintDrag}
+                        style={pwHintFloating ? {
+                          position:'fixed',
+                          left: pwHintPos.left,
+                          top: pwHintPos.top,
+                          zIndex: 1000,
+                          maxWidth: 'min(360px, 85vw)'
+                        } : undefined}
+                      >
+                        {caps.register && <div className="helper-text warning" style={{paddingTop:26}}>Verr. Maj activée</div>}
+                        <div style={{paddingTop: pwHintFloating ? 28 : 0}}>
+                          <PasswordStrength value={formData.password} />
+                          <PasswordHints value={formData.password} />
+                          {pwHintFloating && (
+                            <button
+                              type="button"
+                              onClick={()=>{ setPwHintFloating(false); /* redeviens docké à droite */ }}
+                              className="mini-link"
+                              style={{ marginTop: 8, background:'none', border:'none', textDecoration:'underline', cursor:'pointer' }}
+                            >
+                              Replacer automatiquement
+                            </button>
+                          )}
+                        </div>
                       </HintMessage>
                     </div>
 

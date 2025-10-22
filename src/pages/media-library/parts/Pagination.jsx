@@ -1,7 +1,8 @@
 // ------------------------------
-// File: media-library/parts/Pagination.jsx (version avec Font Awesome)
+// File: media-library/parts/Pagination.jsx (version avec Font Awesome + i18n)
 // ------------------------------
 import { useMemo, useState, useCallback } from "react";
+import { useTranslation } from 'react-i18next';
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faChevronLeft,
@@ -11,7 +12,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 
 /**
- * Pagination — composant accessible, réactif et stylé (Tailwind)
+ * Pagination — composant accessible, réactif et stylé (Tailwind) avec i18n
  *
  * Props compatibles avec votre version initiale + options facultatives :
  * - page: number (1-indexed)
@@ -43,6 +44,8 @@ export default function Pagination({
   pageSizeOptions = [10, 20, 50, 100],
   onPageSizeChange,
 }) {
+  const { t, i18n } = useTranslation();
+  
   const pages = Math.max(1, Math.ceil((total || 0) / Math.max(1, perPage)));
   const current = Math.min(Math.max(1, page), pages);
   const canPrev = current > 1;
@@ -129,23 +132,30 @@ export default function Pagination({
     }
   };
 
+  // Formatage des nombres selon la locale
+  const nf = useMemo(() => new Intl.NumberFormat(i18n.language), [i18n.language]);
+
   return (
     <nav
       className={`w-full flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between py-4 ${className}`}
       role="navigation"
-      aria-label="Pagination"
+      aria-label={t('pagination.ariaLabel')}
       onKeyDown={onKeyDownNav}
     >
       {/* Infos */}
       <div className="flex flex-wrap items-center gap-3">
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          Affichage <b>{startItem}</b>–<b>{endItem}</b> sur <b>{total}</b>
+          {t('pagination.displayInfo', {
+            start: nf.format(startItem),
+            end: nf.format(endItem),
+            total: nf.format(total)
+          })}
         </p>
 
         {showPageSize && (
           <div className="flex items-center gap-2 text-sm">
             <label htmlFor="page-size" className="text-slate-600 dark:text-slate-300">
-              Par page
+              {t('pagination.itemsPerPage')}
             </label>
             <select
               id="page-size"
@@ -155,7 +165,7 @@ export default function Pagination({
             >
               {pageSizeOptions.map((opt) => (
                 <option key={opt} value={opt}>
-                  {opt}
+                  {nf.format(opt)}
                 </option>
               ))}
             </select>
@@ -168,7 +178,7 @@ export default function Pagination({
         {showFirstLast && (
           <button
             type="button"
-            aria-label="Première page"
+            aria-label={t('pagination.firstPage')}
             className={`${btnBase} ${btnGhost}`}
             disabled={!canPrev}
             onClick={() => go(1)}
@@ -179,7 +189,7 @@ export default function Pagination({
 
         <button
           type="button"
-          aria-label="Page précédente"
+          aria-label={t('pagination.previousPage')}
           className={`${btnBase} ${btnGhost}`}
           disabled={!canPrev}
           onClick={() => go(current - 1)}
@@ -188,7 +198,7 @@ export default function Pagination({
         </button>
 
         {/* Pages numériques (compact sur mobile) */}
-        <ul className="hidden sm:flex items-center gap-1" aria-label="Pages">
+        <ul className="hidden sm:flex items-center gap-1" aria-label={t('pagination.pages')}>
           {pageItems.map((item, idx) => {
             if (item === "ellipsis") {
               return (
@@ -200,12 +210,12 @@ export default function Pagination({
               <li key={item}>
                 <button
                   type="button"
-                  aria-label={`Aller à la page ${item}`}
+                  aria-label={t('pagination.goToPage', { page: item })}
                   aria-current={isActive ? "page" : undefined}
                   className={`${btnBase} ${isActive ? btnSolid : btnGhost}`}
                   onClick={() => go(item)}
                 >
-                  {item}
+                  {nf.format(item)}
                 </button>
               </li>
             );
@@ -214,7 +224,7 @@ export default function Pagination({
 
         <button
           type="button"
-          aria-label="Page suivante"
+          aria-label={t('pagination.nextPage')}
           className={`${btnBase} ${btnGhost}`}
           disabled={!canNext}
           onClick={() => go(current + 1)}
@@ -225,7 +235,7 @@ export default function Pagination({
         {showFirstLast && (
           <button
             type="button"
-            aria-label="Dernière page"
+            aria-label={t('pagination.lastPage')}
             className={`${btnBase} ${btnGhost}`}
             disabled={!canNext}
             onClick={() => go(pages)}
@@ -237,7 +247,7 @@ export default function Pagination({
         {showJump && (
           <div className="ml-1 flex items-center gap-2">
             <label htmlFor="jump" className="sr-only">
-              Aller à la page
+              {t('pagination.jumpToPage')}
             </label>
             <input
               id="jump"
@@ -254,7 +264,7 @@ export default function Pagination({
                   setJump("");
                 }
               }}
-              placeholder="Aller à…"
+              placeholder={t('pagination.jumpPlaceholder')}
               className="h-9 w-24 rounded-md border border-blue-200 bg-white px-3 text-sm placeholder:text-blue-400/70 focus:outline-none focus:ring-2 focus:ring-blue-400/60 dark:border-blue-700 dark:bg-slate-900"
             />
           </div>

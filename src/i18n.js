@@ -557,6 +557,225 @@ i18n
     }
   }
 ,
+ "filters": {
+    "search": {
+      "ariaLabel": "Article search",
+      "placeholder": "Type to search...",
+      "tip": "Tip: \"/\" to focus",
+      "clear": "Clear search",
+      "execute": "Execute search",
+      "showHistory": "Show search history",
+      "hideHistory": "Hide search history",
+      "recentSearches": "Recent searches",
+      "clearHistory": "Clear history"
+    },
+    "searchHints": {
+      "example1": "Ex: ai startup after:2024-01-01",
+      "example2": "Ex: author:\"Author #12\" tag:mobile",
+      "example3": "Ex: category:\"Artificial Intelligence\" rating>4",
+      "tip": "Tip: type \"/\" to focus"
+    },
+    "view": {
+      "grid": "Grid view",
+      "list": "List view"
+    },
+    "itemsPerPage": "Items per page",
+    "toggleFilters": "Show/Hide filters",
+    "filters": "Filters",
+    "export": "Export to CSV",
+    "categories": "Categories",
+    "tags": "Tags",
+    "authors": "Authors",
+    "options": "Options",
+    "dates": "Dates",
+    "rating": "Rating",
+    "saved": "Saved",
+    "quickOptions": "Quick options",
+    "savedFilters": "Saved filters",
+    "resetAll": "Reset all",
+    "apply": "Apply",
+    "reset": "Reset",
+    "resetSection": "Reset {{section}}",
+    "noOptions": "No {{type}} available",
+    "types": {
+      "categories": "categories",
+      "tags": "tags",
+      "authors": "authors"
+    },
+    "featuredOnly": "Featured only",
+    "pinnedOnly": "Pinned only",
+    "unreadOnly": "Unread only",
+    "startDate": "Start date",
+    "endDate": "End date",
+    "minRating": "Minimum rating",
+    "maxRating": "Maximum rating",
+    "saveCurrent": "Save current state",
+    "noSavedFilters": "No saved filters. Configure your filters then click \"Save current state\".",
+    "loadFilter": "Load filter: {{name}}",
+    "deleteFilter": "Delete filter: {{name}}",
+    "createdOn": "Created on",
+    "suggestedNames": {
+      "featured": "featured",
+      "pinned": "pinned",
+      "unread": "unread",
+      "period": "period",
+      "rating": "rating",
+      "custom": "Custom filter"
+    },
+    "saveModal": {
+      "title": "Save filter",
+      "description": "Give a descriptive name to this filter configuration.",
+      "filterName": "Filter name",
+      "placeholder": "Ex: Recent AI articles"
+    },
+    "toasts": {
+      "filtersApplied": "Filters applied",
+      "filtersReset": "Filters reset",
+      "filterSaved": "Filter \"{{name}}\" saved",
+      "saveError": "Error saving filter",
+      "filterLoaded": "Filter \"{{name}}\" loaded",
+      "filterDeleted": "Filter deleted"
+    }
+  },
+  "common": {
+    "close": "Close",
+    "cancel": "Cancel",
+    "save": "Save"
+  }
+,
+ "gridcard": {
+    "unknownAuthor": "Unknown author",
+    "author": "Author",
+    "date": {
+      "unknown": "—",
+      "published": "Published on",
+      "updated": "Updated"
+    },
+    "visibility": {
+      "public": "Public",
+      "private": "Private",
+      "passwordProtected": "Password protected",
+      "unknown": "—",
+      "label": "Visibility"
+    },
+    "actions": {
+      "read": "Read",
+      "enterPassword": "Enter password",
+      "addFavorite": "Add to favorites",
+      "removeFavorite": "Remove from favorites",
+      "addLike": "Add to likes",
+      "removeLike": "Remove from likes"
+    },
+    "badges": {
+      "favorite": "Favorite",
+      "liked": "Liked",
+      "read": "Read"
+    },
+    "stats": {
+      "views": "Views",
+      "comments": "Comments",
+      "shares": "Shares",
+      "reviews": "reviews"
+    },
+    "passwordModal": {
+      "title": "Access to \"{{title}}\""
+    }}
+  ,
+  "listtable": {
+  "headers": {
+    "image": "Image",
+    "title": "Title", 
+    "author": "Author",
+    "category": "Category",
+    "published": "Published",
+    "views": "Views",
+    "rating": "Rating",
+    "status": "Status",
+    "actions": "Actions"
+  },
+  "categories": {
+    "ai": "Artificial Intelligence",
+    "startup": "Startup",
+    "webdev": "Web Development", 
+    "business": "Business",
+    "mobile": "Mobile",
+    "article": "Article"
+  },
+  "status": {
+    "published": "Published",
+    "draft": "Draft",
+    "unread": "Unread"
+  },
+  "visibility": {
+    "public": "Public",
+    "private": "Private",
+    "passwordProtected": "Password Protected",
+    "unknown": "Unknown"
+  },
+  "badges": {
+    "featured": "Featured",
+    "sticky": "Pinned"
+  },
+  "stats": {
+    "views": "views",
+    "reviews": "reviews"
+  },
+  "date": {
+    "created": "Created on"
+  },
+  "actions": {
+    "read": "Read article",
+    "share": "Share",
+    "addFavorite": "Add to favorites", 
+    "removeFavorite": "Remove from favorites"
+  },
+  "empty": {
+    "title": "No articles found",
+    "subtitle": "Try adjusting your search criteria"
+  }
+},
+
+  "pagination": {
+    "ariaLabel": "Pagination",
+    "displayInfo": "Showing <b>{{start}}</b>–<b>{{end}}</b> of <b>{{total}}</b>",
+    "itemsPerPage": "Per page",
+    "firstPage": "First page",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "lastPage": "Last page",
+    "pages": "Pages",
+    "goToPage": "Go to page {{page}}",
+    "jumpToPage": "Jump to page",
+    "jumpPlaceholder": "Go to..."
+  }
+,
+
+  "smartimage": {
+    "loading": "Loading image...",
+    "unavailable": "Image unavailable",
+    "unavailableText": "Image unavailable",
+    "icon": "Image frame"
+  }
+,
+
+  "passwordModal": {
+    "defaultTitle": "Password required",
+    "description": "This content is protected. Enter the password to continue.",
+    "close": "Close",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "••••••••",
+    "rememberSession": "Remember during session",
+    "cancel": "Cancel",
+    "verifying": "Verifying...",
+    "continue": "Continue",
+    "validation": {
+      "required": "Please enter a password."
+    },
+    "errors": {
+      "generic": "An error occurred during verification."
+    }
+  }
+,
               "role_permissions_management": "Role Permissions Management",
             "manage_role_permissions_description": "Manage associations between roles and permissions",
             "search_roles_permissions": "Search roles and permissions...",
@@ -1243,6 +1462,229 @@ i18n
       "lastModified": "Dernière modification",
       "rate": "Noter",
       "editRating": "Modifier"
+    }
+  }
+,
+
+  "filters": {
+    "search": {
+      "ariaLabel": "Recherche d'articles",
+      "placeholder": "Tapez pour rechercher...",
+      "tip": "Astuce : « / » pour focus",
+      "clear": "Effacer la recherche",
+      "execute": "Lancer la recherche",
+      "showHistory": "Afficher l'historique",
+      "hideHistory": "Masquer l'historique",
+      "recentSearches": "Recherches récentes",
+      "clearHistory": "Effacer l'historique"
+    },
+    "searchHints": {
+      "example1": "Ex : ia startup after:2024-01-01",
+      "example2": "Ex : author:\"Auteur #12\" tag:mobile",
+      "example3": "Ex : category:\"Intelligence Artificielle\" rating>4",
+      "tip": "Astuce : tapez \"/\" pour focaliser"
+    },
+    "view": {
+      "grid": "Vue grille",
+      "list": "Vue liste"
+    },
+    "itemsPerPage": "Éléments par page",
+    "toggleFilters": "Afficher/Masquer les filtres",
+    "filters": "Filtres",
+    "export": "Exporter en CSV",
+    "categories": "Catégories",
+    "tags": "Tags",
+    "authors": "Auteurs",
+    "options": "Options",
+    "dates": "Période",
+    "rating": "Note",
+    "saved": "Sauvegardes",
+    "quickOptions": "Options rapides",
+    "savedFilters": "Filtres sauvegardés",
+    "resetAll": "Tout réinitialiser",
+    "apply": "Appliquer",
+    "reset": "Réinitialiser",
+    "resetSection": "Réinitialiser {{section}}",
+    "noOptions": "Aucun {{type}} disponible",
+    "types": {
+      "categories": "catégories",
+      "tags": "tags",
+      "authors": "auteurs"
+    },
+    "featuredOnly": "Vedettes uniquement",
+    "pinnedOnly": "Épinglés uniquement",
+    "unreadOnly": "Non lus uniquement",
+    "startDate": "Date de début",
+    "endDate": "Date de fin",
+    "minRating": "Note minimale",
+    "maxRating": "Note maximale",
+    "saveCurrent": "Sauvegarder l'état actuel",
+    "noSavedFilters": "Aucun filtre sauvegardé. Configurez vos filtres puis cliquez sur \"Sauvegarder l'état actuel\".",
+    "loadFilter": "Charger le filtre : {{name}}",
+    "deleteFilter": "Supprimer le filtre : {{name}}",
+    "createdOn": "Créé le",
+    "suggestedNames": {
+      "featured": "vedettes",
+      "pinned": "épinglés",
+      "unread": "non lus",
+      "period": "période",
+      "rating": "note",
+      "custom": "Filtre personnalisé"
+    },
+    "saveModal": {
+      "title": "Sauvegarder le filtre",
+      "description": "Donnez un nom descriptif à cette configuration de filtres.",
+      "filterName": "Nom du filtre",
+      "placeholder": "Ex: Articles IA récents"
+    },
+    "toasts": {
+      "filtersApplied": "Filtres appliqués",
+      "filtersReset": "Filtres réinitialisés",
+      "filterSaved": "Filtre \"{{name}}\" sauvegardé",
+      "saveError": "Erreur lors de la sauvegarde",
+      "filterLoaded": "Filtre \"{{name}}\" chargé",
+      "filterDeleted": "Filtre supprimé"
+    }
+  },
+  "common": {
+    "close": "Fermer",
+    "cancel": "Annuler",
+    "save": "Sauvegarder"
+  }
+,
+
+  "gridcard": {
+    "unknownAuthor": "Auteur inconnu",
+    "author": "Auteur",
+    "date": {
+      "unknown": "—",
+      "published": "Publié le",
+      "updated": "Mis à jour"
+    },
+    "visibility": {
+      "public": "Public",
+      "private": "Privé",
+      "passwordProtected": "Protégé par mot de passe",
+      "unknown": "—",
+      "label": "Visibilité"
+    },
+    "actions": {
+      "read": "Lire",
+      "enterPassword": "Entrer le mot de passe",
+      "addFavorite": "Ajouter aux favoris",
+      "removeFavorite": "Retirer des favoris",
+      "addLike": "Ajouter aux likes",
+      "removeLike": "Retirer des likes"
+    },
+    "badges": {
+      "favorite": "Favori",
+      "liked": "Aimé",
+      "read": "Lu"
+    },
+    "stats": {
+      "views": "Vues",
+      "comments": "Commentaires",
+      "shares": "Partages",
+      "reviews": "avis"
+    },
+    "passwordModal": {
+      "title": "Accès à « {{title}} »"
+    }
+  }
+,
+
+  "listtable": {
+    "headers": {
+      "image": "Image",
+      "title": "Titre",
+      "author": "Auteur",
+      "category": "Catégorie",
+      "published": "Publié le",
+      "views": "Vues",
+      "rating": "Note",
+      "status": "Statut",
+      "actions": "Actions"
+    },
+    "categories": {
+      "ai": "Intelligence Artificielle",
+      "startup": "Startup",
+      "webdev": "Développement Web",
+      "business": "Business",
+      "mobile": "Mobile",
+      "article": "Article"
+    },
+    "status": {
+      "published": "Publié",
+      "draft": "Brouillon",
+      "unread": "Non lu"
+    },
+    "visibility": {
+      "public": "Public",
+      "private": "Privé",
+      "passwordProtected": "Protégé par mot de passe",
+      "unknown": "Inconnu"
+    },
+    "badges": {
+      "featured": "À la une",
+      "sticky": "Épinglé"
+    },
+    "stats": {
+      "views": "vues",
+      "reviews": "avis"
+    },
+    "date": {
+      "created": "Créé le"
+    },
+    "actions": {
+      "read": "Lire l'article",
+      "share": "Partager",
+      "addFavorite": "Ajouter aux favoris",
+      "removeFavorite": "Retirer des favoris"
+    },
+    "empty": {
+      "title": "Aucun article trouvé",
+      "subtitle": "Essayez de modifier vos critères de recherche"
+    }
+  }
+,
+
+  "smartimage": {
+    "loading": "Chargement de l'image...",
+    "unavailable": "Image non disponible",
+    "unavailableText": "Image non disponible", 
+    "icon": "Cadre d'image"
+  }
+,
+  "pagination": {
+    "ariaLabel": "Pagination",
+    "displayInfo": "Affichage <b>{{start}}</b>–<b>{{end}}</b> sur <b>{{total}}</b>",
+    "itemsPerPage": "Par page",
+    "firstPage": "Première page",
+    "previousPage": "Page précédente",
+    "nextPage": "Page suivante",
+    "lastPage": "Dernière page",
+    "pages": "Pages",
+    "goToPage": "Aller à la page {{page}}",
+    "jumpToPage": "Aller à la page",
+    "jumpPlaceholder": "Aller à…"
+  }
+,
+
+  "passwordModal": {
+    "defaultTitle": "Mot de passe requis",
+    "description": "Cet article est protégé. Entrez le mot de passe pour continuer.",
+    "close": "Fermer",
+    "passwordLabel": "Mot de passe",
+    "passwordPlaceholder": "••••••••",
+    "rememberSession": "Mémoriser pendant la session",
+    "cancel": "Annuler",
+    "verifying": "Vérification…",
+    "continue": "Continuer",
+    "validation": {
+      "required": "Veuillez saisir un mot de passe."
+    },
+    "errors": {
+      "generic": "Une erreur est survenue lors de la vérification."
     }
   }
 ,

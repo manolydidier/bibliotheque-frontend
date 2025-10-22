@@ -1,5 +1,6 @@
 // SmartImage.jsx
 import { useState, useMemo } from "react";
+import { useTranslation } from 'react-i18next';
 
 export default function SmartImage({
   src,
@@ -11,12 +12,13 @@ export default function SmartImage({
   // 🔧 OFF par défaut pour éviter les NS_BINDING_ABORTED
   modern = "off", // "off" | "on" | "auto"
 }) {
+  const { t } = useTranslation();
   const [loaded, setLoaded] = useState(false);
   const [error, setError]   = useState(false);
 
   const canModern = useMemo(() => {
     if (modern === "off") return false;
-    // "auto" n’active que si on a explicitement une config d’environnement
+    // "auto" n'active que si on a explicitement une config d'environnement
     if (modern === "auto" && import.meta.env.VITE_SERVE_AVIF_WEBP !== "1") return false;
     return /\.(jpe?g|png)$/i.test(String(src || ""));
   }, [modern, src]);
@@ -29,7 +31,12 @@ export default function SmartImage({
 
   return (
     <div className={`relative w-full overflow-hidden ${rounding}`} style={{ paddingTop: ratio }}>
-      {!loaded && !error && <div className="absolute inset-0 bg-slate-200 dark:bg-slate-700 animate-pulse" />}
+      {!loaded && !error && (
+        <div 
+          className="absolute inset-0 bg-slate-200 dark:bg-slate-700 animate-pulse" 
+          aria-label={t('smartimage.loading', { default: "Loading image..." })}
+        />
+      )}
 
       {canModern ? (
         <picture>
@@ -65,9 +72,15 @@ export default function SmartImage({
       )}
 
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center text-slate-400 text-center px-4">
-          <span className="text-3xl" role="img" aria-label="Image non disponible">🖼️</span>
-          <p className="ml-2 text-sm">Image non disponible</p>
+        <div 
+          className="absolute inset-0 flex items-center justify-center text-slate-400 text-center px-4"
+          role="alert"
+          aria-label={t('smartimage.unavailable', { default: "Image unavailable" })}
+        >
+          <span className="text-3xl" role="img" aria-label={t('smartimage.icon', { default: "Image frame" })}>
+            🖼️
+          </span>
+          <p className="ml-2 text-sm">{t('smartimage.unavailableText', { default: "Image unavailable" })}</p>
         </div>
       )}
     </div>

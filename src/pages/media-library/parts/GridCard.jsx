@@ -1,5 +1,6 @@
 // src/media-library/parts/GridCard.jsx
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from "react-router-dom";
 import {
   FaRegStar, FaStar, FaEye, FaUser,
@@ -47,8 +48,6 @@ const toAbsolute = (u) => {
   // si base existe (ex: http://127.0.0.1:8000), on compose une URL absolue
   return base ? `${base}/${fixed.replace(/^\/+/, "")}` : `/${fixed.replace(/^\/+/, "")}`;
 };
-
-
 
 function getCategoryFromTitle(title) {
   const s = String(title || "").toLowerCase();
@@ -112,12 +111,12 @@ const isPwdProtected = (v) => {
   const k = String(v ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
   return ["password_protected", "password", "protected", "protected_by_password"].includes(k);
 };
-const humanizeVisibility = (v) => {
+const humanizeVisibility = (v, t) => {
   const k = String(v || "").toLowerCase();
-  if (k === "public") return "Public";
-  if (isPrivate(k)) return "Privé";
-  if (isPwdProtected(k)) return "Protégé par mot de passe";
-  return v || "—";
+  if (k === "public") return t('gridcard.visibility.public');
+  if (isPrivate(k)) return t('gridcard.visibility.private');
+  if (isPwdProtected(k)) return t('gridcard.visibility.passwordProtected');
+  return v || t('gridcard.visibility.unknown');
 };
 
 /* =========================
@@ -164,6 +163,7 @@ const CATEGORY_BORDER_COLORS = {
    Composant
 ========================= */
 export default function GridCard({ item, routeBase, onOpen }) {
+  const { t, i18n } = useTranslation();
   const itemKey = useMemo(
     () => (cleanSlug(item?.slug) ?? (item?.id != null ? String(item.id) : "unknown")),
     [item?.slug, item?.id]
@@ -197,11 +197,11 @@ export default function GridCard({ item, routeBase, onOpen }) {
       item.createdBy?.name ||
       full(item.created_by?.first_name, item.created_by?.last_name);
     if (!name && item.author_id) name = `Auteur #${item.author_id}`;
-    return name || "Auteur";
-  }, [item.author_name, item.author, item.createdBy, item.created_by, item.author_id]);
+    return name || t('gridcard.unknownAuthor');
+  }, [item.author_name, item.author, item.createdBy, item.created_by, item.author_id, t]);
 
-  const nf = useMemo(() => new Intl.NumberFormat("fr-FR", { notation: "compact", maximumFractionDigits: 1 }), []);
-  const df = useMemo(() => new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric" }), []);
+  const nf = useMemo(() => new Intl.NumberFormat(i18n.language, { notation: "compact", maximumFractionDigits: 1 }), [i18n.language]);
+  const df = useMemo(() => new Intl.DateTimeFormat(i18n.language, { day: "numeric", month: "short", year: "numeric" }), [i18n.language]);
 
   const readingTime = useMemo(() => {
     if (item.reading_time) return item.reading_time;
@@ -219,7 +219,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
   if (item.featured_image?.url)
     return toAbsolute(item.featured_image.url);
 
-  // 🆕 si l’API renvoie `path` plutôt que `url`
+  // 🆕 si l'API renvoie `path` plutôt que `url`
   if (item.featured_image?.path)
     return toAbsolute(item.featured_image.path);
 
@@ -232,9 +232,9 @@ export default function GridCard({ item, routeBase, onOpen }) {
 
   const formattedViewCount = useMemo(() => nf.format(Number(item.view_count || 0)), [nf, item.view_count]);
   const formattedRating    = useMemo(() => (item.rating_average ? Number(item.rating_average).toFixed(1) : "0,0"), [item.rating_average]);
-  const formattedDate      = useMemo(() => (item.published_at ? df.format(new Date(item.published_at)) : "—"), [df, item.published_at]);
+  const formattedDate      = useMemo(() => (item.published_at ? df.format(new Date(item.published_at)) : t('gridcard.date.unknown')), [df, item.published_at, t]);
 
-  const visLabel = useMemo(() => humanizeVisibility(item.visibility), [item.visibility]);
+  const visLabel = useMemo(() => humanizeVisibility(item.visibility, t), [item.visibility, t]);
 
   const motionless = prefersReducedMotion();
   const hoverCls   = motionless ? "" : "hover:-translate-y-3 hover:scale-[1.02]";
@@ -298,9 +298,6 @@ export default function GridCard({ item, routeBase, onOpen }) {
     // 2) Privé -> on laisse TOUJOURS le Visualiseur décider (pas de redirection /auth ici)
     if (isPrivate(item.visibility)) {
       e?.preventDefault?.();
-      // On peut encore vérifier le token si tu veux, mais on n'empêche plus la navigation
-      // const token = getTokenGuard();
-      // (Optionnel) si tu veux éviter un flash, tu peux stocker un flag UI ici
       onOpenCard();
       return;
     }
@@ -372,19 +369,17 @@ export default function GridCard({ item, routeBase, onOpen }) {
                   onMouseEnter={prefetchDetail}
                   onClick={handleRead}
                   className={cls(overlayBtnClass, "hover:text-blue-600 hover:shadow-blue-200/50")}
-                  title="Lire l'article"
+                  title={t('gridcard.actions.read')}
                 >
                   <FaEye size={24} />
                 </Link>
-
-              
 
                 {/* 🔒 Bouton pour rouvrir la modale mot de passe */}
                 {isPwdProtected(item.visibility) && (
                   <button
                     className={cls(overlayBtnClass, "hover:text-rose-600 hover:shadow-rose-200/50")}
                     onClick={openPwdManually}
-                    title="Entrer le mot de passe"
+                    title={t('gridcard.actions.enterPassword')}
                   >
                     <FaLock size={22} />
                   </button>
@@ -406,7 +401,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-white/95 border border-slate-200/70 text-slate-800 shadow-lg">
                 {isPrivate(item.visibility) ? <FaLock /> : <FaLockOpen />}
-                {humanizeVisibility(item.visibility)}
+                {humanizeVisibility(item.visibility, t)}
               </span>
             </div>
           )}
@@ -423,15 +418,14 @@ export default function GridCard({ item, routeBase, onOpen }) {
               channels={["email", "emailAuto", "facebook", "whatsapp", "whatsappNumber"]}
               emailEndpoint="/share/email"
               defaultWhatsNumber="33612345678"
-                     global={false} 
-
+              global={false} 
             />
           </div>
 
           {/* Coins : favoris / like */}
           <div className="absolute top-4 left-4 flex gap-2 z-20">
             <button
-              aria-label={fav ? "Retirer des favoris" : "Ajouter aux favoris"}
+              aria-label={fav ? t('gridcard.actions.removeFavorite') : t('gridcard.actions.addFavorite')}
               aria-pressed={fav}
               onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onToggleFav(e)}
               onClick={onToggleFav}
@@ -441,14 +435,14 @@ export default function GridCard({ item, routeBase, onOpen }) {
                   ? "text-amber-500 bg-amber-50/90 hover:bg-amber-100/90 shadow-amber-200/50 scale-110"
                   : "text-slate-500 bg-white/90 hover:bg-white hover:text-amber-500 shadow-slate-200/50"
               )}
-              title={fav ? "Retirer des favoris" : "Ajouter aux favoris"}
+              title={fav ? t('gridcard.actions.removeFavorite') : t('gridcard.actions.addFavorite')}
               data-testid="btn-fav"
             >
               {fav ? <FaStar size={20} /> : <FaRegStar size={20} />}
             </button>
 
             <button
-              aria-label={liked ? "Retirer des likes" : "Ajouter aux likes"}
+              aria-label={liked ? t('gridcard.actions.removeLike') : t('gridcard.actions.addLike')}
               aria-pressed={liked}
               onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onToggleLike(e)}
               onClick={onToggleLike}
@@ -458,7 +452,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
                   ? "text-pink-500 bg-pink-50/90 hover:bg-pink-100/90 shadow-pink-200/50 scale-110"
                   : "text-slate-500 bg-white/90 hover:bg-white hover:text-pink-500 shadow-slate-200/50"
               )}
-              title={liked ? "Retirer des likes" : "Ajouter aux likes"}
+              title={liked ? t('gridcard.actions.removeLike') : t('gridcard.actions.addLike')}
               data-testid="btn-like"
             >
               {liked ? <FaHeart size={20} /> : <FaRegHeart size={20} />}
@@ -482,13 +476,13 @@ export default function GridCard({ item, routeBase, onOpen }) {
                   {fav && (
                     <div className="flex items-center gap-2 bg-amber-100/80 rounded-full px-3 py-1">
                       <FaStar className="text-amber-500" size={12} />
-                      <span className="text-amber-700 text-xs font-semibold">Favori</span>
+                      <span className="text-amber-700 text-xs font-semibold">{t('gridcard.badges.favorite')}</span>
                     </div>
                   )}
                   {liked && (
                     <div className="flex items-center gap-2 bg-pink-100/80 rounded-full px-3 py-1">
                       <FaHeart className="text-pink-500" size={12} />
-                      <span className="text-pink-700 text-xs font-semibold">Aimé</span>
+                      <span className="text-pink-700 text-xs font-semibold">{t('gridcard.badges.liked')}</span>
                     </div>
                   )}
                 </div>
@@ -503,13 +497,13 @@ export default function GridCard({ item, routeBase, onOpen }) {
                   className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl font-semibold text-sm transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
                 >
                   <FaEye size={14} />
-                  <span>Lire</span>
+                  <span>{t('gridcard.actions.read')}</span>
                 </Link>
 
                 {read && (
                   <div className="flex items-center gap-2 bg-emerald-100/80 rounded-full px-4 py-2">
                     <div className="w-4 h-4 bg-emerald-500 rounded-full animate-pulse" />
-                    <span className="text-emerald-700 text-xs font-semibold">Lu</span>
+                    <span className="text-emerald-700 text-xs font-semibold">{t('gridcard.badges.read')}</span>
                   </div>
                 )}
               </div>
@@ -523,7 +517,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
                   <div className="p-1.5 bg-slate-200/80 rounded"><FaUser className="text-slate-600" size={12} /></div>
                   <div className="flex-1 min-w-0">
                     <span className="font-semibold text-slate-800 text-xs block truncate overflow-auto">{authorName}</span>
-                    <p className="text-slate-600 text-xs overflow-auto">{item.author?.email || "Auteur"}</p>
+                    <p className="text-slate-600 text-xs overflow-auto">{item.author?.email || t('gridcard.author')}</p>
                   </div>
                 </div>
 
@@ -533,7 +527,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
                   <div className="flex-1 min-w-0">
                     <span className="font-semibold text-slate-800 text-xs block truncate">{formattedDate}</span>
                     <p className="text-slate-600 text-xs">
-                      {item.updated_at !== item.created_at ? "Mis à jour" : "Publié le"}
+                      {item.updated_at !== item.created_at ? t('gridcard.date.updated') : t('gridcard.date.published')}
                     </p>
                   </div>
                 </div>
@@ -546,9 +540,9 @@ export default function GridCard({ item, routeBase, onOpen }) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <span className={`font-semibold text-xs block truncate ${isPrivate(item.visibility) ? "text-rose-800" : "text-blue-800"}`}>
-                        {humanizeVisibility(item.visibility)}
+                        {humanizeVisibility(item.visibility, t)}
                       </span>
-                      <p className={`${isPrivate(item.visibility) ? "text-rose-700" : "text-blue-700"} text-xs`}>Visibilité</p>
+                      <p className={`${isPrivate(item.visibility) ? "text-rose-700" : "text-blue-700"} text-xs`}>{t('gridcard.visibility.label')}</p>
                     </div>
                   </div>
                 )}
@@ -561,26 +555,26 @@ export default function GridCard({ item, routeBase, onOpen }) {
         <div className="grid grid-cols-4 gap-2 px-6 pt-3 mb-4">
           <div className={cls("bg-gradient-to-br from-blue-50/80 to-indigo-50/80", smallStatBox)}>
             <div className="text-blue-700 font-bold text-sm">{formattedViewCount}</div>
-            <div className="text-blue-600 text-xs">Vues</div>
+            <div className="text-blue-600 text-xs">{t('gridcard.stats.views')}</div>
           </div>
 
           {item.comment_count !== undefined && (
             <div className={cls("bg-gradient-to-br from-green-50/80 to-emerald-50/80", smallStatBox)}>
               <div className="text-green-700 font-bold text-sm">{item.comment_count}</div>
-              <div className="text-green-600 text-xs">Commentaires</div>
+              <div className="text-green-600 text-xs">{t('gridcard.stats.comments')}</div>
             </div>
           )}
 
           {item.share_count !== undefined && (
             <div className={cls("bg-gradient-to-br from-purple-50/80 to-pink-50/80", smallStatBox)}>
               <div className="text-purple-700 font-bold text-sm">{item.share_count}</div>
-              <div className="text-purple-600 text-xs">Partages</div>
+              <div className="text-purple-600 text-xs">{t('gridcard.stats.shares')}</div>
             </div>
           )}
 
           <div className={cls("bg-gradient-to-br from-amber-50/80 to-orange-50/80", smallStatBox)}>
             <div className="text-amber-700 font-bold text-sm">{formattedRating}/5</div>
-            <div className="text-amber-600 text-xs">{item.rating_count || 0} avis</div>
+            <div className="text-amber-600 text-xs">{item.rating_count || 0} {t('gridcard.stats.reviews')}</div>
           </div>
         </div>
       </article>
@@ -589,7 +583,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
       <PasswordModal
         key={`pwd-${itemKey}`}
         open={pwdOpen}
-        title={`Accès à « ${item.title} »`}
+        title={t('gridcard.passwordModal.title', { title: item.title })}
         onClose={() => setPwdOpen(false)}
         onSubmit={submitPwd}
         defaultValue={pwdDefault}
