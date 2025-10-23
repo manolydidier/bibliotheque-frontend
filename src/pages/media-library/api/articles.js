@@ -1,5 +1,15 @@
 import axios from "axios";
 
+/* ========== De-dupe vues (mémoire par onglet) ========== */
+const viewedKey = (idOrSlug) => `viewed:${idOrSlug}`;
+const hasViewed = (idOrSlug) => {
+  try { return sessionStorage.getItem(viewedKey(idOrSlug)) === "1"; } catch { return false; }
+};
+const markViewed = (idOrSlug) => {
+  try { sessionStorage.setItem(viewedKey(idOrSlug), "1"); } catch {}
+};
+
+
 /* ===================== Configuration de base ===================== */
 export const DEBUG_HTTP = import.meta.env.VITE_DEBUG_HTTP === "true";
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/+$/, "");
@@ -91,9 +101,12 @@ export function buildArticleShowUrl(idOrSlug, { include = [], fields = [], passw
 
   const params = new URLSearchParams();
   if (include?.length) params.set("include", toParam(include));
-  if (fields?.length) params.set("fields", toParam(fields));
-  if (password) params.set("password", password);
-  if (increment_view != null) params.set("increment_view", String(Boolean(increment_view)));
+  if (fields?.length)  params.set("fields", toParam(fields));
+  if (password)        params.set("password", password);
+
+  // Par défaut on met increment_view si pas déjà vu et pas explicitement false
+  const wantInc = (increment_view !== false) && !hasViewed(key);
+  if (wantInc) params.set("increment_view", "1");
 
   const qs = params.toString();
   return `${API_BASE}/articles/${encodeURIComponent(key)}${qs ? `?${qs}` : ""}`;
@@ -106,12 +119,16 @@ export async function fetchArticle(idOrSlug, opts = {}) {
   const key = cleanKey(idOrSlug);
   if (!key) throw new Error("idOrslug manquant pour fetchArticle");
 
-  const { include = [], fields = [], password, increment_view } = opts;
+  const { include = [], fields = [], password } = opts;
+
+  // ⚠️ Par défaut on incrémente, sauf si explicitement désactivé OU déjà vu dans cet onglet
+  const wantIncrement = opts.increment_view !== false && !hasViewed(key);
+
   const params = {};
   if (include?.length) params.include = toParam(include);
-  if (fields?.length) params.fields = toParam(fields);
-  if (password) params.password = password;
-  if (increment_view != null) params.increment_view = Boolean(increment_view);
+  if (fields?.length)  params.fields  = toParam(fields);
+  if (password)        params.password = password;
+  if (wantIncrement)   params.increment_view = 1;
 
   if (DEBUG_HTTP) {
     const logParams = { ...params, ...(params.password ? { password: "********" } : {}) };
@@ -123,12 +140,16 @@ export async function fetchArticle(idOrSlug, opts = {}) {
       params,
       headers: { "Cache-Control": "no-store" },
     });
-    console.log(resp);
-    
+
+    // ✅ On marque comme "vu" seulement si le serveur confirme l’incrément
+    const inc = resp?.data?.meta?.view_incremented;
+    if (wantIncrement && (inc === true || inc === 1)) {
+      markViewed(key);
+    }
+
     return unwrapArticle(resp);
   } catch (error) {
     if (error.response?.status === 403) {
-      // Article verrouillé - on propage l'erreur avec les détails
       throw {
         ...error,
         locked: true,
@@ -151,7 +172,7 @@ export async function unlockArticle(idOrSlug, password, opts = {}) {
   const { include = [], fields = [] } = opts;
   const params = {};
   if (include?.length) params.include = toParam(include);
-  if (fields?.length) params.fields = toParam(fields);
+  if (fields?.length)  params.fields  = toParam(fields);
 
   if (DEBUG_HTTP) console.log("[API] POST /articles/:id/unlock", key, { params });
 
@@ -161,10 +182,30 @@ export async function unlockArticle(idOrSlug, password, opts = {}) {
       { password },
       { params }
     );
-    return unwrapArticle(resp);
+    const unlocked = unwrapArticle(resp);
+
+    // ➜ Ensuite, on déclenche l’incrément de vue si nécessaire
+    if (!hasViewed(key)) {
+      try {
+        const followParams = {};
+        if (include?.length) followParams.include = toParam(include);
+        if (fields?.length)  followParams.fields  = toParam(fields);
+        followParams.password = password;        // accepte header OU param
+        followParams.increment_view = 1;
+
+        const res2 = await api.get(`/articles/${encodeURIComponent(key)}`, { params: followParams });
+        const inc  = res2?.data?.meta?.view_incremented;
+        if (inc === true || inc === 1) markViewed(key);
+        return unwrapArticle(res2);
+      } catch {
+        // Si le GET échoue, on retourne quand même la réponse du unlock
+        return unlocked;
+      }
+    }
+
+    return unlocked;
   } catch (error) {
     if (error.response?.status === 403) {
-      // Mot de passe incorrect
       throw {
         ...error,
         incorrectPassword: true,
@@ -174,6 +215,7 @@ export async function unlockArticle(idOrSlug, password, opts = {}) {
     throw error;
   }
 }
+
 
 /**
  * Récupération des articles similaires
