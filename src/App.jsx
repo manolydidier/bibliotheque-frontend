@@ -14,9 +14,7 @@ import AuthPage from './pages/auth/AuthPage';
 import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import UserManagementDashboard from './pages/UserManagementDashboard/Components/UserManagementDashboard';
 import Accueil from './pages/UserManagementDashboard/Components/Accueil/Accueil';
-import Backoffice from './pages/UserManagementDashboard/Components/Backoffice/Backoffice';
-import AlbumDetailPage from './pages/UserManagementDashboard/Components/Backoffice/Album/AlbumDetailPage';
-import AlbumPhoto from './pages/UserManagementDashboard/Components/Backoffice/Album/AlbumPhoto';
+
 import Visualiseur from './pages/media-library/Visualiseur/Visualiseur';
 
 // Layouts
@@ -35,6 +33,7 @@ import ArticlesPage from './pages/media-library/ArticlesPage';
 import ArticlesIndex from './pages/UserManagementDashboard/Components/Backoffice/articles/ArticlesIndex';
 import ArticleEditCreate from './pages/UserManagementDashboard/Components/Backoffice/articles/ArticleEditCreate';
 import TrashedPage from './pages/UserManagementDashboard/Components/Backoffice/articles/TrashedPage';
+import Dashboard from './pages/UserManagementDashboard/Components/Backoffice/dashboard/Dashboard';
 
 function BootScreen() {
   return (
@@ -113,11 +112,10 @@ export default function App() {
                 {/* Routes protégées avec DashboardLayout */}
                 <Route element={<RequireAuth redirectTo="/auth" />}>
                   <Route element={<DashboardLayout />}>
-                    <Route path="/backoffice" element={<Backoffice />} />
-                    <Route path="/backoffice/album/:albumName" element={<AlbumDetailPage />} />
-                    <Route path="/albumphoto" element={<AlbumPhoto />} />
+                   
                     <Route path="/visualiseur/:articleslug" element={<Visualiseur />} />
                     <Route path="/configuration" element={<Configuration />} />
+                    <Route path="/dashboard" element={<Dashboard  />} />
 
 
                     <Route path="/articlescontroler" element={<ArticlesIndex />} />

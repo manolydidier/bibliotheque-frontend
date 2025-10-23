@@ -1,46 +1,94 @@
 // src/pages/articles/ArticlesIndex.jsx
-
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import Toast from '../../../../../component/toast/Toaster';
 import {
   FaEye, FaCalendarAlt, FaTag, FaUser, FaEdit, FaTrashAlt, FaTrash,
-  FaExternalLinkAlt, FaSync, FaThumbsUp, FaFilter, FaEraser, FaRocket, FaDownload,
-  FaTimes, FaSpinner, FaCheck, FaUndo, FaCheckSquare, FaSquare,
-  FaTable, FaThLarge, FaSort, FaSortUp, FaSortDown, FaChevronDown, FaChevronUp
+  FaExternalLinkAlt, FaThumbsUp, FaFilter, FaUndo, FaCheckSquare, FaSquare,
+  FaSort, FaSortUp, FaSortDown, FaTimes, FaSpinner, FaCheck,
 } from 'react-icons/fa';
+import {
+  FiRefreshCw, FiPlus, FiTrash2, FiFilter as FiFilterIcon,
+  FiChevronDown as FiChevronDownFi, FiChevronUp as FiChevronUpFi,
+  FiSettings, FiGrid as FiGridIcon, FiList as FiListIcon, FiSave, FiTrash as FiTrashFeather
+} from 'react-icons/fi';
 
-// ✅ nouveau FiltersBar stylé
 import FiltersBar from './FiltersBar';
 
 /* =========================
-   Axios de base pour Sanctum
+   Axios de base
 ========================= */
-axios.defaults.withCredentials = true;
 axios.defaults.baseURL = axios.defaults.baseURL || '/api';
+// Pas de Sanctum ici
+// axios.defaults.withCredentials = true;
 const API = '/articles';
 
+/* =========================
+   CSRF (optionnel)
+========================= */
+const USE_SANCTUM = false;
 let csrfReady = false;
+const rootHTTP = axios.create({ baseURL: undefined, withCredentials: true });
 async function ensureCsrf() {
+  if (!USE_SANCTUM) return;
   if (csrfReady) return;
-  try { await axios.get('/sanctum/csrf-cookie'); } catch {}
-  csrfReady = true;
+  try { await rootHTTP.get('/sanctum/csrf-cookie'); csrfReady = true; } catch {}
 }
 
 /* =========================
    Helpers API & mapping
 ========================= */
+const DEBUG = true;
+
 function normalizeList(payload, fallbackPerPage = 24) {
-  const items = payload?.data ?? payload?.items ?? (Array.isArray(payload) ? payload : []);
-  const meta = payload?.meta ?? {
-    current_page: payload?.current_page ?? 1,
-    last_page: payload?.last_page ?? 1,
-    total: payload?.total ?? items.length,
-    per_page: payload?.per_page ?? fallbackPerPage,
-    facets: payload?.meta?.facets ?? null
+  const p0 = payload || {};
+  const p = (
+    p0 && p0.data && !Array.isArray(p0.data) &&
+    (Array.isArray(p0.data.data) || p0.data.current_page !== undefined)
+  ) ? p0.data : p0;
+
+  const items =
+    (Array.isArray(p?.data) ? p.data : null) ??
+    (Array.isArray(p?.items) ? p.items : null) ??
+    (Array.isArray(p0) ? p0 : []) ?? [];
+
+  const rawMeta = (p?.meta && typeof p.meta === 'object') ? p.meta : p || {};
+
+  const perPage = Number(rawMeta.per_page ?? p.per_page ?? fallbackPerPage) || fallbackPerPage;
+  const currentPage = Number(rawMeta.current_page ?? p.current_page ?? p.page ?? 1) || 1;
+
+  let total = rawMeta.total ?? p.total;
+  if (typeof total !== 'number') {
+    if (
+      Array.isArray(items) &&
+      (p.next_page_url ?? rawMeta.next_page_url ?? null) == null &&
+      (p.prev_page_url ?? rawMeta.prev_page_url ?? null) == null
+    ) {
+      total = items.length;
+    }
+  }
+  total = Number(total) || 0;
+
+  let lastPage = rawMeta.last_page ?? p.last_page;
+  if (typeof lastPage !== 'number') {
+    if (total && perPage) {
+      lastPage = Math.max(1, Math.ceil(total / perPage));
+    } else {
+      const hasNextHint = !!(p.next_page_url ?? rawMeta.next_page_url ?? false);
+      lastPage = hasNextHint ? (currentPage + 1) : currentPage;
+    }
+  }
+  lastPage = Number(lastPage) || 1;
+
+  const hasNext = !!(p.next_page_url ?? rawMeta.next_page_url ?? null);
+  const hasPrev = !!(p.prev_page_url ?? rawMeta.prev_page_url ?? null);
+
+  return {
+    items,
+    meta: { current_page: currentPage, last_page: lastPage, total, per_page: perPage, facets: rawMeta.facets ?? null, has_next: hasNext, has_prev: hasPrev },
   };
-  return { items, meta };
 }
 
 const splitNumericAndString = (arr = []) => {
@@ -117,37 +165,6 @@ async function apiForceDelete(id) {
 async function apiRestore(id) { await ensureCsrf(); return axios.post(`${API}/${id}/restore`); }
 
 /* =========================
-   Helpers UI
-========================= */
-const badgeClass = (status) => {
-  switch (String(status || '').toLowerCase()) {
-    case 'published': return 'bg-green-100 text-green-700 border-green-200';
-    case 'archived':  return 'bg-slate-100 text-slate-700 border-slate-200';
-    case 'draft':
-    default:          return 'bg-amber-100 text-amber-700 border-amber-200';
-  }
-};
-function getCategoryFromTitle(title) {
-  const s = (title || '').toLowerCase();
-  if (s.includes('intelligence artificielle') || s.includes('ia')) return 'Intelligence Artificielle';
-  if (s.includes('startup')) return 'Startup';
-  if (s.includes('développement') || s.includes('web')) return 'Développement Web';
-  if (s.includes('marketing')) return 'Business';
-  if (s.includes('technologie')) return 'Mobile';
-  return 'Article';
-}
-const cleanSlug = (x) => { const s = (x ?? '').toString().trim(); if (!s || s === 'undefined' || s === 'null') return null; return s; };
-const buildPublicPath = (rec) => { const slug = cleanSlug(rec?.slug); const id = rec?.id != null ? String(rec.id) : null; return slug ? `/articles/${slug}` : (id ? `/articles/${id}` : '#'); };
-
-const Thumb = ({ src, alt, className='' }) => (
-  src ? (
-    <img src={src} alt={alt || 'thumb'} className={`object-cover rounded-lg shadow-sm ${className}`} />
-  ) : (
-    <div className={`rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center ${className}`}>📝</div>
-  )
-);
-
-/* =========================
    Dates
 ========================= */
 const RE_SQL = /^\d{4}-\d{2}-\d{2}(?:[ T])\d{2}:\d{2}:\d{2}$/;
@@ -195,6 +212,34 @@ function exportRowsToCSV(rows = []) {
 ========================= */
 const ArticlesIndex = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Ids restaurés (arrivent via state depuis TrashedPage)
+  const [restoredIds, setRestoredIds] = useState(new Set());
+  useEffect(() => {
+    const ids = Array.isArray(location.state?.restoredIds) ? location.state.restoredIds : [];
+    if (ids.length) {
+      setRestoredIds(new Set(ids));
+      // on nettoie l'URL/state pour ne pas rejouer au back/refresh
+      navigate(location.pathname + location.search, { replace: true });
+      // 👉 plus de setTimeout ici : la surbrillance reste jusqu'à interaction
+    }
+  }, []); // mount only
+
+  // Efface la surbrillance au PREMIER geste utilisateur
+  useEffect(() => {
+    if (restoredIds.size === 0) return;
+    const clear = () => setRestoredIds(new Set());
+    const opts = { once: true, passive: true };
+    window.addEventListener('pointerdown', clear, opts);
+    window.addEventListener('keydown', clear, opts);
+    window.addEventListener('wheel', clear, opts);
+    return () => {
+      window.removeEventListener('pointerdown', clear);
+      window.removeEventListener('keydown', clear);
+      window.removeEventListener('wheel', clear);
+    };
+  }, [restoredIds]);
 
   // Recherche & filtres
   const [search, setSearch] = useState('');
@@ -225,10 +270,13 @@ const ArticlesIndex = () => {
   };
 
   // Données + facettes
-  const [data, setData] = useState({ items: [], meta: { total: 0, current_page: 1, last_page: 1, per_page: 24, facets: { categories: [], tags: [], authors: [] } } });
+  const [data, setData] = useState({ items: [], meta: { total: 0, current_page: 1, last_page: 1, per_page: 24, facets: { categories: [], tags: [], authors: [] }, has_next: false, has_prev: false } });
 
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // Compteur corbeille
+  const [trashCount, setTrashCount] = useState(0);
 
   // Modal suppression
   const [isDeleting, setIsDeleting] = useState(false);
@@ -238,7 +286,6 @@ const ArticlesIndex = () => {
   const [draggingId, setDraggingId] = useState(null);
   const [overSoft, setOverSoft] = useState(false);
   const [overHard, setOverHard] = useState(false);
-  const [pulseSoft, setPulseSoft] = useState(false);
   const [shakeHard, setShakeHard] = useState(false);
 
   // Sélection multiple
@@ -251,8 +298,8 @@ const ArticlesIndex = () => {
   // Undo (restore)
   const [lastSoftDeletedIds, setLastSoftDeletedIds] = useState([]);
 
-  // Affichage/masquage des filtres
-  const [showFilters, setShowFilters] = useState(true);
+  // Filtres visibles ?
+  const [showFilters, setShowFilters] = useState(false);
   const activeFiltersCount = useMemo(() => {
     let c = 0;
     if (search?.trim()) c++;
@@ -292,6 +339,22 @@ const ArticlesIndex = () => {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPage(1); }, [search, filters, sortBy, sortDir]);
 
+  // === Compteur corbeille ===
+  async function fetchTrashCount() {
+    try {
+      const { data } = await axios.get('/corbeille', { params: { per_page: 1 } });
+      const { meta } = normalizeList(data, 1);
+      setTrashCount(Number(meta?.total || 0));
+    } catch (err1) {
+      try {
+        const { data } = await axios.get(API, { params: { trashed: 'only', per_page: 1 } });
+        const { meta } = normalizeList(data, 1);
+        setTrashCount(Number(meta?.total || 0));
+      } catch (err2) {}
+    }
+  }
+  useEffect(() => { fetchTrashCount(); }, []);
+
   const handleExport = () => exportRowsToCSV(data.items || []);
 
   /* ============
@@ -311,12 +374,13 @@ const ArticlesIndex = () => {
         await apiSoftDelete(confirmDelete.id);
         setLastSoftDeletedIds([confirmDelete.id]);
         setToast({ type: 'success', message: 'Envoyé à la corbeille' });
-        setPulseSoft(true); setTimeout(()=> setPulseSoft(false), 700);
+        await fetchTrashCount();
       }
       if (confirmDelete.mode === 'hard') {
         await apiForceDelete(confirmDelete.id);
         setToast({ type: 'success', message: 'Supprimé définitivement' });
         setShakeHard(true); setTimeout(()=> setShakeHard(false), 500);
+        await fetchTrashCount();
       }
       if (confirmDelete.mode === 'soft-many') {
         const ids = confirmDelete.ids || [];
@@ -324,7 +388,7 @@ const ArticlesIndex = () => {
         const ok = results.filter(r => r.status === 'fulfilled').length;
         setLastSoftDeletedIds(ids);
         setToast({ type: 'success', message: `Corbeille : ${ok}/${ids.length} article(s)` });
-        setPulseSoft(true); setTimeout(()=> setPulseSoft(false), 700);
+        await fetchTrashCount();
       }
       if (confirmDelete.mode === 'hard-many') {
         const ids = confirmDelete.ids || [];
@@ -332,6 +396,7 @@ const ArticlesIndex = () => {
         const ok = results.filter(r => r.status === 'fulfilled').length;
         setToast({ type: 'success', message: `Supprimé(s) : ${ok}/${ids.length} article(s)` });
         setShakeHard(true); setTimeout(()=> setShakeHard(false), 500);
+        await fetchTrashCount();
       }
       closeConfirm();
       setSelectedIds(new Set());
@@ -343,7 +408,7 @@ const ArticlesIndex = () => {
     }
   };
 
-  // ESC pour fermer + raccourcis suppression
+  // ESC + raccourcis
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape') { if (confirmDelete) closeConfirm(); }
@@ -365,7 +430,6 @@ const ArticlesIndex = () => {
     e.dataTransfer.effectAllowed = 'move';
   };
   const onDragEndRow = () => { setDraggingId(null); setOverSoft(false); setOverHard(false); };
-  const allowDrop = (e) => { e.preventDefault(); };
   const onDropSoft = async (e) => {
     e.preventDefault(); setOverSoft(false);
     try {
@@ -374,8 +438,8 @@ const ArticlesIndex = () => {
       await apiSoftDelete(payload.id);
       setLastSoftDeletedIds([payload.id]);
       setToast({ type: 'success', message: `Article "${payload.title || payload.id}" → corbeille` });
-      setPulseSoft(true); setTimeout(()=> setPulseSoft(false), 700);
       await load();
+      await fetchTrashCount();
     } catch { setToast({ type: 'error', message: 'Erreur lors de l’envoi à la corbeille' }); }
     finally { setDraggingId(null); }
   };
@@ -388,76 +452,6 @@ const ArticlesIndex = () => {
     } catch { setToast({ type: 'error', message: 'Erreur lors de la suppression' }); }
     finally { setDraggingId(null); }
   };
-
-  /* ===================
-     Sélection multiple
-  =================== */
-  const toggleSelect = (id) => setSelectedIds(prev => { const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
-  const toggleSelectAllOnPage = () => {
-    const ids = (data.items || []).map(a => a.id);
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (ids.length && ids.every(id => next.has(id))) ids.forEach(id => next.delete(id));
-      else ids.forEach(id => next.add(id));
-      return next;
-    });
-  };
-  const clearSelection = () => setSelectedIds(new Set());
-
-  /* ============
-     Undo (restore)
-  ============ */
-function optimisticPublish(ids) {
-  setData(prev => {
-    const items = (prev.items || []).map(it =>
-      ids.includes(it.id)
-        ? { ...it, status: 'published', deleted_at: null }
-        : it
-    );
-    return { ...prev, items };
-  });
-}
-async function apiRestoreAndPublish(id) {
-  await ensureCsrf();
-
-  // 1) RESTORE (efface deleted_at côté DB)
-  const restoreRes = await axios.post(`${API}/${id}/restore`);
-
-  // 2) PUBLISH (au cas où le backend ne force pas déjà le statut)
-  try {
-    await axios.put(`${API}/${id}`, { status: 'published' });
-  } catch (_) {
-    // si ton endpoint restore met déjà published, ce PUT renverra 422/400 -> on ignore.
-  }
-
-  return restoreRes;
-}
-
-
-  const handleUndo = async () => {
-  if (!lastSoftDeletedIds.length) return;
-
-  const ids = [...lastSoftDeletedIds];
-
-  // patch optimiste (immédiat dans l’UI)
-  optimisticPublish(ids);
-
-  try {
-    const results = await Promise.allSettled(
-      ids.map(id => apiRestoreAndPublish(id))
-    );
-    const ok = results.filter(r => r.status === 'fulfilled').length;
-
-    setToast({ type: 'success', message: `Restauration : ${ok}/${ids.length}` });
-    setLastSoftDeletedIds([]);
-
-    // Re-synchronise complètement depuis l’API
-    await load();
-  } catch (e) {
-    setToast({ type: 'error', message: 'Erreur lors de la restauration' });
-  }
-};
-
 
   const rows = useMemo(() => data.items || [], [data.items]);
 
@@ -559,81 +553,148 @@ async function apiRestoreAndPublish(id) {
   useEffect(() => { localStorage.setItem(COLS_KEY, JSON.stringify(visibleCols)); }, [visibleCols]);
   const [colsOpen, setColsOpen] = useState(false);
 
+  const colsBtnRef = useRef(null);
+  const colsMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!colsOpen) return;
+    const onDown = (e) => {
+      const t = e.target;
+      if (colsMenuRef.current?.contains(t)) return;
+      if (colsBtnRef.current?.contains(t)) return;
+      setColsOpen(false);
+    };
+    const onEsc = (e) => { if (e.key === 'Escape') setColsOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [colsOpen]);
+
   /* ===================
      Rendu
   =================== */
   return (
-    <div className="relative bg-white rounded-xl shadow-sm ring-1 ring-slate-200/70 overflow-hidden">
+    <div className="relative bg-white rounded-xl shadow-sm ring-1 ring-slate-200/70">
       {toast && <Toast {...toast} onClose={()=>setToast(null)} />}
 
-      {/* Header */}
-      <div className="p-5 border-b bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold tracking-tight">Articles</h2>
-            <p className="text-sm/5 opacity-90">Filtres, tri, export, corbeille, DnD, multi-sélection, undo, vue table/grid, URL, vues, colonnes.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button onClick={load} className="px-3 py-2 bg-white/20 hover:bg-white/30 rounded inline-flex items-center gap-2"><FaSync /> Actualiser</button>
-            <Link to="/articles/new" className="px-3 py-2 bg-white text-blue-700 rounded hover:bg-gray-100">Créer</Link>
-            <Link to="/articles/trashed" className="px-3 py-2 bg-white/20 hover:bg-white/30 rounded">Corbeille</Link>
+      {/* Glow “restored” persistant jusqu'à interaction */}
+      <style>{`
+        @keyframes restoredPulse {
+          0%   { box-shadow: 0 0 0 0 rgba(16,185,129,.55); background: #ecfdf5; }
+          60%  { box-shadow: 0 0 0 6px rgba(16,185,129,.0); }
+          100% { box-shadow: 0 0 0 0 rgba(16,185,129,.0); background: transparent; }
+        }
+        /* halo doux et récurrent (breathing) */
+        @keyframes restoredIdle {
+          0%   { box-shadow: 0 0 0 0 rgba(16,185,129,.25); background: #f0fdf4; }
+          50%  { box-shadow: 0 0 0 6px rgba(16,185,129,0); background: #ffffff; }
+          100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); background: #f0fdf4; }
+        }
 
-            {/* Bouton Vues enregistrées */}
+        /* table rows */
+        tr.row-restored-hold {
+          animation:
+            restoredPulse 900ms ease-out 0s 1 both,
+            restoredIdle 2400ms ease-in-out 900ms infinite both;
+        }
+
+        /* cards (vue grid) */
+        .card-restored-hold {
+          animation:
+            restoredPulse 900ms ease-out 0s 1 both,
+            restoredIdle 2400ms ease-in-out 900ms infinite both;
+          border-radius: 12px;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          tr.row-restored-hold, .card-restored-hold { animation: none !important; outline: 2px solid #34d399; background: #ecfdf5; }
+        }
+
+        @keyframes wiggle {
+          0%{transform:rotate(0)}15%{transform:rotate(-1.5deg) scale(1.01)}
+          30%{transform:rotate(1.5deg) scale(1.01)}45%{transform:rotate(-1deg)}
+          60%{transform:rotate(1deg)}75%{transform:rotate(-.5deg)}100%{transform:rotate(0)}
+        }
+      `}</style>
+
+      {/* ===== Header ===== */}
+      <div className="relative overflow-hidden p-5 border-b bg-gradient-to-br from-indigo-600 via-blue-600 to-sky-600 text-white">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10 blur-2xl" />
+          <div className="absolute -bottom-20 -left-10 w-72 h-72 rounded-full bg-cyan-300/10 blur-3xl" />
+        </div>
+
+        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="text-xl font-semibold tracking-tight">Articles</h2>
+            <p className="text-sm text-white/90 mt-1">Gestion des articles du backoffice</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={()=> setViewsModal(true)}
-              className="px-3 py-2 bg-white/20 hover:bg-white/30 rounded inline-flex items-center gap-2"
+              onClick={load}
+              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-sm inline-flex items-center gap-2 transition"
+              title="Actualiser"
+            >
+              <FiRefreshCw className={loading ? 'animate-spin' : ''} />
+              Actualiser
+            </button>
+
+            <Link
+              to="/articles/new"
+              className="px-3 py-2 rounded-xl bg-white text-blue-700 hover:bg-white/95 border border-white/40 shadow-sm inline-flex items-center gap-2 transition"
+              title="Créer un article"
+            >
+              <FiPlus /> Créer
+            </Link>
+
+            <button
+              onClick={() => setViewsModal(true)}
+              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-sm inline-flex items-center gap-2 transition"
               title="Vues enregistrées"
             >
-              💾 Vues
+              <FiSave /> Vues
             </button>
 
-            {/* Toggle Filtres */}
             <button
-              onClick={()=> setShowFilters(v=>!v)}
-              className="px-3 py-2 bg-white/20 hover:bg-white/30 rounded inline-flex items-center gap-2"
+              onClick={() => setShowFilters(v => !v)}
+              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-sm inline-flex items-center gap-2 transition"
               title="Afficher/Masquer les filtres (Maj+F)"
             >
-              <FaFilter />
+              <FiFilterIcon />
               <span>Filtres</span>
-              <span className="inline-flex items-center justify-center min-w-5 h-5 text-xs rounded-full bg-white/30 px-1">
+              <span className="inline-flex items-center justify-center min-w-5 h-5 text-[11px] font-semibold rounded-full bg-white/20 px-1">
                 {activeFiltersCount}
               </span>
-              {showFilters ? <FaChevronUp /> : <FaChevronDown />}
+              {showFilters ? <FiChevronUpFi /> : <FiChevronDownFi />}
             </button>
 
-            {/* Choix colonnes */}
-            <div className="relative">
+            <div className="ml-2 inline-flex rounded-xl bg-white/10 p-1 border border-white/20 backdrop-blur-sm">
               <button
-                onClick={()=> setColsOpen(o=>!o)}
-                className="px-3 py-2 bg-white/20 hover:bg-white/30 rounded inline-flex items-center gap-2"
-                title="Choisir les colonnes"
-              >
-                🧱 Colonnes
-              </button>
-              {colsOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border p-3 z-[75]">
-                  {Object.keys(defaultCols).map(key => (
-                    <label key={key} className="flex items-center justify-between py-1 text-sm">
-                      <span className="capitalize text-blue-500">{key.replace('_',' ')}</span>
-                      <input type="checkbox" className="accent-blue-600" checked={!!visibleCols[key]} onChange={()=> setVisibleCols(v => ({ ...v, [key]: !v[key] }))}/>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Vue Table/Grid */}
-            <div className="ml-2 inline-flex bg-white/20 rounded overflow-hidden">
-              <button
-                className={`px-3 py-2 flex items-center gap-2 ${viewMode==='table'?'bg-white text-blue-700':'text-white/90 hover:bg-white/10'}`}
-                onClick={()=>setViewMode('table')}
+                className={`px-3 py-2 rounded-lg flex items-center gap-2 transition ${
+                  viewMode === 'table'
+                    ? 'bg-white text-blue-700 shadow-sm'
+                    : 'text-white/90 hover:bg-white/10'
+                }`}
+                onClick={() => setViewMode('table')}
                 title="Vue table"
-              ><FaTable /> Table</button>
+              >
+                <FiListIcon /> Table
+              </button>
               <button
-                className={`px-3 py-2 flex items-center gap-2 ${viewMode==='grid'?'bg-white text-blue-700':'text-white/90 hover:bg-white/10'}`}
-                onClick={()=>setViewMode('grid')}
+                className={`px-3 py-2 rounded-lg flex items-center gap-2 transition ${
+                  viewMode === 'grid'
+                    ? 'bg-white text-blue-700 shadow-sm'
+                    : 'text-white/90 hover:bg-white/10'
+                }`}
+                onClick={() => setViewMode('grid')}
                 title="Vue grid"
-              ><FaThLarge /> Grid</button>
+              >
+                <FiGridIcon /> Grid
+              </button>
             </div>
           </div>
         </div>
@@ -641,14 +702,13 @@ async function apiRestoreAndPublish(id) {
 
       {/* Barre d’actions multi */}
       {selectedIds.size > 0 && (
-        <div className="sticky top-[56px] z-30 bg-amber-50 border-y border-amber-200 text-amber-900 px-4 py-2 flex items-center justify-between animate-[slideDown_160ms_ease-out]">
-          <style>{`@keyframes slideDown{from{transform:translateY(-8px);opacity:0}to{transform:translateY(0);opacity:1}}`}</style>
+        <div className="sticky top-[56px] z-30 bg-amber-50 border-y border-amber-200 text-amber-900 px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <FaCheckSquare /> <b>{selectedIds.size}</b> sélectionné(s)
             <button onClick={()=>openConfirm('soft-many', Array.from(selectedIds))} className="ml-3 px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-100 hover:bg-amber-200 text-amber-900 inline-flex items-center gap-2"><FaTrashAlt /> Corbeille</button>
-            <button onClick={()=>openConfirm('hard-many', Array.from(selectedIds))} className="px-3 py-1.5 rounded-lg border border-rose-300 bg-rose-100 hover:bg-rose-200 text-rose-900 inline-flex items-center gap-2"><FaTrash /> Supprimer</button>
+            <button onClick={()=>openConfirm('hard-many', Array.from(selectedIds))} className="px-3 py-1.5 rounded-lg border text-rose-700 border-rose-300 bg-rose-50 hover:bg-rose-100 inline-flex items-center gap-2"><FaTrash /> Supprimer</button>
           </div>
-          <button onClick={clearSelection} className="text-sm underline">Tout désélectionner</button>
+          <button onClick={()=>setSelectedIds(new Set())} className="text-sm underline">Tout désélectionner</button>
         </div>
       )}
 
@@ -677,7 +737,7 @@ async function apiRestoreAndPublish(id) {
         )}
       </div>
 
-      {/* Bandeau compact quand filtres masqués */}
+      {/* Bandeau quand filtres masqués */}
       {!showFilters && (
         <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center justify-between">
           <div className="text-sm text-slate-600">
@@ -702,60 +762,56 @@ async function apiRestoreAndPublish(id) {
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50">
               <tr>
-                {visibleCols.select && (
-                  <th className="px-3 py-3 text-xs font-medium text-slate-600">
-                    <button className="inline-flex items-center gap-2 select-none" onClick={toggleSelectAllOnPage}>
-                      {allSelectedOnPage ? <FaCheckSquare /> : <FaSquare />} Sélect.
-                    </button>
-                  </th>
-                )}
+                <th className="px-3 py-3 text-xs font-medium text-slate-600">
+                  <button className="inline-flex items-center gap-2 select-none" onClick={()=>{
+                    const ids = (data.items || []).map(a => a.id);
+                    setSelectedIds(prev => {
+                      const next = new Set(prev);
+                      if (ids.length && ids.every(id => next.has(id))) ids.forEach(id => next.delete(id));
+                      else ids.forEach(id => next.add(id));
+                      return next;
+                    });
+                  }}>
+                    {allSelectedOnPage ? <FaCheckSquare /> : <FaSquare />} Sélect.
+                  </button>
+                </th>
 
-                {visibleCols.image && <th className="px-3 py-3 text-xs font-medium text-slate-600">Image</th>}
+                <th className="px-3 py-3 text-xs font-medium text-slate-600">Image</th>
 
-                {visibleCols.title && (
-                  <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
-                    <button onClick={()=>toggleSort('title')} className="inline-flex items-center gap-1 hover:underline">
-                      Titre <SortIcon col="title" />
-                    </button>
-                  </th>
-                )}
+                <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
+                  <button onClick={()=>toggleSort('title')} className="inline-flex items-center gap-1 hover:underline">
+                    Titre <SortIcon col="title" />
+                  </button>
+                </th>
 
-                {visibleCols.author && <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">Auteur</th>}
-                {visibleCols.category && <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">Catégorie</th>}
+                <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">Auteur</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">Catégorie</th>
 
-                {visibleCols.published_at && (
-                  <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
-                    <button onClick={()=>toggleSort('published_at')} className="inline-flex items-center gap-1 hover:underline">
-                      Publié le <SortIcon col="published_at" />
-                    </button>
-                  </th>
-                )}
+                <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
+                  <button onClick={()=>toggleSort('published_at')} className="inline-flex items-center gap-1 hover:underline">
+                    Publié le <SortIcon col="published_at" />
+                  </button>
+                </th>
 
-                {visibleCols.views && (
-                  <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
-                    <button onClick={()=>toggleSort('view_count')} className="inline-flex items-center gap-1 hover:underline">
-                      Vues <SortIcon col="view_count" />
-                    </button>
-                  </th>
-                )}
+                <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
+                  <button onClick={()=>toggleSort('view_count')} className="inline-flex items-center gap-1 hover:underline">
+                    Vues <SortIcon col="view_count" />
+                  </button>
+                </th>
 
-                {visibleCols.rating && (
-                  <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
-                    <button onClick={()=>toggleSort('rating_average')} className="inline-flex items-center gap-1 hover:underline">
-                      Note <SortIcon col="rating_average" />
-                    </button>
-                  </th>
-                )}
+                <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
+                  <button onClick={()=>toggleSort('rating_average')} className="inline-flex items-center gap-1 hover:underline">
+                    Note <SortIcon col="rating_average" />
+                  </button>
+                </th>
 
-                {visibleCols.status && (
-                  <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
-                    <button onClick={()=>toggleSort('status')} className="inline-flex items-center gap-1 hover:underline">
-                      Statut <SortIcon col="status" />
-                    </button>
-                  </th>
-                )}
+                <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
+                  <button onClick={()=>toggleSort('status')} className="inline-flex items-center gap-1 hover:underline">
+                    Statut <SortIcon col="status" />
+                  </button>
+                </th>
 
-                {visibleCols.actions && <th className="px-3 py-3 text-right text-xs font-medium text-slate-600">Actions</th>}
+                <th className="px-3 py-3 text-right text-xs font-medium text-slate-600">Actions</th>
               </tr>
             </thead>
 
@@ -772,130 +828,114 @@ async function apiRestoreAndPublish(id) {
                 const pubRel  = publishedAt ? formatRelative(publishedAt) : '';
                 const updRel  = updatedAt ? formatRelative(updatedAt) : null;
                 const creRel  = createdAt ? formatRelative(createdAt) : null;
-                const isDragging = draggingId === article.id;
-                const isSelected = selectedIds.has(article.id);
 
                 return (
                   <tr
                     key={article.id}
-                    className={`transition-all duration-200 group ${isDragging ? 'opacity-60 scale-[0.995] rotate-[0.2deg] shadow-inner' : 'hover:bg-slate-50/50'}`}
+                    className={`transition-all duration-200 group hover:bg-slate-50/50
+                      ${restoredIds.has(article.id) ? 'row-restored-hold' : ''}`}
                     draggable
                     onDragStart={(e)=> onDragStartRow(e, article)}
                     onDragEnd={onDragEndRow}
                   >
-                    {visibleCols.select && (
-                      <td className="px-3 py-4">
-                        <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-                          <input type="checkbox" className="accent-blue-600" checked={isSelected} onChange={()=>toggleSelect(article.id)} />
-                        </label>
-                      </td>
-                    )}
+                    <td className="px-3 py-4">
+                      <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          className="accent-blue-600"
+                          checked={selectedIds.has(article.id)}
+                          onChange={()=> setSelectedIds(prev => { const n=new Set(prev); n.has(article.id)?n.delete(article.id):n.add(article.id); return n; })}
+                        />
+                      </label>
+                    </td>
 
-                    {visibleCols.image && (
-                      <td className="px-3 py-4 cursor-grab active:cursor-grabbing">
-                        <Thumb src={article.featured_image_url || article.featured_image || null} alt={article.featured_image_alt || article.title} className="w-12 h-12" />
-                      </td>
-                    )}
+                    <td className="px-3 py-4 cursor-grab active:cursor-grabbing">
+                      <Thumb src={article.featured_image_url || article.featured_image || null} alt={article.featured_image_alt || article.title} className="w-12 h-12" />
+                    </td>
 
-                    {visibleCols.title && (
-                      <td className="px-3 py-4">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <Link to={publicTo} className="font-semibold text-slate-900 hover:text-blue-600 transition-colors duration-200 block truncate" title={article.title} target="_blank" rel="noopener noreferrer">
-                              {article.title || <span className="text-gray-400 italic">Sans titre</span>}
-                            </Link>
-                            <a href={publicTo} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800" title="Ouvrir l'article"><FaExternalLinkAlt size={12} /></a>
-                          </div>
-                          {article.excerpt && <div className="text-xs text-slate-500 truncate max-w-[420px] mt-1">{article.excerpt}</div>}
-                          <div className="flex gap-1 mt-2">
-                            {article.is_featured && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">⭐ À la une</span>)}
-                            {article.is_sticky && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">📌 Épinglé</span>)}
-                            {article.visibility && article.visibility !== 'public' && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">🔒 {article.visibility}</span>)}
-                          </div>
-                        </div>
-                      </td>
-                    )}
-
-                    {visibleCols.author && (
-                      <td className="px-3 py-4 text-sm">
+                    <td className="px-3 py-4">
+                      <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"><FaUser className="text-slate-500" size={12} /></div>
-                          <div>
-                            <div className="font-medium text-slate-900">{article.author_name || `Auteur #${article.author_id || '—'}`}</div>
-                            {article.author_id && (<div className="text-xs text-slate-500">ID: {article.author_id}</div>)}
-                          </div>
+                          <Link to={publicTo} className="font-semibold text-slate-900 hover:text-blue-600 transition-colors duration-200 block truncate" title={article.title} target="_blank" rel="noopener noreferrer">
+                            {article.title || <span className="text-gray-400 italic">Sans titre</span>}
+                          </Link>
+                          <a href={publicTo} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800" title="Ouvrir l'article"><FaExternalLinkAlt size={12} /></a>
                         </div>
-                      </td>
-                    )}
-
-                    {visibleCols.category && (
-                      <td className="px-3 py-4 text-sm">
-                        <span className="inline-flex items-center px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-xs font-medium transition-colors duration-200">
-                          <FaTag className="mr-1" size={10} />{getCategoryFromTitle(article.title)}
-                        </span>
-                      </td>
-                    )}
-
-                    {visibleCols.published_at && (
-                      <td className="px-3 py-4 text-sm">
-                        <div className="flex items-center gap-2">
-                          <FaCalendarAlt className="text-slate-400" size={12} />
-                          <div>
-                            <div className="font-medium text-slate-900">{pubDate}</div>
-                            <div className="text-xs text-slate-500">{publishedAt ? `${pubTime} • ${pubRel}` : '—'}</div>
-                          </div>
+                        {article.excerpt && <div className="text-xs text-slate-500 truncate max-w-[420px] mt-1">{article.excerpt}</div>}
+                        <div className="flex gap-1 mt-2">
+                          {article.is_featured && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">⭐ À la une</span>)}
+                          {article.is_sticky && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">📌 Épinglé</span>)}
+                          {article.visibility && article.visibility !== 'public' && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">🔒 {article.visibility}</span>)}
                         </div>
-                      </td>
-                    )}
+                      </div>
+                    </td>
 
-                    {visibleCols.views && (
-                      <td className="px-3 py-4 text-sm">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-blue-600"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
-                          </div>
-                          <div>
-                            <div className="font-bold text-blue-700">{formattedViewCount}</div>
-                            <div className="text-xs text-slate-500">vues</div>
-                          </div>
+                    <td className="px-3 py-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"><FaUser className="text-slate-500" size={12} /></div>
+                        <div>
+                          <div className="font-medium text-slate-900">{article.author_name || `Auteur #${article.author_id || '—'}`}</div>
+                          {article.author_id && (<div className="text-xs text-slate-500">ID: {article.author_id}</div>)}
                         </div>
-                      </td>
-                    )}
+                      </div>
+                    </td>
 
-                    {visibleCols.rating && (
-                      <td className="px-3 py-4 text-sm">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center"><FaThumbsUp className="text-amber-600" size={12} /></div>
-                          <div>
-                            <div className="font-bold text-amber-700">{formattedRating}/5</div>
-                            <div className="text-xs text-slate-500">{article.rating_count || 0} avis</div>
-                          </div>
-                        </div>
-                      </td>
-                    )}
+                    <td className="px-3 py-4 text-sm">
+                      <span className="inline-flex items-center px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-xs font-medium transition-colors duration-200">
+                        <FaTag className="mr-1" size={10} />{getCategoryFromTitle(article.title)}
+                      </span>
+                    </td>
 
-                    {visibleCols.status && (
-                      <td className="px-3 py-4 text-sm">
-                        <div className="space-y-1">
-                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${badgeClass(article.status)}`}>{article.status || 'draft'}</span>
-                          <div className="text-xs text-slate-500 space-y-0.5">
-                            {createdAt && (<div>Créé {creRel} • {formatDate(createdAt)} {formatTime(createdAt)}</div>)}
-                            {updatedAt && (<div>Maj {updRel} • {formatDate(updatedAt)} {formatTime(updatedAt)}</div>)}
-                          </div>
+                    <td className="px-3 py-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <FaCalendarAlt className="text-slate-400" size={12} />
+                        <div>
+                          <div className="font-medium text-slate-900">{pubDate}</div>
+                          <div className="text-xs text-slate-500">{publishedAt ? `${pubTime} • ${pubRel}` : '—'}</div>
                         </div>
-                      </td>
-                    )}
+                      </div>
+                    </td>
 
-                    {visibleCols.actions && (
-                      <td className="px-3 py-4 text-right">
-                        <div className="flex items-center gap-1 justify-end">
-                          <Link to={publicTo} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg border text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100 hover:scale-105 transition-all duration-200" title="Voir l'article"><FaEye size={14} /></Link>
-                          <button className="p-2 rounded-lg border text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100 hover:scale-105 transition-all duration-200" onClick={()=>navigate(`/articles/${article.id}/edit`, { state: { article } })} title="Éditer"><FaEdit size={14} /></button>
-                          <button className="p-2 rounded-lg border text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100 hover:scale-105 transition-all duration-200" onClick={()=>openConfirm('soft', article)} title="Envoyer à la corbeille"><FaTrashAlt size={14} /></button>
-                          <button className="p-2 rounded-lg border text-red-600 bg-rose-50 border-rose-200 hover:bg-rose-100 hover:scale-105 transition-all duration-200" onClick={()=>openConfirm('hard', article)} title="Supprimer définitivement"><FaTrash size={14} /></button>
+                    <td className="px-3 py-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-blue-600"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
                         </div>
-                      </td>
-                    )}
+                        <div>
+                          <div className="font-bold text-blue-700">{formattedViewCount}</div>
+                          <div className="text-xs text-slate-500">vues</div>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="px-3 py-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center"><FaThumbsUp className="text-amber-600" size={12} /></div>
+                        <div>
+                          <div className="font-bold text-amber-700">{formattedRating}/5</div>
+                          <div className="text-xs text-slate-500">{article.rating_count || 0} avis</div>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="px-3 py-4 text-sm">
+                      <div className="space-y-1">
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${badgeClass(article.status)}`}>{article.status || 'draft'}</span>
+                        <div className="text-xs text-slate-500 space-y-0.5">
+                          {creRel && (<div>Créé {creRel} • {formatDate(toDate(article.created_at))} {formatTime(toDate(article.created_at))}</div>)}
+                          {updRel && (<div>Maj {updRel} • {formatDate(toDate(article.updated_at))} {formatTime(toDate(article.updated_at))}</div>)}
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="px-3 py-4 text-right">
+                      <div className="flex items-center gap-1 justify-end">
+                        <Link to={publicTo} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg border text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100 transition" title="Voir l'article"><FaEye size={14} /></Link>
+                        <button className="p-2 rounded-lg border text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100 transition" onClick={()=>navigate(`/articles/${article.id}/edit`, { state: { article } })} title="Éditer"><FaEdit size={14} /></button>
+                        <button className="p-2 rounded-lg border text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100 transition" onClick={()=>openConfirm('soft', article)} title="Envoyer à la corbeille"><FaTrashAlt size={14} /></button>
+                        <button className="p-2 rounded-lg border text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100 transition" onClick={()=>openConfirm('hard', article)} title="Supprimer définitivement"><FaTrash size={14} /></button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -927,39 +967,36 @@ async function apiRestoreAndPublish(id) {
               const publishedAt = toDate(article.published_at);
               const pubDate = publishedAt ? formatDate(publishedAt) : '—';
               const pubRel  = publishedAt ? formatRelative(publishedAt) : '';
-              const isSelected = selectedIds.has(article.id);
-              const isDragging = draggingId === article.id;
 
               return (
                 <div
                   key={article.id}
-                  className={`relative rounded-xl border bg-white p-3 shadow-sm transition-all duration-200
-                    ${isSelected ? 'ring-2 ring-blue-300 border-blue-300' : 'border-slate-200'}
-                    ${isDragging ? 'opacity-60 scale-[0.99] rotate-[0.2deg]' : 'hover:shadow-md'}
-                  `}
+                  className={`relative rounded-xl border bg-white p-3 shadow-sm transition-all duration-200 border-slate-200 hover:shadow-md
+                    ${restoredIds.has(article.id) ? 'card-restored-hold' : ''}`}
                   draggable
                   onDragStart={(e)=> onDragStartRow(e, article)}
                   onDragEnd={onDragEndRow}
                   title="Glisser vers le dock (corbeille / supprimer)"
                 >
-                  {/* Sélection */}
                   <label className="absolute top-2 left-2 inline-flex items-center gap-2 cursor-pointer select-none z-10">
-                    <input type="checkbox" className="accent-blue-600 w-4 h-4" checked={isSelected} onChange={()=>toggleSelect(article.id)} />
+                    <input
+                      type="checkbox"
+                      className="accent-blue-600 w-4 h-4"
+                      checked={selectedIds.has(article.id)}
+                      onChange={()=> setSelectedIds(prev => { const n=new Set(prev); n.has(article.id)?n.delete(article.id):n.add(article.id); return n; })}
+                    />
                   </label>
 
-                  {/* Image */}
                   <div className="aspect-[16/9] w-full overflow-hidden rounded-lg mb-3 cursor-grab active:cursor-grabbing">
                     <Thumb src={article.featured_image_url || article.featured_image || null} alt={article.featured_image_alt || article.title} className="w-full h-full" />
                   </div>
 
-                  {/* Titre */}
                   <div className="mb-2">
                     <Link to={publicTo} target="_blank" rel="noopener noreferrer" className="font-semibold text-slate-900 hover:text-blue-600 line-clamp-2">
                       {article.title || <span className="text-gray-400 italic">Sans titre</span>}
                     </Link>
                   </div>
 
-                  {/* Meta */}
                   <div className="text-xs text-slate-600 flex items-center gap-2 mb-2">
                     <FaCalendarAlt className="text-slate-400" />
                     <span>{pubDate} • {pubRel}</span>
@@ -970,7 +1007,6 @@ async function apiRestoreAndPublish(id) {
                     <span className={`px-2 py-0.5 rounded-full border ${badgeClass(article.status)}`}>{article.status || 'draft'}</span>
                   </div>
 
-                  {/* Actions */}
                   <div className="flex items-center justify-end gap-2">
                     <Link to={publicTo} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg border text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100 transition">
                       <FaEye size={14} />
@@ -981,7 +1017,7 @@ async function apiRestoreAndPublish(id) {
                     <button className="p-2 rounded-lg border text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100 transition" onClick={()=>openConfirm('soft', article)}>
                       <FaTrashAlt size={14} />
                     </button>
-                    <button className="p-2 rounded-lg border text-red-600 bg-rose-50 border-rose-200 hover:bg-rose-100 transition" onClick={()=>openConfirm('hard', article)}>
+                    <button className="p-2 rounded-lg border text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100 transition" onClick={()=>openConfirm('hard', article)}>
                       <FaTrash size={14} />
                     </button>
                   </div>
@@ -1014,7 +1050,7 @@ async function apiRestoreAndPublish(id) {
       {/* MODAL CONFIRM */}
       {confirmDelete && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4" onMouseDown={(e)=> { if (e.target === e.currentTarget) closeConfirm(); }} role="dialog" aria-modal="true">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 relative animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 relative">
             <button onClick={closeConfirm} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600" aria-label="Fermer"><FaTimes /></button>
 
             <div className={`text-center ${String(confirmDelete.mode).startsWith('hard') ? 'bg-rose-50' : 'bg-amber-50'} p-6 rounded-md`}>
@@ -1042,49 +1078,61 @@ async function apiRestoreAndPublish(id) {
         </div>
       )}
 
-      {/* DOCK DnD */}
-      <div className="fixed right-4 bottom-4 z-[55] flex flex-col gap-3 select-none">
+      {/* DOCK DnD — Corbeille & Supprimer */}
+      <div className="fixed right-60 bottom-8 z-[75] flex flex-wrap gap-2 sm:gap-3 select-none">
         <div
-          onDragOver={allowDrop}
+          onDragOver={(e)=>{e.preventDefault();}}
           onDragEnter={(e)=>{e.preventDefault(); setOverSoft(true);}}
           onDragLeave={()=>setOverSoft(false)}
           onDrop={onDropSoft}
-          className={`w-52 rounded-xl border p-3 bg-white shadow transition-all
-            ${overSoft ? 'border-amber-400 ring-2 ring-amber-200 scale-[1.03]' : 'border-slate-200'}
-            ${pulseSoft ? 'animate-pulse' : ''}`}
-          title="Glisser ici pour corbeille"
+          onClick={() => navigate('/articles/trashed', { state: { fromIndex: true } })}
+          className={`
+            group relative inline-flex items-center gap-3
+            rounded-full px-4 py-2 text-sm
+            bg-blue-600 text-white cursor-pointer
+            ring-1 ring-blue-300/40 shadow-sm
+            transition-[transform,box-shadow,background-color] duration-200
+            ${overSoft ? 'scale-[1.03] ring-blue-200 shadow-md' : 'hover:scale-[1.01] hover:shadow-md'}
+          `}
+          title="Glisser ici pour corbeille (clic pour ouvrir)"
         >
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${overSoft ? 'bg-amber-100' : 'bg-amber-50'}`}>
-              <FaTrashAlt className={`${overSoft ? 'animate-bounce' : ''} text-amber-600`} />
+          <div className="w-8 h-8 rounded-full flex items-center justify-center bg-white/10 ring-1 ring-white/10">
+            <FiTrash2 className="w-4 h-4" />
+          </div>
+          <div className="leading-tight">
+            <div className="font-semibold tracking-tight flex items-center gap-2">
+              <span>Corbeille</span>
+              <span className="inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full text-[11px] font-semibold bg-white/20">
+                {trashCount}
+              </span>
             </div>
-            <div className="flex-1">
-              <div className="font-semibold text-slate-800">Corbeille</div>
-              <div className="text-xs text-slate-500">Soft delete</div>
-            </div>
+            <div className="text-[10px] text-white/80">Soft delete</div>
           </div>
         </div>
 
         <div
-          onDragOver={allowDrop}
+          onDragOver={(e)=>{e.preventDefault();}}
           onDragEnter={(e)=>{e.preventDefault(); setOverHard(true);}}
           onDragLeave={()=>setOverHard(false)}
           onDrop={onDropHard}
-          className={`w-52 rounded-xl border p-3 bg-white shadow transition-all
-            ${overHard ? 'border-rose-400 ring-2 ring-rose-200 scale-[1.03]' : 'border-slate-200'}
-            ${shakeHard ? 'animate-[wiggle_0.5s_ease-in-out_1]' : ''}`}
+          className={`
+            group relative inline-flex items-center gap-3
+            rounded-full px-4 py-2 text-sm
+            bg-blue-600 text-white
+            ring-1 ring-blue-300/40 shadow-sm
+            transition-[transform,box-shadow,background-color] duration-200
+            ${overHard ? 'scale-[1.03] ring-blue-200 shadow-md' : 'hover:scale-[1.01] hover:shadow-md'}
+            ${shakeHard ? 'animate-[wiggle_0.5s_ease-in-out_1]' : ''}
+          `}
           title="Glisser ici pour supprimer définitivement (avec confirmation)"
           style={{ animationName: shakeHard ? 'wiggle' : undefined }}
         >
-          <style>{`@keyframes wiggle{0%{transform:rotate(0)}15%{transform:rotate(-2deg) scale(1.02)}30%{transform:rotate(2deg) scale(1.02)}45%{transform:rotate(-1.5deg)}60%{transform:rotate(1.5deg)}75%{transform:rotate(-1deg)}100%{transform:rotate(0)}}`}</style>
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${overHard ? 'bg-rose-100' : 'bg-rose-50'}`}>
-              <FaTrash className={`${overHard ? 'animate-bounce' : ''} text-rose-600`} />
-            </div>
-            <div className="flex-1">
-              <div className="font-semibold text-slate-800">Supprimer</div>
-              <div className="text-xs text-slate-500">Hard delete</div>
-            </div>
+          <div className="w-8 h-8 rounded-full flex items-center justify-center bg-white/10 ring-1 ring-white/10">
+            <FiTrashFeather className="w-4 h-4" />
+          </div>
+          <div className="leading-tight">
+            <div className="font-semibold tracking-tight">Supprimer</div>
+            <div className="text-[10px] text-white/80">Hard delete</div>
           </div>
         </div>
       </div>
@@ -1094,49 +1142,55 @@ async function apiRestoreAndPublish(id) {
         <div className="fixed left-1/2 -translate-x-1/2 bottom-6 z-[65]">
           <div className="bg-slate-900 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-3">
             <span>{lastSoftDeletedIds.length} envoyé(s) à la corbeille.</span>
-            <button onClick={handleUndo} className="px-3 py-1 rounded bg-white/10 hover:bg-white/20 inline-flex items-center gap-2" title="Annuler"><FaUndo /> Annuler</button>
+            <button onClick={async () => {
+              // restauration rapide puis surbrillance persistante jusqu'à interaction
+              const ids = [...lastSoftDeletedIds];
+              try {
+                await Promise.all(ids.map((id) => apiRestore(id)));
+                setRestoredIds(new Set(ids)); // 👉 pas de timer : on attend la prochaine action
+                setToast({ type: 'success', message: `Restauration : ${ids.length}/${ids.length}` });
+                setLastSoftDeletedIds([]);
+                await load();
+                await fetchTrashCount();
+              } catch (e) { setToast({ type: 'error', message: 'Erreur lors de la restauration' }); }
+            }} className="px-3 py-1 rounded bg-white/10 hover:bg-white/20 inline-flex items-center gap-2" title="Annuler"><FaUndo /> Annuler</button>
             <button onClick={()=> setLastSoftDeletedIds([])} className="ml-2 text-white/70 hover:text-white" aria-label="Fermer"><FaTimes /></button>
-          </div>
-        </div>
-      )}
-
-      {/* Modale Vues enregistrées */}
-      {viewsModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4" onMouseDown={(e)=>{ if(e.target===e.currentTarget) setViewsModal(false); }}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 relative">
-            <button className="absolute top-4 right-4 text-gray-400 hover:text-gray-600" onClick={()=>setViewsModal(false)}><FaTimes/></button>
-            <h3 className="text-lg font-semibold mb-4">Vues enregistrées</h3>
-
-            <div className="mb-4 flex gap-2">
-              <input
-                value={newViewName}
-                onChange={(e)=>setNewViewName(e.target.value)}
-                placeholder="Nom de la vue"
-                className="flex-1 h-10 px-3 rounded-lg border border-slate-200"
-              />
-              <button onClick={saveCurrentView} className="px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700">Enregistrer</button>
-            </div>
-
-            <div className="max-h-64 overflow-y-auto space-y-2">
-              {views.length === 0 && <div className="text-slate-500 text-sm">Aucune vue enregistrée.</div>}
-              {views.map((v, idx) => (
-                <div key={`${v.createdAt}-${idx}`} className="p-3 border rounded-lg flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">{v.name}</div>
-                    <div className="text-xs text-slate-500">{new Date(v.createdAt).toLocaleString()}</div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={()=>applyView(v)} className="px-3 py-1 rounded bg-slate-100 hover:bg-slate-200 text-sm">Appliquer</button>
-                    <button onClick={()=>deleteView(idx)} className="px-3 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 text-sm">Supprimer</button>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       )}
     </div>
   );
 };
+
+/* =========================
+   Helpers UI (après composant)
+========================= */
+const badgeClass = (status) => {
+  switch (String(status || '').toLowerCase()) {
+    case 'published': return 'bg-green-100 text-green-700 border-green-200';
+    case 'archived':  return 'bg-slate-100 text-slate-700 border-slate-200';
+    case 'draft':
+    default:          return 'bg-amber-100 text-amber-700 border-amber-200';
+  }
+};
+function getCategoryFromTitle(title) {
+  const s = (title || '').toLowerCase();
+  if (s.includes('intelligence artificielle') || s.includes('ia')) return 'Intelligence Artificielle';
+  if (s.includes('startup')) return 'Startup';
+  if (s.includes('développement') || s.includes('web')) return 'Développement Web';
+  if (s.includes('marketing')) return 'Business';
+  if (s.includes('technologie')) return 'Mobile';
+  return 'Article';
+}
+const cleanSlug = (x) => { const s = (x ?? '').toString().trim(); if (!s || s === 'undefined' || s === 'null') return null; return s; };
+const buildPublicPath = (rec) => { const slug = cleanSlug(rec?.slug); const id = rec?.id != null ? String(rec.id) : null; return slug ? `/articles/${slug}` : (id ? `/articles/${id}` : '#'); };
+
+const Thumb = ({ src, alt, className='' }) => (
+  src ? (
+    <img src={src} alt={alt || 'thumb'} className={`object-cover rounded-lg shadow-sm overflow-hidden ${className}`} />
+  ) : (
+    <div className={`rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center ${className}`}>📝</div>
+  )
+);
 
 export default ArticlesIndex;

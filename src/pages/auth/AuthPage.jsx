@@ -15,7 +15,6 @@ import { startGoogleOAuth } from '../../features/auth/oauthActions';
 import OtpModal from '../../component/otp/OtpModal';
 import ForgotPasswordModal from '../../component/auth/ForgotPasswordModal';
 
-
 /* ================= Illustrations web (SVG libres) ================= */
 const THEME = 'securite';
 const THEMES = {
@@ -46,7 +45,6 @@ const GoogleIcon = () => (
 );
 
 /* ================== Messages UI utilitaires ================== */
-// ⬇️ Étendu: close + drag supportés via props (closable, draggable, onClose, onDragHandleMouseDown, style)
 const ErrorMessage = ({ id, children, visible }) => visible ? (
   <div id={id} className="field-pop error" role="alert">{children}</div>
 ) : null;
@@ -55,7 +53,7 @@ const SuccessMessage = ({ id, children, visible }) => visible ? (
   <div id={id} className="field-pop success" role="status">{children}</div>
 ) : null;
 
-// forwardRef pour permettre le drag depuis le parent
+// forwardRef pour pouvoir gérer le drag depuis le parent
 const HintMessage = React.forwardRef(
   (
     {
@@ -120,11 +118,14 @@ const InlineError = ({ id, children, visible }) => visible ? (
 ) : null;
 
 /* ================== Password helpers ================== */
-const PasswordStrength = ({ value = '' }) => {
+const PasswordStrength = ({ value = '', t }) => {
   const tests = [(v)=>v.length>=8,(v)=>/[A-Z]/.test(v)&&/[a-z]/.test(v),(v)=>/\d/.test(v),(v)=>/[^A-Za-z0-9]/.test(v)];
   const score = tests.reduce((a,t)=>a+(t(value)?1:0),0);
-  const label = value.length===0 ? 'Commencez à taper votre mot de passe'
-    : (score<=1?'Très faible':score===2?'Faible':score===3?'Bon':'Fort');
+  const label = value.length===0 ? t('auth.passwordStrength.start', 'Start typing your password')
+    : (score<=1?t('auth.passwordStrength.veryWeak', 'Very weak')
+      : score===2?t('auth.passwordStrength.weak', 'Weak')
+      : score===3?t('auth.passwordStrength.good', 'Good')
+      : t('auth.passwordStrength.strong', 'Strong'));
   return (
     <div className="strength" aria-live="polite">
       <div className="bars" aria-hidden="true">
@@ -134,12 +135,13 @@ const PasswordStrength = ({ value = '' }) => {
     </div>
   );
 };
-const PasswordHints = ({ value = '' }) => {
+
+const PasswordHints = ({ value = '', t }) => {
   const rules = [
-    { id:'len',  label:'Au moins 8 caractères',              test:v=>v.length>=8 },
-    { id:'case', label:'Majuscules & minuscules',             test:v=>/[A-Z]/.test(v)&&/[a-z]/.test(v) },
-    { id:'num',  label:'Au moins un chiffre',                 test:v=>/\d/.test(v) },
-    { id:'spec', label:'Au moins un caractère spécial (!@#)', test:v=>/[^A-Za-z0-9]/.test(v) }
+    { id:'len',  label:t('auth.passwordHints.minLength', 'At least 8 characters'), test:v=>v.length>=8 },
+    { id:'case', label:t('auth.passwordHints.mixedCase', 'Uppercase & lowercase letters'), test:v=>/[A-Z]/.test(v)&&/[a-z]/.test(v) },
+    { id:'num',  label:t('auth.passwordHints.number', 'At least one number'), test:v=>/\d/.test(v) },
+    { id:'spec', label:t('auth.passwordHints.specialChar', 'At least one special character (!@#)'), test:v=>/[^A-Za-z0-9]/.test(v) }
   ];
   return <ul className="pw-hints" aria-live="polite">
     {rules.map(r => <li key={r.id} className={r.test(value)?'ok':''}><i aria-hidden="true" /> {r.label}</li>)}
@@ -153,6 +155,24 @@ const slugify = (s='') =>
 
 const isLaravelUnique = (msg='') => /(already been taken|déjà.*pris|déjà.*utilisé|déjà.*utilisée|unique)/i.test(msg);
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/* ===== Détection du "fixed containing block" pour corriger le décalage au drag ===== */
+function getFixedContainingBlock(node) {
+  let el = node?.parentElement;
+  while (el && el !== document.documentElement) {
+    const cs = getComputedStyle(el);
+    if (
+      cs.transform !== 'none' ||
+      cs.filter !== 'none' ||
+      cs.perspective !== 'none' ||
+      (cs.contain && /paint|layout|strict|content/.test(cs.contain))
+    ) {
+      return el;
+    }
+    el = el.parentElement;
+  }
+  return null; // sinon: viewport
+}
 
 const AuthPage = () => {
   const { t } = useTranslation();
@@ -176,7 +196,7 @@ const AuthPage = () => {
   const [uniqueMsg, setUniqueMsg] = useState({ email:'', username:'' });
   const [uSuggest, setUSuggest] = useState('');
 
-  // NEW — contrôle de la bulle d’aide pour éviter qu’elle ne cache le champ confirm
+  // Contrôle bulle d'aide
   const [pwHintsOpen, setPwHintsOpen] = useState(true);
   const [pwHintFloating, setPwHintFloating] = useState(false);
   const [pwHintPos, setPwHintPos] = useState({ left: 0, top: 0 });
@@ -229,7 +249,6 @@ const AuthPage = () => {
     if(base.length>=3) setUSuggest(base.slice(0,18));
     else setUSuggest('');
   }, [isLoginActive, formData.firstName, formData.lastName, formData.username]);
-  // useEffect(()=>{ if(isAuthenticated) navigate('/'); },[isAuthenticated,navigate]);
 
   const toggleAuthMode = () => {
     setIsLoginActive(v => !v);
@@ -244,14 +263,13 @@ const AuthPage = () => {
     setUniqueStatus({ email:'idle', username:'idle' });
     setUniqueMsg({ email:'', username:'' });
     setUSuggest('');
-    // reset de la bulle
+    // reset bulle
     setPwHintsOpen(true);
     setPwHintFloating(false);
   };
 
   const handleFocus = (e)=>{
     setFocusField(e.target.name);
-    // Si on revient sur le champ password, on ré-ouvre la bulle
     if(e.target.name === 'password') setPwHintsOpen(true);
   };
   const handleBlur  = ()=>setFocusField(null);
@@ -298,11 +316,11 @@ const AuthPage = () => {
         const res=await checkUnique('email', debouncedEmail, undefined, langue);
         if(ctrl.signal.aborted) return;
         if(res?.unique){ setUniqueStatus(s=>({ ...s, email:'ok' })); setUniqueMsg(m=>({ ...m, email:'' })); }
-        else { setUniqueStatus(s=>({ ...s, email:'taken' })); setUniqueMsg(m=>({ ...m, email:res?.message || (langue==='fr'?'Cet email est déjà utilisé.':'Email already taken') })); }
-      }catch{ if(!ctrl.signal.aborted){ setUniqueStatus(s=>({ ...s, email:'error' })); setUniqueMsg(m=>({ ...m, email: langue==='fr'?'Vérification indisponible.':'Check unavailable.' })); } }
+        else { setUniqueStatus(s=>({ ...s, email:'taken' })); setUniqueMsg(m=>({ ...m, email:res?.message || t('auth.unique.emailTaken', 'Email already taken') })); }
+      }catch{ if(!ctrl.signal.aborted){ setUniqueStatus(s=>({ ...s, email:'error' })); setUniqueMsg(m=>({ ...m, email: t('auth.unique.checkUnavailable', 'Check unavailable') })); } }
     },debounceMs);
     return ()=>{ ctrl.abort(); clearTimeout(tmr); };
-  },[debouncedEmail,isLoginActive,langue]);
+  },[debouncedEmail,isLoginActive,langue,t]);
 
   useEffect(()=>{
     if(isLoginActive) return;
@@ -314,22 +332,21 @@ const AuthPage = () => {
         const res=await checkUnique('username', debouncedUsername.trim(), undefined, langue);
         if(ctrl.signal.aborted) return;
         if(res?.unique){ setUniqueStatus(s=>({ ...s, username:'ok' })); setUniqueMsg(m=>({ ...m, username:'' })); }
-        else { setUniqueStatus(s=>({ ...s, username:'taken' })); setUniqueMsg(m=>({ ...m, username:res?.message || (langue==='fr'?"Nom d'utilisateur déjà pris.":'Username already taken') })); }
-      }catch{ if(!ctrl.signal.aborted){ setUniqueStatus(s=>({ ...s, username:'error' })); setUniqueMsg(m=>({ ...m, username: langue==='fr'?'Vérification indisponible.':'Check unavailable.' })); } }
+        else { setUniqueStatus(s=>({ ...s, username:'taken' })); setUniqueMsg(m=>({ ...m, username:res?.message || t('auth.unique.usernameTaken', 'Username already taken') })); }
+      }catch{ if(!ctrl.signal.aborted){ setUniqueStatus(s=>({ ...s, username:'error' })); setUniqueMsg(m=>({ ...m, username: t('auth.unique.checkUnavailable', 'Check unavailable') })); } }
     },debounceMs);
     return ()=>{ ctrl.abort(); clearTimeout(tmr); };
-  },[debouncedUsername,isLoginActive,langue]);
+  },[debouncedUsername,isLoginActive,langue,t]);
 
   const handleSubmit = async (e)=>{
     e.preventDefault();
     setSubmitAttempted(true);
     if(!validateForm()) return;
 
-    // === LOGIN: OTP AVANT loginUser ===
     if(isLoginActive){
       try{
         setSubmitting(true);
-        const pre = await dispatch(preVerifyEmail(formData.email, langue, 'login')); // envoie le code
+        const pre = await dispatch(preVerifyEmail(formData.email, langue, 'login'));
         setPendingLogin({
           email: formData.email,
           password: formData.password,
@@ -344,12 +361,11 @@ const AuthPage = () => {
       return;
     }
 
-    // === REGISTER: OTP AVANT registerUser ===
     if(!isLoginActive){
       if(uniqueStatus.email==='taken'||uniqueStatus.username==='taken') return;
       setSubmitting(true);
       try{
-        const pre = await dispatch(preVerifyEmail(formData.email, langue, 'register')); // envoie le code
+        const pre = await dispatch(preVerifyEmail(formData.email, langue, 'register'));
         setPendingRegister({
           username:formData.username,
           first_name:formData.firstName,
@@ -366,7 +382,6 @@ const AuthPage = () => {
     }
   };
 
-  // OTP validé => on lance l'action correspondante
   const onOtpVerified = async () => {
     setOtpOpen(false);
     setSubmitting(true);
@@ -375,9 +390,8 @@ const AuthPage = () => {
         await dispatch(loginUser(pendingLogin));
         setPendingLogin(null);
       } else if (otpCtx.intent === 'register' && pendingRegister) {
-        const result = await dispatch(registerUser(pendingRegister));
+        await dispatch(registerUser(pendingRegister));
         setPendingRegister(null);
-        // Si l'API renvoie des erreurs (forme redux déjà gérée), rien à ajouter ici
       }
     } finally {
       setSubmitting(false);
@@ -392,29 +406,29 @@ const AuthPage = () => {
     if(name==='confirmPassword' && formData.confirmPassword && formData.confirmPassword===formData.password) return 'valid';
     return '';
   };
-  const showEmailHint = !isLoginActive && !!formData.email && (['checking','taken','error'].includes(uniqueStatus.email));
-  const showUsernameHint = !isLoginActive && !!formData.username && (['checking','taken','error'].includes(uniqueStatus.username));
 
-  // NEW — gestion du drag de la bulle
+  /* ===== Drag corrigé: soustraction du rect de l'ancêtre transformé ===== */
   const startPwHintDrag = useCallback((e) => {
     const el = pwHintRef.current;
-    if (!el) return;
+    if (!el || (e.button !== undefined && e.button !== 0)) return; // click gauche uniquement
     e.preventDefault();
 
-    // passer en mode flottant au 1er déplacement
     const rect = el.getBoundingClientRect();
+    const fcb  = getFixedContainingBlock(el); // ancêtre transformé, ou null
+    const base = fcb ? fcb.getBoundingClientRect() : { left: 0, top: 0 };
+
     const startX = e.clientX;
     const startY = e.clientY;
     const offsetX = startX - rect.left;
     const offsetY = startY - rect.top;
 
     setPwHintFloating(true);
-    setPwHintPos({ left: rect.left, top: rect.top });
+    setPwHintPos({ left: rect.left - base.left, top: rect.top - base.top });
 
     const onMove = (ev) => {
       setPwHintPos({
-        left: Math.max(8, ev.clientX - offsetX),
-        top:  Math.max(8, ev.clientY - offsetY),
+        left: Math.max(8, ev.clientX - offsetX - base.left),
+        top:  Math.max(8, ev.clientY - offsetY - base.top),
       });
     };
     const onUp = () => {
@@ -467,16 +481,16 @@ const AuthPage = () => {
               <aside className="auth-media" aria-hidden="true">
                 <img src={LOGIN_ILLU} alt="" className="auth-media-img img-fade" onError={(e)=>{ e.currentTarget.style.display='none'; }} loading="eager"/>
                 <div className="auth-media-overlay">
-                  <h3>Connexion</h3>
-                  <p>Accédez à votre espace en toute sécurité</p>
+                  <h3>{t('auth.media.login.title', 'Login')}</h3>
+                  <p>{t('auth.media.login.subtitle', 'Access your space securely')}</p>
                 </div>
                 <div className="auth-media-fallback">
                   <span className="badge">UI</span>
-                  <h4>Vente de consommables d’imprimerie</h4>
+                  <h4>{t('auth.media.fallback.title', 'Printing consumables sales')}</h4>
                   <ul>
-                    <li>DTF — Poudres & Films</li>
-                    <li>Éco-solvant — DX5/DX7</li>
-                    <li>Sublimation — Textile & transfert</li>
+                    <li>{t('auth.media.fallback.dtf', 'DTF — Powders & Films')}</li>
+                    <li>{t('auth.media.fallback.eco', 'Eco-solvent — DX5/DX7')}</li>
+                    <li>{t('auth.media.fallback.sub', 'Sublimation — Textile & transfer')}</li>
                   </ul>
                 </div>
               </aside>
@@ -513,11 +527,11 @@ const AuthPage = () => {
                     <label>{t("password")}</label>
                     <span className="input-icon">🔒</span>
                     <button type="button" className="password-toggle" onClick={()=>togglePasswordVisibility('login')}
-                      aria-label={showPassword.login ? t('hide_password') : t('show_password')}>
+                      aria-label={showPassword.login ? t('auth.hidePassword') : t('auth.showPassword')}>
                       <FontAwesomeIcon icon={showPassword.login ? faEyeSlash : faEye} />
                     </button>
                     <ErrorMessage id="err-pass-login" visible={!!errors.password}>{errors.password}</ErrorMessage>
-                    {caps.login && <div className="helper-text warning">Verr. Maj activée</div>}
+                    {caps.login && <div className="helper-text warning">{t('auth.capsLock', 'Caps Lock is on')}</div>}
                   </div>
 
                   <div className="form-row justify-between w-full  flex items-center px-2 py-1 rounded">
@@ -525,7 +539,6 @@ const AuthPage = () => {
                       <input type="checkbox" name="rememberMe" checked={formData.rememberMe} onChange={handleChange} />
                       <span>{t("remember_me")}</span>
                     </label>
-                    {/* Ouvre le modal "Mot de passe oublié" */}
                     <button type="button" className="link" onClick={()=>setForgotOpen(true)}>
                       {t("forgot_password")}
                     </button>
@@ -602,15 +615,17 @@ const AuthPage = () => {
                       <span className="right-mark">✓</span>
                       {uSuggest && !formData.username && (
                         <button type="button" className="suggest-pill" onClick={()=>setFormData(p=>({...p, username: uSuggest}))}
-                          title="Utiliser la suggestion">@{uSuggest}</button>
+                          title={t('auth.useSuggestion', 'Use suggestion')}>@{uSuggest}</button>
                       )}
                       <small className="char-counter">{formData.username.length}/20</small>
 
                       <ErrorMessage id="err-username" visible={!!errors.username}>{errors.username}</ErrorMessage>
-                      <SuccessMessage id="success-username" visible={uniqueStatus.username === 'ok'}>Nom d'utilisateur disponible</SuccessMessage>
+                      <SuccessMessage id="success-username" visible={uniqueStatus.username === 'ok'}>
+                        {t('auth.unique.usernameAvailable', 'Username available')}
+                      </SuccessMessage>
                       <HintMessage id="hint-username" type="hint" placement="right" visible={!!formData.username && (['checking','taken','error'].includes(uniqueStatus.username))}>
-                        {uniqueStatus.username === 'checking' && <span className="hint-row"><span className="mini-spinner" /> Vérification…</span>}
-                        {uniqueStatus.username === 'taken' && <span>{uniqueMsg.username || "Ce nom d'utilisateur est déjà pris."}</span>}
+                        {uniqueStatus.username === 'checking' && <span className="hint-row"><span className="mini-spinner" /> {t('auth.unique.checking', 'Checking...')}</span>}
+                        {uniqueStatus.username === 'taken' && <span>{uniqueMsg.username || t('auth.unique.usernameTaken', 'Username already taken')}</span>}
                         {uniqueStatus.username === 'error' && <span>{uniqueMsg.username}</span>}
                       </HintMessage>
                     </div>
@@ -624,10 +639,12 @@ const AuthPage = () => {
                       <span className="input-icon">@</span>
                       <span className="right-mark">✓</span>
                       <ErrorMessage id="err-email" visible={!!errors.email}>{errors.email}</ErrorMessage>
-                      <SuccessMessage id="success-email" visible={uniqueStatus.email === 'ok'}>Email disponible</SuccessMessage>
+                      <SuccessMessage id="success-email" visible={uniqueStatus.email === 'ok'}>
+                        {t('auth.unique.emailAvailable', 'Email available')}
+                      </SuccessMessage>
                       <HintMessage id="hint-email" type="hint" placement="right" visible={!!formData.email && (['checking','taken','error'].includes(uniqueStatus.email))}>
-                        {uniqueStatus.email === 'checking' && <span className="hint-row"><span className="mini-spinner" /> Vérification…</span>}
-                        {uniqueStatus.email === 'taken' && <span>{uniqueMsg.email || 'Cet email est déjà utilisé.'}</span>}
+                        {uniqueStatus.email === 'checking' && <span className="hint-row"><span className="mini-spinner" /> {t('auth.unique.checking', 'Checking...')}</span>}
+                        {uniqueStatus.email === 'taken' && <span>{uniqueMsg.email || t('auth.unique.emailTaken', 'Email already taken')}</span>}
                         {uniqueStatus.email === 'error' && <span>{uniqueMsg.email}</span>}
                       </HintMessage>
                     </div>
@@ -643,12 +660,12 @@ const AuthPage = () => {
                       <label>{t("password")}</label>
                       <span className="input-icon">🔒</span>
                       <button type="button" className="password-toggle" onClick={()=>togglePasswordVisibility('register')}
-                        aria-label={showPassword.register ? t('hide_password') : t('show_password')}>
+                        aria-label={showPassword.register ? t('auth.hidePassword') : t('auth.showPassword')}>
                         <FontAwesomeIcon icon={showPassword.register ? faEyeSlash : faEye} />
                       </button>
                       <ErrorMessage id="err-pass" visible={!!errors.password}>{errors.password}</ErrorMessage>
 
-                      {/* ⬇️ Bulle d’aide modifiée: fermable + draggable pour ne pas couvrir confirmPassword */}
+                      {/* Bulle d'aide: fermable + draggable (corrigée pour offset) */}
                       <HintMessage
                         ref={pwHintRef}
                         id="pw-pop"
@@ -667,18 +684,18 @@ const AuthPage = () => {
                           maxWidth: 'min(360px, 85vw)'
                         } : undefined}
                       >
-                        {caps.register && <div className="helper-text warning" style={{paddingTop:26}}>Verr. Maj activée</div>}
+                        {caps.register && <div className="helper-text warning" style={{paddingTop:26}}>{t('auth.capsLock', 'Caps Lock is on')}</div>}
                         <div style={{paddingTop: pwHintFloating ? 28 : 0}}>
-                          <PasswordStrength value={formData.password} />
-                          <PasswordHints value={formData.password} />
+                          <PasswordStrength value={formData.password} t={t} />
+                          <PasswordHints value={formData.password} t={t} />
                           {pwHintFloating && (
                             <button
                               type="button"
-                              onClick={()=>{ setPwHintFloating(false); /* redeviens docké à droite */ }}
+                              onClick={()=>{ setPwHintFloating(false); }}
                               className="mini-link"
                               style={{ marginTop: 8, background:'none', border:'none', textDecoration:'underline', cursor:'pointer' }}
                             >
-                              Replacer automatiquement
+                              {t('auth.resetPosition', 'Reset to default position')}
                             </button>
                           )}
                         </div>
@@ -694,7 +711,7 @@ const AuthPage = () => {
                       <label>{t("confirm_password")}</label>
                       <span className="input-icon">🔒</span>
                       <button type="button" className="password-toggle" onClick={()=>togglePasswordVisibility('confirm')}
-                        aria-label={showPassword.confirm ? t('hide_password') : t('show_password')}>
+                        aria-label={showPassword.confirm ? t('auth.hidePassword') : t('auth.showPassword')}>
                         <FontAwesomeIcon icon={showPassword.confirm ? faEyeSlash : faEye} />
                       </button>
                       {formData.confirmPassword && formData.confirmPassword===formData.password && (
@@ -729,16 +746,16 @@ const AuthPage = () => {
               <aside className="auth-media" aria-hidden="true">
                 <img src={REGISTER_ILLU} alt="" className="auth-media-img img-fade" onError={(e)=>{ e.currentTarget.style.display='none'; }} loading="eager"/>
                 <div className="auth-media-overlay">
-                  <h3>Inscription</h3>
-                  <p>Rejoignez la communauté et démarrez</p>
+                  <h3>{t('auth.media.register.title', 'Registration')}</h3>
+                  <p>{t('auth.media.register.subtitle', 'Join the community and get started')}</p>
                 </div>
                 <div className="auth-media-fallback">
                   <span className="badge">UI</span>
-                  <h4>Créer un compte</h4>
+                  <h4>{t('auth.media.fallback.createAccount', 'Create an account')}</h4>
                   <ul>
-                    <li>Nom, prénom, e-mail</li>
-                    <li>Nom d’utilisateur unique</li>
-                    <li>Mot de passe robuste</li>
+                    <li>{t('auth.media.fallback.nameEmail', 'Name, first name, email')}</li>
+                    <li>{t('auth.media.fallback.uniqueUsername', 'Unique username')}</li>
+                    <li>{t('auth.media.fallback.strongPassword', 'Strong password')}</li>
                   </ul>
                 </div>
               </aside>

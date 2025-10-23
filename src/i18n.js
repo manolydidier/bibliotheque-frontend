@@ -776,6 +776,56 @@ i18n
     }
   }
 ,
+
+  "auth": {
+    "hidePassword": "Hide password",
+    "showPassword": "Show password",
+    "capsLock": "Caps Lock is on",
+    "useSuggestion": "Use suggestion",
+    "resetPosition": "Reset to default position",
+    "passwordStrength": {
+      "start": "Start typing your password",
+      "veryWeak": "Very weak",
+      "weak": "Weak",
+      "good": "Good",
+      "strong": "Strong"
+    },
+    "passwordHints": {
+      "minLength": "At least 8 characters",
+      "mixedCase": "Uppercase & lowercase letters",
+      "number": "At least one number",
+      "specialChar": "At least one special character (!@#)"
+    },
+    "unique": {
+      "emailAvailable": "Email available",
+      "usernameAvailable": "Username available",
+      "emailTaken": "Email already taken",
+      "usernameTaken": "Username already taken",
+      "checking": "Checking...",
+      "checkUnavailable": "Check unavailable"
+    },
+    "media": {
+      "login": {
+        "title": "Login",
+        "subtitle": "Access your space securely"
+      },
+      "register": {
+        "title": "Registration",
+        "subtitle": "Join the community and get started"
+      },
+      "fallback": {
+        "title": "Printing consumables sales",
+        "dtf": "DTF — Powders & Films",
+        "eco": "Eco-solvent — DX5/DX7",
+        "sub": "Sublimation — Textile & transfer",
+        "createAccount": "Create an account",
+        "nameEmail": "Name, first name, email",
+        "uniqueUsername": "Unique username",
+        "strongPassword": "Strong password"
+      }
+    }
+  }
+,
               "role_permissions_management": "Role Permissions Management",
             "manage_role_permissions_description": "Manage associations between roles and permissions",
             "search_roles_permissions": "Search roles and permissions...",
@@ -1685,6 +1735,56 @@ i18n
     },
     "errors": {
       "generic": "Une erreur est survenue lors de la vérification."
+    }
+  }
+,
+
+  "auth": {
+    "hidePassword": "Masquer le mot de passe",
+    "showPassword": "Afficher le mot de passe",
+    "capsLock": "Verr. Maj activée",
+    "useSuggestion": "Utiliser la suggestion",
+    "resetPosition": "Replacer automatiquement",
+    "passwordStrength": {
+      "start": "Commencez à taper votre mot de passe",
+      "veryWeak": "Très faible",
+      "weak": "Faible",
+      "good": "Bon",
+      "strong": "Fort"
+    },
+    "passwordHints": {
+      "minLength": "Au moins 8 caractères",
+      "mixedCase": "Majuscules & minuscules",
+      "number": "Au moins un chiffre",
+      "specialChar": "Au moins un caractère spécial (!@#)"
+    },
+    "unique": {
+      "emailAvailable": "Email disponible",
+      "usernameAvailable": "Nom d'utilisateur disponible",
+      "emailTaken": "Cet email est déjà utilisé",
+      "usernameTaken": "Ce nom d'utilisateur est déjà pris",
+      "checking": "Vérification…",
+      "checkUnavailable": "Vérification indisponible"
+    },
+    "media": {
+      "login": {
+        "title": "Connexion",
+        "subtitle": "Accédez à votre espace en toute sécurité"
+      },
+      "register": {
+        "title": "Inscription",
+        "subtitle": "Rejoignez la communauté et démarrez"
+      },
+      "fallback": {
+        "title": "Vente de consommables d'imprimerie",
+        "dtf": "DTF — Poudres & Films",
+        "eco": "Éco-solvant — DX5/DX7",
+        "sub": "Sublimation — Textile & transfert",
+        "createAccount": "Créer un compte",
+        "nameEmail": "Nom, prénom, e-mail",
+        "uniqueUsername": "Nom d'utilisateur unique",
+        "strongPassword": "Mot de passe robuste"
+      }
     }
   }
 ,

@@ -8,6 +8,27 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
  * IMPORTANT : on NE fixe PAS "Content-Type" quand on envoie un FormData.
  * 🔎 Aucune navigation ici : pas de useNavigate, navigate, window.location, etc.
  */
+// --- View de-dupe helpers (session-scoped = par onglet) ---
+const viewedKey = (idOrSlug) => `viewed:${idOrSlug}`;
+const hasViewed = (idOrSlug) => {
+  try { return sessionStorage.getItem(viewedKey(idOrSlug)) === "1"; } catch { return false; }
+};
+const markViewed = (idOrSlug) => {
+  try { sessionStorage.setItem(viewedKey(idOrSlug), "1"); } catch {}
+};
+
+// Construit les params pour /articles/{idOrSlug}
+const buildShowParams = ({ include, fields, password, incrementView = true, idOrSlug } = {}) => {
+  const params = {};
+  if (Array.isArray(include) && include.length) params.include = include.join(",");
+  if (Array.isArray(fields)  && fields.length)  params.fields  = fields.join(",");
+  if (password) params.password = password;
+  // N'ajouter increment_view=1 que si pas déjà vu dans CET onglet
+  if (incrementView && idOrSlug && !hasViewed(idOrSlug)) params.increment_view = 1;
+  return params;
+};
+
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
@@ -74,8 +95,21 @@ api.interceptors.response.use(
 export const listArticles = (params = {}) =>
   api.get("/articles", { params }).then((r) => r.data);
 
-export const getArticle = (id) =>
-  api.get(`/articles/${id}`).then((r) => r.data);
+export const getArticle = async (idOrSlug, opts = {}) => {
+  const params  = buildShowParams({ ...opts, idOrSlug });
+  const headers = opts.password ? { "X-Article-Password": opts.password } : undefined;
+
+  const res = await api.get(`/articles/${encodeURIComponent(idOrSlug)}`, { params, headers });
+
+  // Si l'API confirme l'incrément, on mémorise côté client pour ne plus renvoyer increment_view
+  const inc = res?.data?.meta?.view_incremented;
+  if (params.increment_view && (inc === true || inc === 1)) {
+    markViewed(idOrSlug);
+  }
+
+  return res.data; // on renvoie le payload brut (data + meta)
+};
+
 
 // CREATE
 // - JSON  -> POST /articlesstore
