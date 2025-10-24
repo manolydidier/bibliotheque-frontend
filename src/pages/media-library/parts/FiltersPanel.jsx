@@ -1,11 +1,9 @@
-// ------------------------------
-// File: src/media-library/parts/FiltersPanel.jsx
-// Improved + robust + i18n
-// - Normalise les props options (categories/tags/authors) quel que soit le shape
-// - Evite filters undefined via défaut interne
-// - SUPPRIME TOUS LES CHIFFRES D'AFFICHAGE (pills, chips, badge total)
-// - Support i18n complet
-// ------------------------------
+// src/media-library/parts/FiltersPanel.jsx
+// Improved + robust + i18n (NO <style jsx>, NO jsx prop)
+// - Normalise options (categories/tags/authors)
+// - Valeurs par défaut sûres
+// - Aucun badge/compteur numérique en UI
+// - i18n complet
 import { useEffect, useState, useCallback, useMemo, useRef, useLayoutEffect } from "react";
 import { useTranslation } from 'react-i18next';
 import {
@@ -14,10 +12,11 @@ import {
   FaUser, FaTrash, FaCheck, FaThumbtack, FaEraser,
 } from "react-icons/fa";
 import { cls } from "../shared/utils/format";
+import "./FiltersPanel.css"; // 👈 styles externes (remplace <style jsx>)
 
-/* -------------------------------------------
-   Constants
-------------------------------------------- */
+// -------------------------------------------
+// Constants
+// -------------------------------------------
 const ANIMATION_DELAYS = {
   TYPEWRITER_END: 900,
   TYPEWRITER_START: 400,
@@ -33,7 +32,6 @@ const STORAGE_KEYS = {
   SEARCH_HISTORY: "article-search-history",
 };
 
-// Défault filters (même forme que le container)
 const DEFAULT_FILTERS = {
   categories: [],
   tags: [],
@@ -47,17 +45,11 @@ const DEFAULT_FILTERS = {
   ratingMax: 5,
 };
 
-/* -------------------------------------------
-   Hooks utilitaires
-------------------------------------------- */
-
+// -------------------------------------------
+// Hooks utilitaires
+// -------------------------------------------
 function useTypewriter(textList, enabled) {
-  const [state, setState] = useState({
-    text: "",
-    currentIndex: 0,
-    position: 0,
-    direction: 1,
-  });
+  const [state, setState] = useState({ text: "", currentIndex: 0, position: 0, direction: 1 });
 
   useEffect(() => {
     if (!enabled || !textList.length) {
@@ -81,17 +73,13 @@ function useTypewriter(textList, enabled) {
         if (prev.direction === 1) {
           const nextPos = Math.min(currentText.length, prev.position + 1);
           return {
-            ...prev,
-            position: nextPos,
-            text: currentText.slice(0, nextPos),
+            ...prev, position: nextPos, text: currentText.slice(0, nextPos),
             direction: nextPos === currentText.length ? -1 : 1,
           };
         } else {
           const nextPos = Math.max(0, prev.position - 1);
           return {
-            ...prev,
-            position: nextPos,
-            text: currentText.slice(0, nextPos),
+            ...prev, position: nextPos, text: currentText.slice(0, nextPos),
             direction: nextPos === 0 ? 1 : -1,
             currentIndex: nextPos === 0 ? (prev.currentIndex + 1) % textList.length : prev.currentIndex,
           };
@@ -239,9 +227,9 @@ function useAutoHeight(isOpen, dependencies = []) {
   return { wrapperRef, contentRef, height };
 }
 
-/* -------------------------------------------
-   Normalizers d'options (categories/tags/authors)
-------------------------------------------- */
+// -------------------------------------------
+// Normalizers
+// -------------------------------------------
 const extractArray = (src) => {
   if (Array.isArray(src)) return src;
   if (src && Array.isArray(src.data)) return src.data;
@@ -271,10 +259,9 @@ const normalizeOptionsList = (input, kind) => {
     .filter(Boolean);
 };
 
-/* -------------------------------------------
-   UI parts
-------------------------------------------- */
-
+// -------------------------------------------
+// UI atoms
+// -------------------------------------------
 const Chip = ({ active, onClick, children, index = 0, disabled = false }) => (
   <button
     type="button"
@@ -359,9 +346,9 @@ const InputWithIcon = ({ icon, onChange, label, ...props }) => (
   </div>
 );
 
-/* -------------------------------------------
-   Main component
-------------------------------------------- */
+// -------------------------------------------
+// Main component
+// -------------------------------------------
 export default function FiltersPanel({
   search, setSearch,
   filters: rawFilters = DEFAULT_FILTERS,
@@ -373,9 +360,8 @@ export default function FiltersPanel({
   categoriesOptions = [],
   tagsOptions = [],
 }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
 
-  // Search hints avec i18n
   const SEARCH_HINTS = useMemo(() => [
     t('filters.searchHints.example1'),
     t('filters.searchHints.example2'),
@@ -383,12 +369,10 @@ export default function FiltersPanel({
     t('filters.searchHints.tip'),
   ], [t]);
 
-  // Normalise options (peu importe la forme)
   const safeAuthors    = useMemo(() => normalizeOptionsList(authorsOptions, "authors"), [authorsOptions]);
   const safeCategories = useMemo(() => normalizeOptionsList(categoriesOptions, "categories"), [categoriesOptions]);
   const safeTags       = useMemo(() => normalizeOptionsList(tagsOptions, "tags"), [tagsOptions]);
 
-  // Normalizer des filters
   const normalizeFilters = useMemo(() => {
     const normalizeArray = (v) => Array.isArray(v) ? v : [];
     const normalizeBool  = (v) => !!v;
@@ -431,11 +415,9 @@ export default function FiltersPanel({
   const { show: showToast, toastElements } = useToast();
   const { wrapperRef, contentRef, height } = useAutoHeight(isExpanded, [activeMenu, localFilters, savedFilters]);
 
-  // Sync externes → internes
   useEffect(() => setLocalFilters(normalizeFilters(rawFilters)), [rawFilters, normalizeFilters]);
   useEffect(() => setSearchQuery(String(search || "")), [search]);
 
-  // Fermer menus au clic extérieur
   const handleOutsideClick = useCallback((e) => {
     if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setActiveMenu(null);
     if (searchWrapperRef.current && !searchWrapperRef.current.contains(e.target) && !isHistoryPinned) {
@@ -447,7 +429,6 @@ export default function FiltersPanel({
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [handleOutsideClick]);
 
-  // Raccourcis
   useEffect(() => {
     const onKey = (ev) => {
       if (ev.key === "Escape") {
@@ -470,7 +451,6 @@ export default function FiltersPanel({
     return () => document.removeEventListener("keydown", onKey);
   }, [showSaveModal, activeMenu, isExpanded]);
 
-  // Actions
   const handleApplyFilters = useCallback(() => {
     setFilters(normalizeFilters(localFilters));
     setActiveMenu(null);
@@ -514,7 +494,6 @@ export default function FiltersPanel({
     return ok;
   }, [localFilters, saveFilter, normalizeFilters, showToast, t]);
 
-  // Helpers render options (SANS compter)
   const renderOptionChips = (options, type) => {
     if (!options.length) {
       return <div className="text-sm text-slate-500">{t('filters.noOptions', { type: t(`filters.types.${type}`) })}</div>;
@@ -545,7 +524,6 @@ export default function FiltersPanel({
     );
   };
 
-  // UI
   const animatedHint = useTypewriter(SEARCH_HINTS, !searchQuery.length);
 
   return (
@@ -681,7 +659,7 @@ export default function FiltersPanel({
             )}
           </div>
 
-          {/* Contrôles droite */}
+          {/* Right controls */}
           <div className="flex items-center gap-3">
             <div className="flex bg-white rounded-xl border border-slate-200 p-1" role="tablist">
               {[
@@ -766,49 +744,13 @@ export default function FiltersPanel({
                   className="px-6 pt-4 pb-2 flex gap-2 overflow-x-auto no-scrollbar"
                   style={{ scrollbarWidth: "none" }}
                 >
-                  <Pill
-                    label={t('filters.categories')}
-                    icon={<FaTag />}
-                    open={activeMenu === "categories"}
-                    onToggle={() => setActiveMenu(activeMenu === "categories" ? null : "categories")}
-                  />
-                  <Pill
-                    label={t('filters.tags')}
-                    icon={<FaTag />}
-                    open={activeMenu === "tags"}
-                    onToggle={() => setActiveMenu(activeMenu === "tags" ? null : "tags")}
-                  />
-                  <Pill
-                    label={t('filters.authors')}
-                    icon={<FaUser />}
-                    open={activeMenu === "authors"}
-                    onToggle={() => setActiveMenu(activeMenu === "authors" ? null : "authors")}
-                  />
-                  <Pill
-                    label={t('filters.options')}
-                    icon={<FaFilter />}
-                    open={activeMenu === "options"}
-                    onToggle={() => setActiveMenu(activeMenu === "options" ? null : "options")}
-                  />
-                  <Pill
-                    label={t('filters.dates')}
-                    icon={<FaCalendar />}
-                    open={activeMenu === "dates"}
-                    onToggle={() => setActiveMenu(activeMenu === "dates" ? null : "dates")}
-                  />
-                  <Pill
-                    label={t('filters.rating')}
-                    icon={<FaThumbsUp />}
-                    open={activeMenu === "rating"}
-                    onToggle={() => setActiveMenu(activeMenu === "rating" ? null : "rating")}
-                  />
-
-                  <Pill
-                    label={t('filters.saved')}
-                    icon={<FaBookmark />}
-                    open={activeMenu === "saved"}
-                    onToggle={() => setActiveMenu(activeMenu === "saved" ? null : "saved")}
-                  />
+                  <Pill label={t('filters.categories')} icon={<FaTag />} open={activeMenu === "categories"} onToggle={() => setActiveMenu(activeMenu === "categories" ? null : "categories")} />
+                  <Pill label={t('filters.tags')}        icon={<FaTag />} open={activeMenu === "tags"}        onToggle={() => setActiveMenu(activeMenu === "tags" ? null : "tags")} />
+                  <Pill label={t('filters.authors')}     icon={<FaUser />} open={activeMenu === "authors"}     onToggle={() => setActiveMenu(activeMenu === "authors" ? null : "authors")} />
+                  <Pill label={t('filters.options')}     icon={<FaFilter />} open={activeMenu === "options"}   onToggle={() => setActiveMenu(activeMenu === "options" ? null : "options")} />
+                  <Pill label={t('filters.dates')}       icon={<FaCalendar />} open={activeMenu === "dates"}   onToggle={() => setActiveMenu(activeMenu === "dates" ? null : "dates")} />
+                  <Pill label={t('filters.rating')}      icon={<FaThumbsUp />} open={activeMenu === "rating"}  onToggle={() => setActiveMenu(activeMenu === "rating" ? null : "rating")} />
+                  <Pill label={t('filters.saved')}       icon={<FaBookmark />} open={activeMenu === "saved"}   onToggle={() => setActiveMenu(activeMenu === "saved" ? null : "saved")} />
 
                   <div className="ml-auto flex gap-2 pl-4">
                     <button
@@ -835,118 +777,45 @@ export default function FiltersPanel({
 
               {/* Sections */}
               <div className="px-6 pb-6 space-y-3">
-                <FilterSection
-                  visible={activeMenu === "categories"}
-                  title={t('filters.categories')}
-                  onClear={localFilters.categories.length ? () => setLocalFilters(p => ({ ...p, categories: [] })) : undefined}
-                >
+                <FilterSection visible={activeMenu === "categories"} title={t('filters.categories')} onClear={localFilters.categories.length ? () => setLocalFilters(p => ({ ...p, categories: [] })) : undefined}>
                   {renderOptionChips(safeCategories, 'categories')}
                 </FilterSection>
 
-                <FilterSection
-                  visible={activeMenu === "tags"}
-                  title={t('filters.tags')}
-                  onClear={localFilters.tags.length ? () => setLocalFilters(p => ({ ...p, tags: [] })) : undefined}
-                >
+                <FilterSection visible={activeMenu === "tags"} title={t('filters.tags')} onClear={localFilters.tags.length ? () => setLocalFilters(p => ({ ...p, tags: [] })) : undefined}>
                   {renderOptionChips(safeTags, 'tags')}
                 </FilterSection>
 
-                <FilterSection
-                  visible={activeMenu === "authors"}
-                  title={t('filters.authors')}
-                  onClear={localFilters.authors.length ? () => setLocalFilters(p => ({ ...p, authors: [] })) : undefined}
-                >
+                <FilterSection visible={activeMenu === "authors"} title={t('filters.authors')} onClear={localFilters.authors.length ? () => setLocalFilters(p => ({ ...p, authors: [] })) : undefined}>
                   {renderOptionChips(safeAuthors, 'authors')}
                 </FilterSection>
 
                 <FilterSection
                   visible={activeMenu === "options"}
                   title={t('filters.quickOptions')}
-                  onClear={
-                    (localFilters.featuredOnly || localFilters.stickyOnly || localFilters.unreadOnly)
-                      ? () => setLocalFilters(p => ({ ...p, featuredOnly: false, stickyOnly: false, unreadOnly: false }))
-                      : undefined
-                  }
+                  onClear={(localFilters.featuredOnly || localFilters.stickyOnly || localFilters.unreadOnly)
+                    ? () => setLocalFilters(p => ({ ...p, featuredOnly: false, stickyOnly: false, unreadOnly: false }))
+                    : undefined}
                 >
                   <div className="flex flex-wrap gap-3">
-                    <ToggleButton
-                      active={localFilters.featuredOnly}
-                      onClick={() => setLocalFilters(prev => ({ ...prev, featuredOnly: !prev.featuredOnly }))}
-                      icon={<FaStar />}
-                      label={t('filters.featuredOnly')}
-                    />
-                    <ToggleButton
-                      active={localFilters.stickyOnly}
-                      onClick={() => setLocalFilters(prev => ({ ...prev, stickyOnly: !prev.stickyOnly }))}
-                      icon={<FaThumbtack />}
-                      label={t('filters.pinnedOnly')}
-                    />
-                    <ToggleButton
-                      active={localFilters.unreadOnly}
-                      onClick={() => setLocalFilters(prev => ({ ...prev, unreadOnly: !prev.unreadOnly }))}
-                      icon={<FaEye />}
-                      label={t('filters.unreadOnly')}
-                    />
+                    <ToggleButton active={localFilters.featuredOnly} onClick={() => setLocalFilters(prev => ({ ...prev, featuredOnly: !prev.featuredOnly }))} icon={<FaStar />} label={t('filters.featuredOnly')} />
+                    <ToggleButton active={localFilters.stickyOnly}   onClick={() => setLocalFilters(prev => ({ ...prev, stickyOnly: !prev.stickyOnly }))}   icon={<FaThumbtack />} label={t('filters.pinnedOnly')} />
+                    <ToggleButton active={localFilters.unreadOnly}   onClick={() => setLocalFilters(prev => ({ ...prev, unreadOnly: !prev.unreadOnly }))}   icon={<FaEye />} label={t('filters.unreadOnly')} />
                   </div>
                 </FilterSection>
 
-                <FilterSection
-                  visible={activeMenu === "dates"}
-                  title={t('filters.dates')}
-                  onClear={(localFilters.dateFrom || localFilters.dateTo) ? () => setLocalFilters(p => ({ ...p, dateFrom: "", dateTo: "" })) : undefined}
-                >
+                <FilterSection visible={activeMenu === "dates"} title={t('filters.dates')} onClear={(localFilters.dateFrom || localFilters.dateTo) ? () => setLocalFilters(p => ({ ...p, dateFrom: "", dateTo: "" })) : undefined}>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <InputWithIcon
-                      icon={<FaCalendar />}
-                      type="date"
-                      label={t('filters.startDate')}
-                      value={localFilters.dateFrom}
-                      onChange={(value) => setLocalFilters(prev => ({ ...prev, dateFrom: value }))}
-                    />
-                    <InputWithIcon
-                      icon={<FaCalendar />}
-                      type="date"
-                      label={t('filters.endDate')}
-                      value={localFilters.dateTo}
-                      onChange={(value) => setLocalFilters(prev => ({ ...prev, dateTo: value }))}
-                    />
+                    <InputWithIcon icon={<FaCalendar />} type="date" label={t('filters.startDate')} value={localFilters.dateFrom} onChange={(value) => setLocalFilters(prev => ({ ...prev, dateFrom: value }))} />
+                    <InputWithIcon icon={<FaCalendar />} type="date" label={t('filters.endDate')}   value={localFilters.dateTo}   onChange={(value) => setLocalFilters(prev => ({ ...prev, dateTo: value }))} />
                   </div>
                 </FilterSection>
 
-                <FilterSection
-                  visible={activeMenu === "rating"}
-                  title={t('filters.rating')}
-                  onClear={(localFilters.ratingMin > 0 || localFilters.ratingMax < 5) ? () => setLocalFilters(p => ({ ...p, ratingMin: 0, ratingMax: 5 })) : undefined}
-                >
+                <FilterSection visible={activeMenu === "rating"} title={t('filters.rating')} onClear={(localFilters.ratingMin > 0 || localFilters.ratingMax < 5) ? () => setLocalFilters(p => ({ ...p, ratingMin: 0, ratingMax: 5 })) : undefined}>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <InputWithIcon
-                      icon={<FaThumbsUp />}
-                      type="number"
-                      min="0"
-                      max="5"
-                      step="0.1"
-                      placeholder={t('filters.minRating')}
-                      label={t('filters.minRating')}
-                      value={localFilters.ratingMin}
-                      onChange={(value) => setLocalFilters(prev => ({
-                        ...prev,
-                        ratingMin: Math.min(5, Math.max(0, parseFloat(value) || 0))
-                      }))}
-                    />
-                    <InputWithIcon
-                      icon={<FaThumbsUp />}
-                      type="number"
-                      min="0"
-                      max="5"
-                      step="0.1"
-                      placeholder={t('filters.maxRating')}
-                      label={t('filters.maxRating')}
-                      value={localFilters.ratingMax}
-                      onChange={(value) => setLocalFilters(prev => ({
-                        ...prev,
-                        ratingMax: Math.min(5, Math.max(0, parseFloat(value) || 5))
-                      }))}
-                    />
+                    <InputWithIcon icon={<FaThumbsUp />} type="number" min="0" max="5" step="0.1" placeholder={t('filters.minRating')} label={t('filters.minRating')} value={localFilters.ratingMin}
+                      onChange={(value) => setLocalFilters(prev => ({ ...prev, ratingMin: Math.min(5, Math.max(0, parseFloat(value) || 0)) }))} />
+                    <InputWithIcon icon={<FaThumbsUp />} type="number" min="0" max="5" step="0.1" placeholder={t('filters.maxRating')} label={t('filters.maxRating')} value={localFilters.ratingMax}
+                      onChange={(value) => setLocalFilters(prev => ({ ...prev, ratingMax: Math.min(5, Math.max(0, parseFloat(value) || 5)) }))} />
                   </div>
                 </FilterSection>
 
@@ -1025,13 +894,11 @@ export default function FiltersPanel({
   );
 }
 
-/* -------------------------------------------
-   Sub-components
-------------------------------------------- */
-
+// -------------------------------------------
+// Sub-components
+// -------------------------------------------
 function FilterSection({ visible, title, children, onClear, action }) {
   const { t } = useTranslation();
-  
   if (!visible) return null;
   return (
     <div className="transition-all origin-top opacity-100 translate-y-0 scale-[1]">
@@ -1152,33 +1019,4 @@ function SaveModal({ initialValue = "", onSave, onClose }) {
       </div>
     </div>
   );
-}
-
-/* -------------------------------------------
-   Styles
-------------------------------------------- */
-const COMPONENT_STYLES = `
-  @keyframes toast-in { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: translateY(0) } }
-  @keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
-  @keyframes scale-in { from { opacity: 0.6; transform: scale(0.98) } to { opacity: 1; transform: scale(1) } }
-  @keyframes dropdown-in { from { opacity: 0; transform: translateY(-4px) scale(0.98) } to { opacity: 1; transform: translateY(0) scale(1) } }
-  @keyframes dropdown-out { from { opacity: 1; transform: translateY(0) scale(1) } to { opacity: 0; transform: translateY(-4px) scale(0.98) } }
-  @keyframes caret-blink { 0%,49% { opacity: 1 } 50%,100% { opacity: 0 } }
-
-  .animate-[toast-in_240ms_ease-out] { animation: toast-in 0.24s ease-out both; }
-  .animate-fade-in { animation: fade-in 0.16s ease-out both; }
-  .animate-scale-in { animation: scale-in 0.18s ease-out both; }
-  .animate-[dropdown-in_.14s_ease-out] { animation: dropdown-in 0.14s ease-out both; }
-  .animate-[dropdown-out_.12s_ease-in] { animation: dropdown-out 0.12s ease-in both; }
-  .animate-caret-blink { animation: caret-blink 1s steps(2, start) infinite; }
-
-  .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
-  .no-scrollbar::-webkit-scrollbar { display: none; }
-`;
-
-if (typeof document !== "undefined" && !document.getElementById("improved-filters-panel-styles")) {
-  const style = document.createElement("style");
-  style.id = "improved-filters-panel-styles";
-  style.textContent = COMPONENT_STYLES;
-  document.head.appendChild(style);
 }

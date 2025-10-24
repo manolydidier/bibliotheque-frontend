@@ -1,6 +1,5 @@
 // src/pages/articles/ArticlesIndex.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import Toast from '../../../../../component/toast/Toaster';
@@ -12,7 +11,7 @@ import {
 import {
   FiRefreshCw, FiPlus, FiTrash2, FiFilter as FiFilterIcon,
   FiChevronDown as FiChevronDownFi, FiChevronUp as FiChevronUpFi,
-  FiSettings, FiGrid as FiGridIcon, FiList as FiListIcon, FiSave, FiTrash as FiTrashFeather
+  FiGrid as FiGridIcon, FiList as FiListIcon, FiSave, FiTrash as FiTrashFeather
 } from 'react-icons/fi';
 
 import FiltersBar from './FiltersBar';
@@ -21,9 +20,7 @@ import FiltersBar from './FiltersBar';
    Axios de base
 ========================= */
 axios.defaults.baseURL = axios.defaults.baseURL || '/api';
-// Pas de Sanctum ici
-// axios.defaults.withCredentials = true;
-const API = '/articles';
+const API = '/articles-index'; // <<< nouveau endpoint d’index
 
 /* =========================
    CSRF (optionnel)
@@ -40,8 +37,6 @@ async function ensureCsrf() {
 /* =========================
    Helpers API & mapping
 ========================= */
-const DEBUG = true;
-
 function normalizeList(payload, fallbackPerPage = 24) {
   const p0 = payload || {};
   const p = (
@@ -142,6 +137,7 @@ function buildQuery({ page, per_page, search, filters, sortBy, sortDir }) {
   if (rmin !== undefined && rmin > 0) q.rating_min = rmin;
   if (rmax !== undefined && rmax < 5) q.rating_max = rmax;
 
+  // ⚠️ important: on passe status (published par défaut)
   if (filters?.status) q.status = filters.status;
   if (filters?.visibility) q.visibility = filters.visibility;
 
@@ -153,16 +149,16 @@ async function apiList({ page, per_page, search, filters, sortBy, sortDir }) {
   const { data } = await axios.get(API, { params });
   return normalizeList(data, per_page);
 }
-async function apiSoftDelete(id) { await ensureCsrf(); return axios.post(`${API}/${id}/soft-delete`); }
+async function apiSoftDelete(id) { await ensureCsrf(); return axios.post(`/articles/${id}/soft-delete`); }
 async function apiForceDelete(id) {
   await ensureCsrf();
-  try { return await axios.delete(`${API}/${id}/hard-delete`); }
+  try { return await axios.delete(`/articles/${id}/hard-delete`); }
   catch (e) {
-    if (e?.response?.status === 404) return axios.delete(`${API}/${id}`, { params: { force: 1 } });
+    if (e?.response?.status === 404) return axios.delete(`/articles/${id}`, { params: { force: 1 } });
     throw e;
   }
 }
-async function apiRestore(id) { await ensureCsrf(); return axios.post(`${API}/${id}/restore`); }
+async function apiRestore(id) { await ensureCsrf(); return axios.post(`/articles/${id}/restore`); }
 
 /* =========================
    Dates
@@ -184,7 +180,7 @@ function exportRowsToCSV(rows = []) {
       a.id,
       JSON.stringify(a.title ?? ''),
       JSON.stringify(a.slug ?? ''),
-      JSON.stringify(a.status ?? ''),
+      JSON.stringify(a.ui_status ?? a.status ?? ''),
       JSON.stringify(a.visibility ?? ''),
       JSON.stringify(a.published_at ?? ''),
       a.view_count ?? 0,
@@ -208,25 +204,42 @@ function exportRowsToCSV(rows = []) {
 }
 
 /* =========================
+   Collapse (accordéon stable via CSS Grid)
+========================= */
+function Collapse({ open, children, duration = 260 }) {
+  return (
+    <div
+      className="grid transition-[grid-template-rows] ease-in-out"
+      style={{
+        gridTemplateRows: open ? '1fr' : '0fr',
+        transitionDuration: `${duration}ms`,
+      }}
+      aria-hidden={!open}
+    >
+      <div className="overflow-hidden">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* =========================
    Composant principal
 ========================= */
 const ArticlesIndex = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Ids restaurés (arrivent via state depuis TrashedPage)
+  // Ids restaurés (glow jusqu'à interaction)
   const [restoredIds, setRestoredIds] = useState(new Set());
   useEffect(() => {
     const ids = Array.isArray(location.state?.restoredIds) ? location.state.restoredIds : [];
     if (ids.length) {
       setRestoredIds(new Set(ids));
-      // on nettoie l'URL/state pour ne pas rejouer au back/refresh
       navigate(location.pathname + location.search, { replace: true });
-      // 👉 plus de setTimeout ici : la surbrillance reste jusqu'à interaction
     }
   }, []); // mount only
 
-  // Efface la surbrillance au PREMIER geste utilisateur
   useEffect(() => {
     if (restoredIds.size === 0) return;
     const clear = () => setRestoredIds(new Set());
@@ -241,9 +254,14 @@ const ArticlesIndex = () => {
     };
   }, [restoredIds]);
 
-  // Recherche & filtres
+  // Recherche & filtres (⚠️ status par défaut = 'published')
   const [search, setSearch] = useState('');
-  const [filters, setFilters] = useState({ categories: [], tags: [], authors: [], featuredOnly: false, stickyOnly: false, unreadOnly: false, dateFrom: '', dateTo: '', ratingMin: 0, ratingMax: 5 });
+  const [filters, setFilters] = useState({
+    categories: [], tags: [], authors: [],
+    featuredOnly: false, stickyOnly: false, unreadOnly: false,
+    dateFrom: '', dateTo: '', ratingMin: 0, ratingMax: 5,
+    status: 'published', visibility: undefined
+  });
 
   // Vue & pagination
   const [page, setPage] = useState(1);
@@ -298,8 +316,18 @@ const ArticlesIndex = () => {
   // Undo (restore)
   const [lastSoftDeletedIds, setLastSoftDeletedIds] = useState([]);
 
-  // Filtres visibles ?
-  const [showFilters, setShowFilters] = useState(false);
+  /* ===== Accordéon Filtres — état persistant ===== */
+  const [showFilters, setShowFilters] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlFlag = params.get('filters_open'); // '1' | '0' | null
+    if (urlFlag === '1') return true;
+    if (urlFlag === '0') return false;
+    try { return localStorage.getItem('articles_filters_open') === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('articles_filters_open', showFilters ? '1' : '0'); } catch {}
+  }, [showFilters]);
+
   const activeFiltersCount = useMemo(() => {
     let c = 0;
     if (search?.trim()) c++;
@@ -347,7 +375,7 @@ const ArticlesIndex = () => {
       setTrashCount(Number(meta?.total || 0));
     } catch (err1) {
       try {
-        const { data } = await axios.get(API, { params: { trashed: 'only', per_page: 1 } });
+        const { data } = await axios.get('/articles', { params: { trashed: 'only', per_page: 1 } });
         const { meta } = normalizeList(data, 1);
         setTrashCount(Number(meta?.total || 0));
       } catch (err2) {}
@@ -470,6 +498,13 @@ const ArticlesIndex = () => {
     if (filters.dateTo) params.set('to', filters.dateTo);
     if ((filters.ratingMin ?? 0) > 0) params.set('rmin', String(filters.ratingMin));
     if ((filters.ratingMax ?? 5) < 5) params.set('rmax', String(filters.ratingMax));
+    if (filters.status) params.set('status', String(filters.status));
+    if (filters.visibility) params.set('visibility', String(filters.visibility));
+
+    // >>> Persistance accordéon
+    if (showFilters) params.set('filters_open', '1');
+    else params.set('filters_open', '0');
+
     params.set('sort', sortBy);
     params.set('dir', sortDir);
     params.set('page', String(page));
@@ -477,7 +512,7 @@ const ArticlesIndex = () => {
     params.set('view', viewMode);
     const url = `${location.pathname}?${params.toString()}`;
     window.history.replaceState(null, '', url);
-  }, [search, filters, sortBy, sortDir, page, perPage, viewMode]);
+  }, [search, filters, sortBy, sortDir, page, perPage, viewMode, showFilters, location.pathname]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -494,6 +529,9 @@ const ArticlesIndex = () => {
       dateTo: params.get('to') || '',
       ratingMin: Number(params.get('rmin') ?? 0) || 0,
       ratingMax: Number(params.get('rmax') ?? 5) || 5,
+      // ⚠️ défaut published si non présent dans l'URL
+      status: params.get('status') || 'published',
+      visibility: params.get('visibility') || undefined,
     };
     setSearch(q);
     setFilters(next);
@@ -502,6 +540,11 @@ const ArticlesIndex = () => {
     setPage(Number(params.get('page') ?? 1));
     setPerPage(Number(params.get('pp') ?? 24));
     setViewMode(params.get('view') === 'grid' ? 'grid' : 'table');
+
+    // >>> lecture de l'état d'accordéon dans l'URL
+    const openFlag = params.get('filters_open');
+    if (openFlag === '1') setShowFilters(true);
+    else if (openFlag === '0') setShowFilters(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -580,39 +623,32 @@ const ArticlesIndex = () => {
     <div className="relative bg-white rounded-xl shadow-sm ring-1 ring-slate-200/70">
       {toast && <Toast {...toast} onClose={()=>setToast(null)} />}
 
-      {/* Glow “restored” persistant jusqu'à interaction */}
+      {/* Glow restored */}
       <style>{`
         @keyframes restoredPulse {
           0%   { box-shadow: 0 0 0 0 rgba(16,185,129,.55); background: #ecfdf5; }
           60%  { box-shadow: 0 0 0 6px rgba(16,185,129,.0); }
           100% { box-shadow: 0 0 0 0 rgba(16,185,129,.0); background: transparent; }
         }
-        /* halo doux et récurrent (breathing) */
         @keyframes restoredIdle {
           0%   { box-shadow: 0 0 0 0 rgba(16,185,129,.25); background: #f0fdf4; }
           50%  { box-shadow: 0 0 0 6px rgba(16,185,129,0); background: #ffffff; }
           100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); background: #f0fdf4; }
         }
-
-        /* table rows */
         tr.row-restored-hold {
           animation:
             restoredPulse 900ms ease-out 0s 1 both,
             restoredIdle 2400ms ease-in-out 900ms infinite both;
         }
-
-        /* cards (vue grid) */
         .card-restored-hold {
           animation:
             restoredPulse 900ms ease-out 0s 1 both,
             restoredIdle 2400ms ease-in-out 900ms infinite both;
           border-radius: 12px;
         }
-
         @media (prefers-reduced-motion: reduce) {
           tr.row-restored-hold, .card-restored-hold { animation: none !important; outline: 2px solid #34d399; background: #ecfdf5; }
         }
-
         @keyframes wiggle {
           0%{transform:rotate(0)}15%{transform:rotate(-1.5deg) scale(1.01)}
           30%{transform:rotate(1.5deg) scale(1.01)}45%{transform:rotate(-1deg)}
@@ -672,6 +708,26 @@ const ArticlesIndex = () => {
               {showFilters ? <FiChevronUpFi /> : <FiChevronDownFi />}
             </button>
 
+            {/* Filtre Statut (par défaut: published) */}
+            <div className="ml-2">
+              <label className="sr-only" htmlFor="statusFilter">Statut</label>
+              <select
+                id="statusFilter"
+                value={filters.status || 'published'}
+                onChange={(e) => {
+                  const v = e.target.value || 'published';
+                  setFilters(f => ({ ...f, status: v }));
+                }}
+                className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white backdrop-blur-sm"
+                title="Filtrer par statut"
+              >
+                <option value="published">Published</option>
+                <option value="draft">Draft</option>
+                <option value="pending">Pending</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+
             <div className="ml-2 inline-flex rounded-xl bg-white/10 p-1 border border-white/20 backdrop-blur-sm">
               <button
                 className={`px-3 py-2 rounded-lg flex items-center gap-2 transition ${
@@ -700,41 +756,40 @@ const ArticlesIndex = () => {
         </div>
       </div>
 
-      {/* Barre d’actions multi */}
-      {selectedIds.size > 0 && (
-        <div className="sticky top-[56px] z-30 bg-amber-50 border-y border-amber-200 text-amber-900 px-4 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <FaCheckSquare /> <b>{selectedIds.size}</b> sélectionné(s)
-            <button onClick={()=>openConfirm('soft-many', Array.from(selectedIds))} className="ml-3 px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-100 hover:bg-amber-200 text-amber-900 inline-flex items-center gap-2"><FaTrashAlt /> Corbeille</button>
-            <button onClick={()=>openConfirm('hard-many', Array.from(selectedIds))} className="px-3 py-1.5 rounded-lg border text-rose-700 border-rose-300 bg-rose-50 hover:bg-rose-100 inline-flex items-center gap-2"><FaTrash /> Supprimer</button>
-          </div>
-          <button onClick={()=>setSelectedIds(new Set())} className="text-sm underline">Tout désélectionner</button>
-        </div>
-      )}
+      {/* ===== Accordéon Filtres ===== */}
+      <div className="border-b bg-white">
+        {/* Entête accordéon */}
+        <button
+          type="button"
+          onClick={() => setShowFilters(v => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 text-slate-700 hover:bg-slate-50 transition"
+          aria-expanded={showFilters}
+          aria-controls="filters-panel"
+        >
+          <span className="inline-flex items-center gap-2 font-medium">
+            <FaFilter className="text-slate-500" /> Filtres
+            <span className="ml-2 inline-flex items-center justify-center min-w-5 h-5 text-[11px] font-semibold rounded-full bg-slate-100 text-slate-700 px-1">
+              {activeFiltersCount}
+            </span>
+          </span>
+          <span className="text-slate-500">{showFilters ? <FiChevronUpFi /> : <FiChevronDownFi />}</span>
+        </button>
 
-      {/* Filtres (pliables) */}
-      <div
-        className={`transition-all duration-200 ease-out
-          ${showFilters ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-1 pointer-events-none'}
-        `}
-        aria-hidden={!showFilters}
-      >
-        {showFilters && (
-          <FiltersBar
-            search={search}
-            setSearch={setSearch}
-            filters={filters}
-            setFilters={setFilters}
-            perPage={perPage}
-            setPerPage={setPerPage}
-            facets={{
-              categories: data?.meta?.facets?.categories || [],
-              tags: data?.meta?.facets?.tags || [],
-              authors: data?.meta?.facets?.authors || [],
-            }}
-            onExportClick={handleExport}
-          />
-        )}
+        {/* Contenu avec Collapse grid (stable) */}
+        <Collapse open={showFilters}>
+          <div id="filters-panel">
+            <FiltersBar
+              search={search}
+              setSearch={setSearch}
+              filters={filters}
+              setFilters={setFilters}
+              perPage={perPage}
+              setPerPage={setPerPage}
+              facets={data?.meta?.facets || {}}
+              onExportClick={handleExport}
+            />
+          </div>
+        </Collapse>
       </div>
 
       {/* Bandeau quand filtres masqués */}
@@ -829,6 +884,11 @@ const ArticlesIndex = () => {
                 const updRel  = updatedAt ? formatRelative(updatedAt) : null;
                 const creRel  = createdAt ? formatRelative(createdAt) : null;
 
+                const uiStatus = article.ui_status
+                  ? String(article.ui_status).toLowerCase()
+                  : (article.deleted_at ? 'archived' : String(article.status || 'draft').toLowerCase());
+                const isArchived = uiStatus === 'archived';
+
                 return (
                   <tr
                     key={article.id}
@@ -920,7 +980,7 @@ const ArticlesIndex = () => {
 
                     <td className="px-3 py-4 text-sm">
                       <div className="space-y-1">
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${badgeClass(article.status)}`}>{article.status || 'draft'}</span>
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${badgeClass(uiStatus)}`}>{uiStatus}</span>
                         <div className="text-xs text-slate-500 space-y-0.5">
                           {creRel && (<div>Créé {creRel} • {formatDate(toDate(article.created_at))} {formatTime(toDate(article.created_at))}</div>)}
                           {updRel && (<div>Maj {updRel} • {formatDate(toDate(article.updated_at))} {formatTime(toDate(article.updated_at))}</div>)}
@@ -931,7 +991,21 @@ const ArticlesIndex = () => {
                     <td className="px-3 py-4 text-right">
                       <div className="flex items-center gap-1 justify-end">
                         <Link to={publicTo} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg border text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100 transition" title="Voir l'article"><FaEye size={14} /></Link>
-                        <button className="p-2 rounded-lg border text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100 transition" onClick={()=>navigate(`/articles/${article.id}/edit`, { state: { article } })} title="Éditer"><FaEdit size={14} /></button>
+
+                        {/* EDIT — désactivé si archived */}
+                        <button
+                          className={`p-2 rounded-lg border transition ${
+                            isArchived
+                              ? 'text-slate-400 bg-slate-50 border-slate-200 cursor-not-allowed'
+                              : 'text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
+                          }`}
+                          onClick={()=>{ if (!isArchived) navigate(`/articles/${article.id}/edit`, { state: { article } }); }}
+                          title={isArchived ? 'Édition interdite (archived)' : 'Éditer'}
+                          disabled={isArchived}
+                        >
+                          <FaEdit size={14} />
+                        </button>
+
                         <button className="p-2 rounded-lg border text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100 transition" onClick={()=>openConfirm('soft', article)} title="Envoyer à la corbeille"><FaTrashAlt size={14} /></button>
                         <button className="p-2 rounded-lg border text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100 transition" onClick={()=>openConfirm('hard', article)} title="Supprimer définitivement"><FaTrash size={14} /></button>
                       </div>
@@ -967,6 +1041,11 @@ const ArticlesIndex = () => {
               const publishedAt = toDate(article.published_at);
               const pubDate = publishedAt ? formatDate(publishedAt) : '—';
               const pubRel  = publishedAt ? formatRelative(publishedAt) : '';
+
+              const uiStatus = article.ui_status
+                ? String(article.ui_status).toLowerCase()
+                : (article.deleted_at ? 'archived' : String(article.status || 'draft').toLowerCase());
+              const isArchived = uiStatus === 'archived';
 
               return (
                 <div
@@ -1004,16 +1083,28 @@ const ArticlesIndex = () => {
                   <div className="flex items-center justify-between text-xs mb-2">
                     <span className="inline-flex items-center gap-1"><FaEye /> {formattedViewCount}</span>
                     <span className="inline-flex items-center gap-1"><FaThumbsUp className="text-amber-600" /> {formattedRating}/5</span>
-                    <span className={`px-2 py-0.5 rounded-full border ${badgeClass(article.status)}`}>{article.status || 'draft'}</span>
+                    <span className={`px-2 py-0.5 rounded-full border ${badgeClass(uiStatus)}`}>{uiStatus}</span>
                   </div>
 
                   <div className="flex items-center justify-end gap-2">
                     <Link to={publicTo} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg border text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100 transition">
                       <FaEye size={14} />
                     </Link>
-                    <button className="p-2 rounded-lg border text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100 transition" onClick={()=>navigate(`/articles/${article.id}/edit`, { state: { article } })}>
+
+                    {/* EDIT — désactivé si archived */}
+                    <button
+                      className={`p-2 rounded-lg border transition ${
+                        isArchived
+                          ? 'text-slate-400 bg-slate-50 border-slate-200 cursor-not-allowed'
+                          : 'text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
+                      }`}
+                      onClick={()=>{ if (!isArchived) navigate(`/articles/${article.id}/edit`, { state: { article } }); }}
+                      title={isArchived ? 'Édition interdite (archived)' : 'Éditer'}
+                      disabled={isArchived}
+                    >
                       <FaEdit size={14} />
                     </button>
+
                     <button className="p-2 rounded-lg border text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100 transition" onClick={()=>openConfirm('soft', article)}>
                       <FaTrashAlt size={14} />
                     </button>
@@ -1143,11 +1234,10 @@ const ArticlesIndex = () => {
           <div className="bg-slate-900 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-3">
             <span>{lastSoftDeletedIds.length} envoyé(s) à la corbeille.</span>
             <button onClick={async () => {
-              // restauration rapide puis surbrillance persistante jusqu'à interaction
               const ids = [...lastSoftDeletedIds];
               try {
                 await Promise.all(ids.map((id) => apiRestore(id)));
-                setRestoredIds(new Set(ids)); // 👉 pas de timer : on attend la prochaine action
+                setRestoredIds(new Set(ids));
                 setToast({ type: 'success', message: `Restauration : ${ids.length}/${ids.length}` });
                 setLastSoftDeletedIds([]);
                 await load();
@@ -1170,6 +1260,7 @@ const badgeClass = (status) => {
     case 'published': return 'bg-green-100 text-green-700 border-green-200';
     case 'archived':  return 'bg-slate-100 text-slate-700 border-slate-200';
     case 'draft':
+    case 'pending':
     default:          return 'bg-amber-100 text-amber-700 border-amber-200';
   }
 };

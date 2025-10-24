@@ -208,7 +208,7 @@ async function listTags() {
   return res?.data?.data || res?.data || [];
 }
 async function fetchArticleDirect(idOrSlug) {
-  const res = await api.get(`/articles/${encodeURIComponent(idOrSlug)}`, {
+  const res = await api.get(`/articlesbackoffice/${encodeURIComponent(idOrSlug)}`, {
     params: { include: 'categories,tags' },
     headers: { 'Cache-Control': 'no-store' },
   });
