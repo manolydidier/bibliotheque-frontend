@@ -394,30 +394,30 @@ export default function Visualiseur() {
   }, []);
 
   // Sélecteur de langue
-  const LanguageSelector = () => (
-    <div className="flex items-center gap-2">
-      <button
-        onClick={() => i18n.changeLanguage('fr')}
-        className={`px-3 py-1 rounded-lg text-sm ${
-          i18n.language === 'fr' 
-            ? 'bg-blue-500 text-white' 
-            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-        }`}
-      >
-        FR
-      </button>
-      <button
-        onClick={() => i18n.changeLanguage('en')}
-        className={`px-3 py-1 rounded-lg text-sm ${
-          i18n.language === 'en' 
-            ? 'bg-blue-500 text-white' 
-            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-        }`}
-      >
-        EN
-      </button>
-    </div>
-  );
+  // const LanguageSelector = () => (
+  //   <div className="flex items-center gap-2">
+  //     <button
+  //       onClick={() => i18n.changeLanguage('fr')}
+  //       className={`px-3 py-1 rounded-lg text-sm ${
+  //         i18n.language === 'fr' 
+  //           ? 'bg-blue-500 text-white' 
+  //           : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+  //       }`}
+  //     >
+  //       FR
+  //     </button>
+  //     <button
+  //       onClick={() => i18n.changeLanguage('en')}
+  //       className={`px-3 py-1 rounded-lg text-sm ${
+  //         i18n.language === 'en' 
+  //           ? 'bg-blue-500 text-white' 
+  //           : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+  //       }`}
+  //     >
+  //       EN
+  //     </button>
+  //   </div>
+  // );
 
   /* ------- Actions ------- */
   // Construit un "article-like" avec le média en tête (pour FilePreview)
@@ -874,9 +874,9 @@ export default function Visualiseur() {
         )}
         
         {/* Sélecteur de langue */}
-        <div className="fixed right-3 top-24 z-50">
+        {/* <div className="fixed right-3 top-24 z-50">
           <LanguageSelector />
-        </div>
+        </div> */}
 
         {/* Bascule Sidebar (desktop) */}
         <button
@@ -890,29 +890,35 @@ export default function Visualiseur() {
           <span className="text-xs font-medium text-slate-700"></span>
         </button>
 
-        <div className="flex gap-4 lg:gap-6 xl:gap-8">
+        <div className="flex gap-2 lg:gap-6 xl:gap-2">
           {sidebarOpen && (
             <Sidebar
               open={sidebarOpen}
-              toggle={toggleSidebar}
+              onOpen={() => setSidebarOpen(true)}
+              onClose={() => setSidebarOpen(false)}
               mediaCount={mediaList.length}
               tags={article?.tags || []}
               mediaList={mediaList}
               selectedFile={selectedFile}
-              onSelectFile={setSelectedFile}
+              onSelectFile={setSelectedFile}            // la fermeture se fait dans Sidebar
               similar={similar}
               similarLoading={similarLoading}
-              onOpenSimilar={(slugOrId) => { setSelectedFile(null); navigate(`/articles/${slugOrId}`); }}
+              onOpenSimilar={(slugOrId) => {
+                setSelectedFile(null);
+                navigate(`/articles/${slugOrId}`);
+                // (la fermeture se fait aussi dans Sidebar après onOpenSimilar)
+              }}
               onOpenTagManager={() => setTagModalOpen(true)}
               TagListComponent={TagList}
               iconForType={iconForType}
               iconBgForType={iconBgForType}
               toAbsolute={toAbsolute}
             />
+
           )}
 
           {/* Main */}
-          <div className="flex-1 min-w-0 flex flex-col">
+          <div className="flex-1  flex flex-col w-full">
             <div className="bg-white/60 backdrop-blur-xl rounded-2xl shadow-xl border border-white/40 overflow-hidden">
               <div className="sticky top-5 z-10 bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40">
                 <Toolbar

@@ -1,5 +1,5 @@
 import React,{useEffect, useState} from 'react'
-import { useTags } from '../../../../../hooks/UseTags';
+import { useTags } from '../configuration/tagTab/useTags';
 import ErrorModal from './ErrorModal';
 import { FaTimes } from 'react-icons/fa';
 

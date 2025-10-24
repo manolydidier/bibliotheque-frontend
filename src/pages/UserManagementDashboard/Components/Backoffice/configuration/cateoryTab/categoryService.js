@@ -1,4 +1,5 @@
-import api from './api';
+import api from "../../../../../../services/api";
+
 
 export const categoryService = {
   // Récupérer toutes les catégories

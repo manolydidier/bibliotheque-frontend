@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import categoryService from '../services/categoryService';
-import { fetchIndex2 } from '../services/categoryService';
+
+import { fetchIndex2 } from './categoryService';
+import categoryService from './categoryService';
 
 export const useCategories = () => {
   const [categories, setCategories] = useState([]);

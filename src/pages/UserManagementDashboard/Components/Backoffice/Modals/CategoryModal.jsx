@@ -1,5 +1,5 @@
 import React,{useState,useEffect} from 'react'
-import { useCategories } from '../../../../../hooks/useCategory';
+import { useCategories } from '../configuration/cateoryTab/useCategory';
 import { FaTimes } from 'react-icons/fa';
 
 const CategoryModal = ({isOpen, onClose, category=null, onSuccess}) => {

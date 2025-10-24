@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { FaEdit, FaPen, FaTrash } from "react-icons/fa";
-import { useTags } from "../../../../../../hooks/UseTags";
+import { useTags } from "./useTags";
 import { FaPenAlt, FaTrashAlt } from "react-icons/fa";
 import TagModal from "../../Modals/TagModal";
 import LoadingComponent from "../../../../../../component/loading/LoadingComponent";

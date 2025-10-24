@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { tagService, fetchIndex2} from '../services/tagService';
+import { tagService, fetchIndex2} from '../tagService';
 
 export const useTags = () => {
   const [tags, setTags] = useState([]);

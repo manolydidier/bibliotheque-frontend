@@ -826,6 +826,83 @@ i18n
     }
   }
 ,
+
+  "layout": {
+    "brand": "Media Manager",
+    "subtitle": "Back Office Admin",
+    "titles": {
+      "dashboard": "Dashboard",
+      "settings": "Settings",
+      "albums": "Albums & Photos"
+    },
+    "sections": {
+      "media": "Media Management",
+      "albums": "Albums & Photos",
+      "settings": "Settings"
+    },
+    "menu": {
+      "dashboard": "Dashboard",
+      "mediaAll": "All Media",
+      "favorites": "Favorites",
+      "documents": "Documents",
+      "imagesVideos": "Images/Videos",
+      "albumsAll": "All Albums",
+      "recentPhotos": "Recent Photos",
+      "byDate": "By Date",
+      "settings": "Configuration",
+      "users": "Users"
+    },
+    "storage": {
+      "used": "Storage used"
+    },
+    "a11y": {
+      "openSidebar": "Open sidebar",
+      "closeSidebar": "Close sidebar",
+      "notifications": "Notifications",
+      "profile": "Profile"
+    }
+
+}
+
+,
+
+
+  "layout": {
+    "brand": "Media Manager",
+    "subtitle": "Back Office Admin",
+    "titles": {
+      "dashboard": "Dashboard",
+      "settings": "Settings",
+      "platform": "Platform",
+      "viewer": "Viewer",
+      "articlesBo": "Articles (Back Office)",
+      "articleNew": "New Article",
+      "trashed": "Trash"
+    },
+    "sections": {
+      "media": "Media Management",
+      "settings": "Settings"
+    },
+    "menu": {
+      "dashboard": "Dashboard",
+      "platform": "Platform",
+      "viewer": "Viewer",
+      "articlesBo": "Articles Controller",
+      "articleNew": "New",
+      "trashed": "Trash",
+      "settings": "Configuration",
+      "users": "Users"
+    },
+    "storage": { "used": "Storage used" },
+    "a11y": {
+      "openSidebar": "Open sidebar",
+      "closeSidebar": "Close sidebar",
+      "notifications": "Notifications",
+      "profile": "Profile"
+    }
+  }
+,
+
               "role_permissions_management": "Role Permissions Management",
             "manage_role_permissions_description": "Manage associations between roles and permissions",
             "search_roles_permissions": "Search roles and permissions...",
@@ -1788,6 +1865,80 @@ i18n
     }
   }
 ,
+
+  "layout": {
+    "brand": "Media Manager",
+    "subtitle": "Back Office Admin",
+    "titles": {
+      "dashboard": "Tableau de bord",
+      "settings": "Paramètres",
+      "albums": "Albums & Photos"
+    },
+    "sections": {
+      "media": "Gestion des médias",
+      "albums": "Albums & Photos",
+      "settings": "Paramètres"
+    },
+    "menu": {
+      "dashboard": "Tableau de bord",
+      "mediaAll": "Tous les médias",
+      "favorites": "Favoris",
+      "documents": "Documents",
+      "imagesVideos": "Images/Vidéos",
+      "albumsAll": "Tous les albums",
+      "recentPhotos": "Photos récentes",
+      "byDate": "Par date",
+      "settings": "Configuration",
+      "users": "Utilisateurs"
+    },
+    "storage": {
+      "used": "Stockage utilisé"
+    },
+    "a11y": {
+      "openSidebar": "Ouvrir le panneau latéral",
+      "closeSidebar": "Fermer le panneau latéral",
+      "notifications": "Notifications",
+      "profile": "Profil"
+    }
+  }
+,
+
+  "layout": {
+    "brand": "Media Manager",
+    "subtitle": "Back Office Admin",
+    "titles": {
+      "dashboard": "Tableau de bord",
+      "settings": "Paramètres",
+      "platform": "Plateforme",
+      "viewer": "Visualiseur",
+      "articlesBo": "Articles (Back-Office)",
+      "articleNew": "Nouvel article",
+      "trashed": "Corbeille"
+    },
+    "sections": {
+      "media": "Gestion des médias",
+      "settings": "Paramètres"
+    },
+    "menu": {
+      "dashboard": "Tableau de bord",
+      "platform": "Plateforme",
+      "viewer": "Visualiseur",
+      "articlesBo": "Contrôleur d’articles",
+      "articleNew": "Nouveau",
+      "trashed": "Corbeille",
+      "settings": "Configuration",
+      "users": "Utilisateurs"
+    },
+    "storage": { "used": "Stockage utilisé" },
+    "a11y": {
+      "openSidebar": "Ouvrir le panneau latéral",
+      "closeSidebar": "Fermer le panneau latéral",
+      "notifications": "Notifications",
+      "profile": "Profil"
+    }
+  }
+,
+
         "role_permissions_management": "Gestion des Permissions de Rôles",
         "manage_role_permissions_description": "Gérer les associations entre rôles et permissions",
         "search_roles_permissions": "Rechercher rôles et permissions...",

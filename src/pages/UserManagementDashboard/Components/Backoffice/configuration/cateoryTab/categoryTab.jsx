@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useCategories } from "../../../../../../hooks/useCategory";
+import { useCategories } from "./useCategory";
 import CategoryModal from "../../Modals/CategoryModal";
 import { FaPenAlt, FaTrashAlt } from "react-icons/fa";
 import Pagination from "../../../../../../component/pagination/Pagination";
