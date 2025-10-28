@@ -1,5 +1,6 @@
 // src/pages/articles/ArticlesIndex.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import Toast from '../../../../../component/toast/Toaster';
@@ -7,6 +8,7 @@ import {
   FaEye, FaCalendarAlt, FaTag, FaUser, FaEdit, FaTrashAlt, FaTrash,
   FaExternalLinkAlt, FaThumbsUp, FaFilter, FaUndo, FaCheckSquare, FaSquare,
   FaSort, FaSortUp, FaSortDown, FaTimes, FaSpinner, FaCheck,
+  FaColumns,
 } from 'react-icons/fa';
 import {
   FiRefreshCw, FiPlus, FiTrash2, FiFilter as FiFilterIcon,
@@ -222,6 +224,18 @@ function Collapse({ open, children, duration = 260 }) {
     </div>
   );
 }
+
+/* =========================
+   PORTAL (pour éviter le clipping)
+========================= */
+const Portal = ({ children }) => {
+  const el = React.useMemo(() => document.createElement('div'), []);
+  useEffect(() => {
+    document.body.appendChild(el);
+    return () => { document.body.removeChild(el); };
+  }, [el]);
+  return ReactDOM.createPortal(children, el);
+};
 
 /* =========================
    Composant principal
@@ -599,6 +613,23 @@ const ArticlesIndex = () => {
   const colsBtnRef = useRef(null);
   const colsMenuRef = useRef(null);
 
+  // Position du menu (Portal)
+  const [colsPos, setColsPos] = useState({ top: 0, left: 0, width: 0 });
+  useEffect(() => {
+    if (!colsOpen || !colsBtnRef.current) return;
+    const upd = () => {
+      const r = colsBtnRef.current.getBoundingClientRect();
+      setColsPos({ top: r.bottom + window.scrollY + 8, left: r.left + window.scrollX, width: r.width });
+    };
+    upd();
+    window.addEventListener('scroll', upd, true);
+    window.addEventListener('resize', upd);
+    return () => {
+      window.removeEventListener('scroll', upd, true);
+      window.removeEventListener('resize', upd);
+    };
+  }, [colsOpen]);
+
   useEffect(() => {
     if (!colsOpen) return;
     const onDown = (e) => {
@@ -615,6 +646,11 @@ const ArticlesIndex = () => {
       document.removeEventListener('keydown', onEsc);
     };
   }, [colsOpen]);
+
+  // Nombre de colonnes visibles pour colSpan
+  const visibleColCount = useMemo(() => {
+    return Object.values(visibleCols).filter(Boolean).length;
+  }, [visibleCols]);
 
   /* ===================
      Rendu
@@ -670,6 +706,106 @@ const ArticlesIndex = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+             <Link
+              to="/articles/new"
+              className="px-3 py-2 rounded-xl bg-white text-blue-700 hover:bg-white/95 border border-white/40 shadow-sm inline-flex items-center gap-2 transition"
+              title="Créer un article"
+            >
+              <FiPlus /> Créer
+            </Link>
+            {/* === Colonnes visibles === */}
+            <div className="relative z-50">
+              <button
+                ref={colsBtnRef}
+                onClick={() => setColsOpen(v => !v)}
+                className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-sm inline-flex items-center gap-2 transition text-white"
+                title="Choisir les colonnes à afficher"
+                type="button"
+              >
+                <FaColumns className="opacity-90" />
+                <span>Colonnes</span>
+              </button>
+
+              {colsOpen && (
+                <Portal>
+                  <div
+                    ref={colsMenuRef}
+                    style={{
+                      position: 'absolute',
+                      top: colsPos.top,
+                      left: colsPos.left,
+                      minWidth: Math.max(256, colsPos.width),
+                      zIndex: 9999
+                    }}
+                    className="rounded-xl border bg-white/95 backdrop-blur shadow-xl p-3 text-slate-800"
+                    role="menu"
+                    aria-label="Sélection des colonnes"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-semibold">Colonnes visibles</span>
+                      <div className="flex gap-2">
+                        <button
+                          className="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50"
+                          onClick={() => setVisibleCols(prev => {
+                            const allOn = Object.fromEntries(Object.keys(prev).map(k => [k, true]));
+                            return allOn;
+                          })}
+                          type="button"
+                        >
+                          Tout
+                        </button>
+                        <button
+                          className="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50"
+                          onClick={() => setVisibleCols(prev => {
+                            const allOff = Object.fromEntries(Object.keys(prev).map(k => [k, false]));
+                            allOff.select = true; // sécurité UX
+                            allOff.actions = true;
+                            return allOff;
+                          })}
+                          type="button"
+                        >
+                          Aucun
+                        </button>
+                        <button
+                          className="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50"
+                          onClick={() => setVisibleCols(defaultCols)}
+                          type="button"
+                          title="Réinitialiser"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-1 text-sm">
+                      {[
+                        ['select',       'Sélection'],
+                        ['image',        'Image'],
+                        ['title',        'Titre'],
+                        ['author',       'Auteur'],
+                        ['category',     'Catégorie'],
+                        ['published_at', 'Publié le'],
+                        ['views',        'Vues'],
+                        ['rating',       'Note'],
+                        ['status',       'Statut'],
+                        ['actions',      'Actions'],
+                      ].map(([key, label]) => (
+                        <label key={key} className="inline-flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="accent-blue-600"
+                            checked={!!visibleCols[key]}
+                            onChange={() => setVisibleCols(prev => ({ ...prev, [key]: !prev[key] }))}
+                          />
+                          <span>{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </Portal>
+              )}
+            </div>
+
             <button
               onClick={load}
               className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-sm inline-flex items-center gap-2 transition"
@@ -679,13 +815,7 @@ const ArticlesIndex = () => {
               Actualiser
             </button>
 
-            <Link
-              to="/articles/new"
-              className="px-3 py-2 rounded-xl bg-white text-blue-700 hover:bg-white/95 border border-white/40 shadow-sm inline-flex items-center gap-2 transition"
-              title="Créer un article"
-            >
-              <FiPlus /> Créer
-            </Link>
+           
 
             <button
               onClick={() => setViewsModal(true)}
@@ -817,56 +947,68 @@ const ArticlesIndex = () => {
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50">
               <tr>
-                <th className="px-3 py-3 text-xs font-medium text-slate-600">
-                  <button className="inline-flex items-center gap-2 select-none" onClick={()=>{
-                    const ids = (data.items || []).map(a => a.id);
-                    setSelectedIds(prev => {
-                      const next = new Set(prev);
-                      if (ids.length && ids.every(id => next.has(id))) ids.forEach(id => next.delete(id));
-                      else ids.forEach(id => next.add(id));
-                      return next;
-                    });
-                  }}>
-                    {allSelectedOnPage ? <FaCheckSquare /> : <FaSquare />} Sélect.
-                  </button>
-                </th>
+                {visibleCols.select && (
+                  <th className="px-3 py-3 text-xs font-medium text-slate-600">
+                    <button className="inline-flex items-center gap-2 select-none" onClick={()=>{
+                      const ids = (data.items || []).map(a => a.id);
+                      setSelectedIds(prev => {
+                        const next = new Set(prev);
+                        if (ids.length && ids.every(id => next.has(id))) ids.forEach(id => next.delete(id));
+                        else ids.forEach(id => next.add(id));
+                        return next;
+                      });
+                    }}>
+                      {allSelectedOnPage ? <FaCheckSquare /> : <FaSquare />} Sélect.
+                    </button>
+                  </th>
+                )}
 
-                <th className="px-3 py-3 text-xs font-medium text-slate-600">Image</th>
+                {visibleCols.image && <th className="px-3 py-3 text-xs font-medium text-slate-600">Image</th>}
 
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
-                  <button onClick={()=>toggleSort('title')} className="inline-flex items-center gap-1 hover:underline">
-                    Titre <SortIcon col="title" />
-                  </button>
-                </th>
+                {visibleCols.title && (
+                  <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
+                    <button onClick={()=>toggleSort('title')} className="inline-flex items-center gap-1 hover:underline">
+                      Titre <SortIcon col="title" />
+                    </button>
+                  </th>
+                )}
 
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">Auteur</th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">Catégorie</th>
+                {visibleCols.author && <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">Auteur</th>}
+                {visibleCols.category && <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">Catégorie</th>}
 
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
-                  <button onClick={()=>toggleSort('published_at')} className="inline-flex items-center gap-1 hover:underline">
-                    Publié le <SortIcon col="published_at" />
-                  </button>
-                </th>
+                {visibleCols.published_at && (
+                  <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
+                    <button onClick={()=>toggleSort('published_at')} className="inline-flex items-center gap-1 hover:underline">
+                      Publié le <SortIcon col="published_at" />
+                    </button>
+                  </th>
+                )}
 
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
-                  <button onClick={()=>toggleSort('view_count')} className="inline-flex items-center gap-1 hover:underline">
-                    Vues <SortIcon col="view_count" />
-                  </button>
-                </th>
+                {visibleCols.views && (
+                  <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
+                    <button onClick={()=>toggleSort('view_count')} className="inline-flex items-center gap-1 hover:underline">
+                      Vues <SortIcon col="view_count" />
+                    </button>
+                  </th>
+                )}
 
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
-                  <button onClick={()=>toggleSort('rating_average')} className="inline-flex items-center gap-1 hover:underline">
-                    Note <SortIcon col="rating_average" />
-                  </button>
-                </th>
+                {visibleCols.rating && (
+                  <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
+                    <button onClick={()=>toggleSort('rating_average')} className="inline-flex items-center gap-1 hover:underline">
+                      Note <SortIcon col="rating_average" />
+                    </button>
+                  </th>
+                )}
 
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
-                  <button onClick={()=>toggleSort('status')} className="inline-flex items-center gap-1 hover:underline">
-                    Statut <SortIcon col="status" />
-                  </button>
-                </th>
+                {visibleCols.status && (
+                  <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
+                    <button onClick={()=>toggleSort('status')} className="inline-flex items-center gap-1 hover:underline">
+                      Statut <SortIcon col="status" />
+                    </button>
+                  </th>
+                )}
 
-                <th className="px-3 py-3 text-right text-xs font-medium text-slate-600">Actions</th>
+                {visibleCols.actions && <th className="px-3 py-3 text-right text-xs font-medium text-slate-600">Actions</th>}
               </tr>
             </thead>
 
@@ -898,125 +1040,145 @@ const ArticlesIndex = () => {
                     onDragStart={(e)=> onDragStartRow(e, article)}
                     onDragEnd={onDragEndRow}
                   >
-                    <td className="px-3 py-4">
-                      <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          className="accent-blue-600"
-                          checked={selectedIds.has(article.id)}
-                          onChange={()=> setSelectedIds(prev => { const n=new Set(prev); n.has(article.id)?n.delete(article.id):n.add(article.id); return n; })}
-                        />
-                      </label>
-                    </td>
+                    {visibleCols.select && (
+                      <td className="px-3 py-4">
+                        <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            className="accent-blue-600"
+                            checked={selectedIds.has(article.id)}
+                            onChange={()=> setSelectedIds(prev => { const n=new Set(prev); n.has(article.id)?n.delete(article.id):n.add(article.id); return n; })}
+                          />
+                        </label>
+                      </td>
+                    )}
 
-                    <td className="px-3 py-4 cursor-grab active:cursor-grabbing">
-                      <Thumb src={article.featured_image_url || article.featured_image || null} alt={article.featured_image_alt || article.title} className="w-12 h-12" />
-                    </td>
+                    {visibleCols.image && (
+                      <td className="px-3 py-4 cursor-grab active:cursor-grabbing">
+                        <Thumb src={article.featured_image_url || article.featured_image || null} alt={article.featured_image_alt || article.title} className="w-12 h-12" />
+                      </td>
+                    )}
 
-                    <td className="px-3 py-4">
-                      <div className="min-w-0">
+                    {visibleCols.title && (
+                      <td className="px-3 py-4">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Link to={publicTo} className="font-semibold text-slate-900 hover:text-blue-600 transition-colors duration-200 block truncate" title={article.title} target="_blank" rel="noopener noreferrer">
+                              {article.title || <span className="text-gray-400 italic">Sans titre</span>}
+                            </Link>
+                            <a href={publicTo} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800" title="Ouvrir l'article"><FaExternalLinkAlt size={12} /></a>
+                          </div>
+                          {article.excerpt && <div className="text-xs text-slate-500 truncate max-w-[420px] mt-1">{article.excerpt}</div>}
+                          <div className="flex gap-1 mt-2">
+                            {article.is_featured && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">⭐ À la une</span>)}
+                            {article.is_sticky && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">📌 Épinglé</span>)}
+                            {article.visibility && article.visibility !== 'public' && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">🔒 {article.visibility}</span>)}
+                          </div>
+                        </div>
+                      </td>
+                    )}
+
+                    {visibleCols.author && (
+                      <td className="px-3 py-4 text-sm">
                         <div className="flex items-center gap-2">
-                          <Link to={publicTo} className="font-semibold text-slate-900 hover:text-blue-600 transition-colors duration-200 block truncate" title={article.title} target="_blank" rel="noopener noreferrer">
-                            {article.title || <span className="text-gray-400 italic">Sans titre</span>}
-                          </Link>
-                          <a href={publicTo} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800" title="Ouvrir l'article"><FaExternalLinkAlt size={12} /></a>
+                          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"><FaUser className="text-slate-500" size={12} /></div>
+                          <div>
+                            <div className="font-medium text-slate-900">{article.author_name || `Auteur #${article.author_id || '—'}`}</div>
+                            {article.author_id && (<div className="text-xs text-slate-500">ID: {article.author_id}</div>)}
+                          </div>
                         </div>
-                        {article.excerpt && <div className="text-xs text-slate-500 truncate max-w-[420px] mt-1">{article.excerpt}</div>}
-                        <div className="flex gap-1 mt-2">
-                          {article.is_featured && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">⭐ À la une</span>)}
-                          {article.is_sticky && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">📌 Épinglé</span>)}
-                          {article.visibility && article.visibility !== 'public' && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">🔒 {article.visibility}</span>)}
+                      </td>
+                    )}
+
+                    {visibleCols.category && (
+                      <td className="px-3 py-4 text-sm">
+                        <span className="inline-flex items-center px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-xs font-medium transition-colors duration-200">
+                          <FaTag className="mr-1" size={10} />{getCategoryFromTitle(article.title)}
+                        </span>
+                      </td>
+                    )}
+
+                    {visibleCols.published_at && (
+                      <td className="px-3 py-4 text-sm">
+                        <div className="flex items-center gap-2">
+                          <FaCalendarAlt className="text-slate-400" size={12} />
+                          <div>
+                            <div className="font-medium text-slate-900">{pubDate}</div>
+                            <div className="text-xs text-slate-500">{publishedAt ? `${pubTime} • ${pubRel}` : '—'}</div>
+                          </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
+                    )}
 
-                    <td className="px-3 py-4 text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"><FaUser className="text-slate-500" size={12} /></div>
-                        <div>
-                          <div className="font-medium text-slate-900">{article.author_name || `Auteur #${article.author_id || '—'}`}</div>
-                          {article.author_id && (<div className="text-xs text-slate-500">ID: {article.author_id}</div>)}
+                    {visibleCols.views && (
+                      <td className="px-3 py-4 text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-blue-600"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+                          </div>
+                          <div>
+                            <div className="font-bold text-blue-700">{formattedViewCount}</div>
+                            <div className="text-xs text-slate-500">vues</div>
+                          </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
+                    )}
 
-                    <td className="px-3 py-4 text-sm">
-                      <span className="inline-flex items-center px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-xs font-medium transition-colors duration-200">
-                        <FaTag className="mr-1" size={10} />{getCategoryFromTitle(article.title)}
-                      </span>
-                    </td>
-
-                    <td className="px-3 py-4 text-sm">
-                      <div className="flex items-center gap-2">
-                        <FaCalendarAlt className="text-slate-400" size={12} />
-                        <div>
-                          <div className="font-medium text-slate-900">{pubDate}</div>
-                          <div className="text-xs text-slate-500">{publishedAt ? `${pubTime} • ${pubRel}` : '—'}</div>
+                    {visibleCols.rating && (
+                      <td className="px-3 py-4 text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center"><FaThumbsUp className="text-amber-600" size={12} /></div>
+                          <div>
+                            <div className="font-bold text-amber-700">{formattedRating}/5</div>
+                            <div className="text-xs text-slate-500">{article.rating_count || 0} avis</div>
+                          </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
+                    )}
 
-                    <td className="px-3 py-4 text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-blue-600"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+                    {visibleCols.status && (
+                      <td className="px-3 py-4 text-sm">
+                        <div className="space-y-1">
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${badgeClass(uiStatus)}`}>{uiStatus}</span>
+                          <div className="text-xs text-slate-500 space-y-0.5">
+                            {creRel && (<div>Créé {creRel} • {formatDate(toDate(article.created_at))} {formatTime(toDate(article.created_at))}</div>)}
+                            {updRel && (<div>Maj {updRel} • {formatDate(toDate(article.updated_at))} {formatTime(toDate(article.updated_at))}</div>)}
+                          </div>
                         </div>
-                        <div>
-                          <div className="font-bold text-blue-700">{formattedViewCount}</div>
-                          <div className="text-xs text-slate-500">vues</div>
+                      </td>
+                    )}
+
+                    {visibleCols.actions && (
+                      <td className="px-3 py-4 text-right">
+                        <div className="flex items-center gap-1 justify-end">
+                          <Link to={publicTo} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg border text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100 transition" title="Voir l'article"><FaEye size={14} /></Link>
+
+                          {/* EDIT — désactivé si archived */}
+                          <button
+                            className={`p-2 rounded-lg border transition ${
+                              isArchived
+                                ? 'text-slate-400 bg-slate-50 border-slate-200 cursor-not-allowed'
+                                : 'text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
+                            }`}
+                            onClick={()=>{ if (!isArchived) navigate(`/articles/${article.id}/edit`, { state: { article } }); }}
+                            title={isArchived ? 'Édition interdite (archived)' : 'Éditer'}
+                            disabled={isArchived}
+                          >
+                            <FaEdit size={14} />
+                          </button>
+
+                          <button className="p-2 rounded-lg border text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100 transition" onClick={()=>openConfirm('soft', article)} title="Envoyer à la corbeille"><FaTrashAlt size={14} /></button>
+                          <button className="p-2 rounded-lg border text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100 transition" onClick={()=>openConfirm('hard', article)} title="Supprimer définitivement"><FaTrash size={14} /></button>
                         </div>
-                      </div>
-                    </td>
-
-                    <td className="px-3 py-4 text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center"><FaThumbsUp className="text-amber-600" size={12} /></div>
-                        <div>
-                          <div className="font-bold text-amber-700">{formattedRating}/5</div>
-                          <div className="text-xs text-slate-500">{article.rating_count || 0} avis</div>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="px-3 py-4 text-sm">
-                      <div className="space-y-1">
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${badgeClass(uiStatus)}`}>{uiStatus}</span>
-                        <div className="text-xs text-slate-500 space-y-0.5">
-                          {creRel && (<div>Créé {creRel} • {formatDate(toDate(article.created_at))} {formatTime(toDate(article.created_at))}</div>)}
-                          {updRel && (<div>Maj {updRel} • {formatDate(toDate(article.updated_at))} {formatTime(toDate(article.updated_at))}</div>)}
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="px-3 py-4 text-right">
-                      <div className="flex items-center gap-1 justify-end">
-                        <Link to={publicTo} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg border text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100 transition" title="Voir l'article"><FaEye size={14} /></Link>
-
-                        {/* EDIT — désactivé si archived */}
-                        <button
-                          className={`p-2 rounded-lg border transition ${
-                            isArchived
-                              ? 'text-slate-400 bg-slate-50 border-slate-200 cursor-not-allowed'
-                              : 'text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
-                          }`}
-                          onClick={()=>{ if (!isArchived) navigate(`/articles/${article.id}/edit`, { state: { article } }); }}
-                          title={isArchived ? 'Édition interdite (archived)' : 'Éditer'}
-                          disabled={isArchived}
-                        >
-                          <FaEdit size={14} />
-                        </button>
-
-                        <button className="p-2 rounded-lg border text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100 transition" onClick={()=>openConfirm('soft', article)} title="Envoyer à la corbeille"><FaTrashAlt size={14} /></button>
-                        <button className="p-2 rounded-lg border text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100 transition" onClick={()=>openConfirm('hard', article)} title="Supprimer définitivement"><FaTrash size={14} /></button>
-                      </div>
-                    </td>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
 
               {(!loading && (data.items || []).length === 0) && (
                 <tr>
-                  <td className="p-10 text-center text-slate-500" colSpan={10}>
+                  <td className="p-10 text-center text-slate-500" colSpan={visibleColCount}>
                     <div className="inline-flex flex-col items-center gap-2">
                       <div className="text-6xl mb-2">📝</div>
                       <p className="text-lg">Aucun article</p>

@@ -55,11 +55,11 @@ export default function Toolbar({
             title="Avancer"
             onClick={onForward}
           />
-          {/* <IconButton
+          <IconButton
             icon={<FaRedo />}
             title="Rafraîchir"
             onClick={onRefresh}
-          /> */}
+          />
           <IconButton
             icon={<FaExpand />}
             title="Plein écran"
@@ -80,13 +80,9 @@ export default function Toolbar({
         /* === Mode étendu (bureau/dashboard) === */
         <>
           {/* Navigation */}
-          <div className="flex items-center flex-wrap gap-2 sm:gap-3">
+          <div className="flex items-center flex-wrap gap-2 sm:gap-3 ml-4">
             <IconButton icon={<FaArrowLeft />} title="Retour" onClick={onBack} />
-            <IconButton
-              icon={<FaArrowRight />}
-              title="Avancer"
-              onClick={onForward}
-            />
+           
             <IconButton
               icon={<FaRedo />}
               title="Rafraîchir"

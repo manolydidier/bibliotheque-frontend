@@ -1,6 +1,6 @@
 // src/layouts/DashboardLayout.jsx
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate, NavLink, useResolvedPath } from 'react-router-dom';
 import {
   FaFolderOpen, FaTachometerAlt, FaImages, FaStar, FaFilePdf,
   FaCamera, FaCog, FaBars, FaBell, FaUser, FaSignOutAlt, FaTrash,
@@ -14,6 +14,7 @@ import { logoutUser } from '../features/auth/authActions';
 
 const STORAGE_KEY         = 'dashboard:activeTabId';
 const ACCORDION_STORE_KEY = 'dashboard:openSections';
+const SIDEBAR_LS_KEY      = 'sidebar:open';
 
 /* ========================= Helpers ========================= */
 const getTokenGuard = () => {
@@ -134,6 +135,57 @@ const timeAgo = (iso, t) => {
 };
 /* ========================= /Helpers ========================= */
 
+/* ========= ActiveLink : "exact" pathname par défaut, "exact FULL" (pathname+search+hash) si exactFull ========= */
+const ActiveLink = ({ to, exactFull = false, className, children, ...rest }) => {
+  const location = useLocation();
+  const resolved  = useResolvedPath(to);
+  const norm = (s) => (s || '').replace(/\/+$/, '') || '/';
+
+  const currentFull = norm(location.pathname) + (location.search || '') + (location.hash || '');
+  const targetFull  = norm(resolved.pathname) + (resolved.search || '') + (resolved.hash || '');
+  const isActiveFull = exactFull ? (currentFull === targetFull) : undefined;
+
+  const compute = (ctx) => exactFull ? isActiveFull : ctx.isActive;
+
+  return (
+    <NavLink
+      to={to}
+      end={!exactFull} // exact pathname si pas FULL
+      className={(ctx) => (typeof className === 'function' ? className({ isActive: compute(ctx) }) : className)}
+      aria-current={(ctx) => (compute(ctx) ? 'page' : undefined)}
+      {...rest}
+    >
+      {(ctx) => (typeof children === 'function' ? children({ isActive: compute(ctx) }) : children)}
+    </NavLink>
+  );
+};
+
+/* ====== Classes du menu (plus prononcé pour Dashboard, border-left fine) ====== */
+const menuItemClass = (item, isActive) => {
+  const thinActiveBorder  = isActive ? 'border-l-[1.5px] border-blue-500' : 'border-l border-transparent';
+  const common = 'flex items-center rounded-lg p-3 mb-1 transition-colors duration-300 relative overflow-hidden group';
+  const hover  = isActive ? '' : 'hover:bg-gray-100/70';
+  const text   = isActive ? 'text-gray-900 font-semibold' : 'text-gray-800';
+  const base   = `${common} ${hover} ${text} ${thinActiveBorder}`;
+
+  if (item.emphasize) {
+    return isActive
+      ? `${base} bg-[#eef5ff] shadow-[inset_0_0_0_1px_rgba(59,130,246,.15)]`
+      : `${base} bg-gradient-to-r from-blue-50/40 to-indigo-50/20`;
+  }
+  return isActive
+    ? `${base} bg-[#f3f7ff]`
+    : base;
+};
+
+const Content = ({ icon, labelKey, fallback, isActive, t }) => (
+  <>
+    <span className="mr-3 text-blue-500">{icon}</span>
+    <span className="font-medium">{t(labelKey, fallback)}</span>
+    <span className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg bg-gradient-to-r from-blue-50/0 via-blue-50/40 to-blue-100/0" />
+  </>
+);
+
 const DashboardLayout = () => {
   const { t } = useTranslation();
   const location = useLocation();
@@ -146,13 +198,19 @@ const DashboardLayout = () => {
   const { isAuthenticated, user } = useSelector((s) => s.library?.auth || {});
   const userId = user?.id;
 
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  /* Sidebar: persistance ouverte/fermée */
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    try { const v = localStorage.getItem(SIDEBAR_LS_KEY); return v ? v === '1' : true; } catch { return true; }
+  });
+  const toggleSidebar = () => setIsSidebarOpen(v => {
+    try { localStorage.setItem(SIDEBAR_LS_KEY, v ? '0' : '1'); } catch {}
+    return !v;
+  });
+
   const [title, setTitle] = useState("");
   const [activeTabId, setActiveTabId] = useState(() => {
     try { return localStorage.getItem(STORAGE_KEY) || 'dashboard'; } catch { return 'dashboard'; }
   });
-
-  const toggleSidebar = () => setIsSidebarOpen(v => !v);
 
   // Langues
   const LanguageSelector = () => (
@@ -180,31 +238,59 @@ const DashboardLayout = () => {
       id: 'root',
       titleKey: null,
       items: [
-        { id: 'dashboard',  tKey: 'layout.menu.dashboard',    icon: <FaTachometerAlt className="text-blue-500 mr-3" />, link: '/dashboard' },
+        { id: 'dashboard',  tKey: 'layout.menu.dashboard',    icon: <FaTachometerAlt />, link: '/dashboard', emphasize: true },
       ],
     },
     {
       id: 'content',
       titleKey: 'layout.sections.media',
       items: [
-        { id: 'platform',     tKey: 'layout.menu.platform',   icon: <FaImages className="text-blue-500 mr-3" />, link: '/articles' },
-        { id: 'articlesBo',   tKey: 'layout.menu.articlesBo', icon: <FaStar className="text-blue-500 mr-3" />, link: '/articlescontroler' },
-        { id: 'articleNew',   tKey: 'layout.menu.articleNew', icon: <FaPlus className="text-blue-500 mr-3" />, link: '/articles/new' },
-        { id: 'trashed',      tKey: 'layout.menu.trashed',    icon: <FaTrash className="text-blue-500 mr-3" />, link: '/articles/trashed' },
+        { id: 'platform',     tKey: 'layout.menu.platform',   icon: <FaImages />, link: '/articles' },
+        { id: 'articlesBo',   tKey: 'layout.menu.articlesBo', icon: <FaStar />,   link: '/articlescontroler' },
+        { id: 'articleNew',   tKey: 'layout.menu.articleNew', icon: <FaPlus />,   link: '/articles/new' },
+        { id: 'trashed',      tKey: 'layout.menu.trashed',    icon: <FaTrash />,  link: '/articles/trashed' },
+        // Exemple si tu veux matcher FULL (pathname + ?query + #hash) :
+        // { id: 'platformMine', tKey: 'layout.menu.platformMine', icon: <FaImages />, link: '/articles?tab=mine', activeMode: 'full' },
       ],
     },
     {
       id: 'system',
       titleKey: 'layout.sections.settings',
       items: [
+        // Route historique de config
         {
           id: 'categoriesTags',
           tKey: 'layout.menu.categoriesTags',
-          // 🔵 Harmonisation du style (même bleu que les autres)
-          icon: <FaCog className="text-blue-500 mr-3" />,
+          icon: <FaCog />,
           link: '/configuration',
+          // active exact pathname (par défaut)
         },
-        { id: 'users', tKey: 'layout.menu.users', icon: <FaUsersGear className="text-blue-500 mr-3" />, onClick: () => {} },
+
+        // Nouveaux sous-onglets /settings en URL EXACTE (FULL)
+        {
+          id: 'settingsProfile',
+          tKey: 'layout.menu.profile',
+          icon: <FaUser />,
+          link: '/settings?tab=profile',
+          activeMode: 'full', // match strict pathname+search+hash
+        },
+        {
+          id: 'settingsSecurity',
+          tKey: 'layout.menu.security',
+          icon: <FaCog />,
+          link: '/settings?tab=security',
+          activeMode: 'full',
+        },
+        {
+          id: 'settingsPermissions',
+          tKey: 'layout.menu.permissions',
+          icon: <FaUsersGear />,
+          link: '/settings?tab=permissions',
+          activeMode: 'full',
+        },
+
+        // Bouton libre d'action si besoin
+        { id: 'users', tKey: 'layout.menu.users', icon: <FaUsersGear />, onClick: () => {} },
       ],
     },
   ]), []);
@@ -215,7 +301,6 @@ const DashboardLayout = () => {
       const raw = localStorage.getItem(ACCORDION_STORE_KEY);
       if (raw) return JSON.parse(raw);
     } catch {}
-    // par défaut: tous ouverts
     return { root: true, content: true, system: true };
   });
 
@@ -243,6 +328,7 @@ const DashboardLayout = () => {
   useEffect(() => {
     if (!title) {
       if (location.pathname.startsWith('/configuration')) setTitle(t('layout.titles.settings'));
+      else if (location.pathname.startsWith('/settings')) setTitle(t('layout.titles.settings')); // <-- ajouté
       else if (location.pathname.startsWith('/articlescontroler')) setTitle(t('layout.titles.articlesBo'));
       else if (location.pathname.startsWith('/articles/trashed')) setTitle(t('layout.titles.trashed'));
       else if (location.pathname.startsWith('/articles/new')) setTitle(t('layout.titles.articleNew'));
@@ -251,10 +337,6 @@ const DashboardLayout = () => {
       else setTitle(t('layout.titles.dashboard'));
     }
   }, [location.pathname, title, t]);
-
-  const baseItemClass = (isActive) =>
-    `flex items-center sidebar-item rounded-lg p-3 mb-1 cursor-pointer transition-colors duration-300
-     ${isActive ? "bg-[#eff6ff] border-l-2 border-blue-500 font-semibold" : "hover:bg-gray-100/70"}`;
 
   /* ===== Profil ===== */
   const computedAvatarSrc = useMemo(() => {
@@ -275,7 +357,7 @@ const DashboardLayout = () => {
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
 
-  /* ===== Notifications (avec z-index haut) ===== */
+  /* ===== Notifications ===== */
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifTab, setNotifTab] = useState('news');
   const notifRef = useRef(null);
@@ -287,8 +369,8 @@ const DashboardLayout = () => {
   const [pending, setPending] = useState({ items: [], page: 1, last: 1, loading: false, error: null });
 
   const recomputeNewCount = useCallback(async () => {
-    if (!isAuthenticated || !userId) { setNewCount(0); return; }
     const token = getTokenGuard();
+    if (!isAuthenticated || !userId) { setNewCount(0); return; }
     const lastSeen = getLastSeenTs(userId);
     if (!lastSeen) { setLastSeenNow(userId); setNewCount(0); return; }
     try {
@@ -439,27 +521,35 @@ const DashboardLayout = () => {
                   }`}
                 >
                   {section.items.map((item) => {
-                    const isActive = activeTabId === item.id;
-                    const content = (
-                      <>
-                        {item.icon}
-                        <span className="font-medium">
-                          {t(item.tKey, item.tKey === 'layout.menu.categoriesTags' ? 'Catégories & Tags' : undefined)}
-                        </span>
-                      </>
+                    const ContentNode = ({ isActive }) => (
+                      <div className={menuItemClass(item, isActive)}>
+                        <Content
+                          icon={item.icon}
+                          labelKey={item.tKey}
+                          fallback={
+                            item.id === 'categoriesTags' ? 'Catégories & Tags'
+                              : item.id === 'settingsProfile' ? 'Profil'
+                              : item.id === 'settingsSecurity' ? 'Sécurité'
+                              : item.id === 'settingsPermissions' ? 'Permissions'
+                              : undefined
+                          }
+                          isActive={isActive}
+                          t={t}
+                        />
+                      </div>
                     );
 
                     if (item.link) {
                       return (
-                        <Link
+                        <ActiveLink
                           key={item.id}
                           to={item.link}
+                          exactFull={item.activeMode === 'full'} // FULL = pathname + ?query + #hash
+                          className={({ isActive }) => 'block'}
                           onClick={() => setActiveTabId(item.id)}
-                          className={`${baseItemClass(isActive)} group relative`}
                         >
-                          {content}
-                          <span className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg bg-gradient-to-r from-blue-50/0 via-blue-50/40 to-blue-100/0" />
-                        </Link>
+                          {({ isActive }) => <ContentNode isActive={!!isActive} />}
+                        </ActiveLink>
                       );
                     }
 
@@ -471,10 +561,9 @@ const DashboardLayout = () => {
                           setActiveTabId(item.id);
                           item.onClick?.();
                         }}
-                        className={`${baseItemClass(isActive)} group relative w-full text-left`}
+                        className={menuItemClass(item, false)}
                       >
-                        {content}
-                        <span className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg bg-gradient-to-r from-blue-50/0 via-blue-50/40 to-blue-100/0" />
+                        <Content icon={item.icon} labelKey={item.tKey} isActive={false} t={t} />
                       </button>
                     );
                   })}
@@ -510,12 +599,12 @@ const DashboardLayout = () => {
 
       {/* Contenu principal */}
       <div className="flex-1 flex flex-col relative z-0">
-        {/* Header avec z-index élevé pour les dropdowns */}
+        {/* Header */}
         <header className="relative z-40 bg-white/70 backdrop-blur-xl shadow-sm p-4 flex justify-between items-center border-b border-white/60">
           <div className="flex items-center">
             <button
               onClick={toggleSidebar}
-              className="mr-4 text-gray-700 hover:text-gray-900"
+              className="mr-4 text-gray-700 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 rounded-md"
               aria-label={isSidebarOpen ? t('layout.a11y.closeSidebar') : t('layout.a11y.openSidebar')}
               aria-expanded={isSidebarOpen}
               aria-controls="sidebar"
@@ -530,8 +619,13 @@ const DashboardLayout = () => {
             {isAuthenticated && (
               <div className="relative z-50" ref={notifRef}>
                 <button
-                  onClick={openNotifications}
-                  className="relative text-gray-700 hover:text-gray-900 transition-colors p-2 rounded-full hover:bg-white/60"
+                  onClick={() => {
+                    setNotifOpen((v) => !v);
+                    if (!notifOpen) {
+                      openNotifications();
+                    }
+                  }}
+                  className="relative text-gray-700 hover:text-gray-900 transition-colors p-2 rounded-full hover:bg-white/60 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                   aria-label={t('layout.a11y.notifications')}
                 >
                   <FaBell />
@@ -661,8 +755,8 @@ const DashboardLayout = () => {
             {/* Profil */}
             <div className="relative z-50" ref={profileRef}>
               <button
-                onClick={() => { setProfileOpen(v => !v); setNotifOpen(false); }}
-                className="w-10 h-10 rounded-full overflow-hidden border-2 border-white/50 hover:border-blue-500 transition-shadow shadow-sm"
+                onClick={() => { setProfileOpen(v => !v); }}
+                className="w-10 h-10 rounded-full overflow-hidden border-2 border-white/50 hover:border-blue-500 transition-shadow shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                 aria-label={t('layout.a11y.profile')}
               >
                 <img

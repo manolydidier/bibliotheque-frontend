@@ -21,7 +21,7 @@ import {
 import {
   FaDownload,
   FaExternalLinkAlt, FaChevronLeft, FaChevronRight, FaSearchPlus, FaSearchMinus,
-  FaFilePdf, FaFileExcel, FaFileWord, FaImage, FaFileVideo, FaFile, FaTag, FaStar, FaClock, FaEye, FaComment, FaChartBar, FaHistory, FaInfoCircle, FaPlay, FaTimes, FaShareAlt,
+  FaFilePdf, FaFileExcel, FaFileWord, FaImage, FaFileVideo, FaFile, FaTag, FaStar, FaClock, FaEye, FaComment, FaChartBar, FaHistory, FaInfoCircle, FaPlay, FaTimes, FaShareAlt,FaColumns,
   FaLock,
   FaBars,
   FaThList,
@@ -1023,41 +1023,33 @@ useEffect(() => {
             {unlockError}
           </div>
         )}
-        
-        {/* Sélecteur de langue */}
-        {/* <div className="fixed right-3 top-24 z-50">
-          <LanguageSelector />
-        </div> */}
-
         {/* Bascule Sidebar (desktop) */}
-<div className="hidden lg:block fixed left-3 top-[90px] z-50 group">
-  {/* Tooltip */}
-  <div className={`absolute left-12 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none ${
-    sidebarOpen ? 'hidden' : 'block'
-  }`}>
-    <div className="bg-slate-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-      Ouvrir le menu
-    </div>
-  </div>
-  
-  {/* Bouton */}
-  <button
-    type="button"
-    onClick={toggleSidebar}
-    title={sidebarOpen ? t('visualiseur.sidebar.hide') : t('visualiseur.sidebar.show')}
-    aria-pressed={!sidebarOpen}
-    className="flex items-center gap-3 px-4 py-3 rounded-full border-2 border-blue-500 bg-white hover:bg-blue-50 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
-  >
-    {sidebarOpen ? (
-      <FaOutdent className="text-blue-600 text-lg" />
-    ) : (
-      <FaIndent className="text-blue-600 text-lg" />
-    )}
-    <span className="text-sm font-semibold text-blue-700">
-      {sidebarOpen ? 'Fermer' : 'Menu'}
-    </span>
-  </button>
-</div>
+        <div className=" lg:block fixed left-3 top-[85px] z-40 group">
+          {/* Tooltip */}
+          <div className={`absolute left-12 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none ${
+            sidebarOpen ? 'hidden' : 'block'
+          }`}>
+            <div className="bg-slate-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+              Ouvrir le menu
+            </div>
+          </div>
+          
+          {/* Bouton */}
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            title={sidebarOpen ? t('visualiseur.sidebar.hide') : t('visualiseur.sidebar.show')}
+            aria-pressed={!sidebarOpen}
+            className="flex items-center gap-3 px-4 py-3 rounded-full border-2  bg-white hover:bg-blue-50 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+          >
+            {sidebarOpen ? (
+              <FaOutdent className="text-blue-600 text-lg" />
+            ) : (
+              <FaIndent className="text-blue-600 text-lg" />
+            )}
+            
+          </button>
+        </div>
 
         <div className="flex gap-2 lg:gap-6 xl:gap-2">
           {sidebarOpen && (
