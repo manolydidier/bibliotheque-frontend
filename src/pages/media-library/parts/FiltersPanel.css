@@ -7,12 +7,13 @@
 @keyframes dropdown-out { from { opacity: 1; transform: translateY(0) scale(1) } to { opacity: 0; transform: translateY(-4px) scale(0.98) } }
 @keyframes caret-blink { 0%,49% { opacity: 1 } 50%,100% { opacity: 0 } }
 
-.animate-\[toast-in_240ms_ease-out] { animation: toast-in 0.24s ease-out both; }
-.animate-fade-in { animation: fade-in 0.16s ease-out both; }
-.animate-scale-in { animation: scale-in 0.18s ease-out both; }
-.animate-\[dropdown-in_.14s_ease-out] { animation: dropdown-in 0.14s ease-out both; }
-.animate-\[dropdown-out_.12s_ease-in] { animation: dropdown-out 0.12s ease-in both; }
-.animate-caret-blink { animation: caret-blink 1s steps(2, start) infinite; }
+/* ✅ classes “normales” */
+.animate-toast-in      { animation: toast-in 0.24s ease-out both; }
+.animate-fade-in       { animation: fade-in 0.16s ease-out both; }
+.animate-scale-in      { animation: scale-in 0.18s ease-out both; }
+.animate-dropdown-in   { animation: dropdown-in 0.14s ease-out both; }
+.animate-dropdown-out  { animation: dropdown-out 0.12s ease-in both; }
+.animate-caret-blink   { animation: caret-blink 1s steps(2, start) infinite; }
 
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }

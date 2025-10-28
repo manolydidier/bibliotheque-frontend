@@ -48,18 +48,18 @@ export default function Toolbar({
     >
       {/* === Mode compact (dock flottant mobile) === */}
       {activeCompact ? (
-        <div className="flex items-center justify-center gap-3 sm:gap-4">
+        <div className="flex items-center justify-center gap-3 sm:gap-4  bg-red-800">
           <IconButton icon={<FaArrowLeft />} title="Retour" onClick={onBack} />
           <IconButton
             icon={<FaArrowRight />}
             title="Avancer"
             onClick={onForward}
           />
-          <IconButton
+          {/* <IconButton
             icon={<FaRedo />}
             title="Rafraîchir"
             onClick={onRefresh}
-          />
+          /> */}
           <IconButton
             icon={<FaExpand />}
             title="Plein écran"

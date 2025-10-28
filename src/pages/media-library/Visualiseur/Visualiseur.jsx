@@ -22,7 +22,12 @@ import {
   FaDownload,
   FaExternalLinkAlt, FaChevronLeft, FaChevronRight, FaSearchPlus, FaSearchMinus,
   FaFilePdf, FaFileExcel, FaFileWord, FaImage, FaFileVideo, FaFile, FaTag, FaStar, FaClock, FaEye, FaComment, FaChartBar, FaHistory, FaInfoCircle, FaPlay, FaTimes, FaShareAlt,
-  FaLock
+  FaLock,
+  FaBars,
+  FaThList,
+  FaOutdent,
+  FaStream,
+  FaIndent
 } from "react-icons/fa";
 import {
   ResponsiveContainer,
@@ -69,6 +74,39 @@ const firstCategory = (art) => {
 };
 
 // === Helpers URL (mêmes règles que GridCard) =========================
+
+// en haut de Visualiseur.jsx, proche des autres helpers
+// helpers (en haut de Visualiseur.jsx par ex.)
+const api = (path) => {
+  const p = String(path).replace(/^\/+/, '');
+  // DEV: passe par le proxy Vite (même origine)
+  if (import.meta.env.DEV) return `/api/${p}`;
+
+  // PROD: base URL depuis l'env
+  const base = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+  const root = base.replace(/\/api\/?$/i, '/api');
+  return `${root}/${p}`;
+};
+
+// --- Debug download ---
+const DL_DEBUG = import.meta.env.DEV && (window?.__DL_DEBUG__ ?? true);
+const dbg = (...args) => { if (DL_DEBUG) console.log("%c[DL]", "color:#2563eb", ...args); };
+const dberr = (...args) => { if (DL_DEBUG) console.error("%c[DL]", "color:#dc2626", ...args); };
+
+
+
+function getOrCreateVuid() {
+  try {
+    const key = 'vuid';
+    let v = localStorage.getItem(key);
+    if (!v) {
+      v = crypto?.randomUUID?.() || String(Math.random()).slice(2) + Date.now();
+      localStorage.setItem(key, v);
+    }
+    return v;
+  } catch { return 'anon'; }
+}
+
 const fixFeaturedPath = (u) => {
   if (!u) return u;
   let s = String(u).trim();
@@ -82,10 +120,22 @@ const fixFeaturedPath = (u) => {
 const toAbsolute = (u) => {
   if (!u) return null;
   const fixed = fixFeaturedPath(u);
-  if (/^https?:\/\//i.test(fixed)) return fixed;
-  const base = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/api\/?$/i, "");
-  return base ? `${base}/${fixed.replace(/^\/+/, "")}` : `/${fixed.replace(/^\/+/, "")}`;
+  if (/^https?:\/\//i.test(fixed)) {
+    if (import.meta.env.DEV && fixed.includes('/storage/')) {
+      const path = fixed.split('/storage/')[1];
+      return `/storage/${path}`;
+    }
+    return fixed;
+  }
+  if (import.meta.env.DEV && fixed.startsWith('storage/')) {
+    return `/${fixed.replace(/^\/+/, '')}`;
+  }
+  const base = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/api\/?$/i, '');
+  return base ? `${base}/${fixed.replace(/^\/+/, '')}` : `/${fixed.replace(/^\/+/, '')}`;
 };
+
+
+
 
 const primaryMediaUrl = (art) => {
   if (!art) return null;
@@ -392,32 +442,23 @@ export default function Visualiseur() {
   const toggleSidebar = useCallback(() => {
     setSidebarOpen((s) => !s);
   }, []);
+useEffect(() => {
+  if (!DL_DEBUG) return;
+  const onErr = (e) => dberr("window error", e.message, e);
+  const onRej = (e) => dberr("unhandledrejection", e.reason);
+  const onBU  = () => dbg("beforeunload fired (une navigation/refresh est déclenchée)");
+  window.addEventListener("error", onErr);
+  window.addEventListener("unhandledrejection", onRej);
+  window.addEventListener("beforeunload", onBU);
+  return () => {
+    window.removeEventListener("error", onErr);
+    window.removeEventListener("unhandledrejection", onRej);
+    window.removeEventListener("beforeunload", onBU);
+  };
+}, []);
 
   // Sélecteur de langue
-  // const LanguageSelector = () => (
-  //   <div className="flex items-center gap-2">
-  //     <button
-  //       onClick={() => i18n.changeLanguage('fr')}
-  //       className={`px-3 py-1 rounded-lg text-sm ${
-  //         i18n.language === 'fr' 
-  //           ? 'bg-blue-500 text-white' 
-  //           : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-  //       }`}
-  //     >
-  //       FR
-  //     </button>
-  //     <button
-  //       onClick={() => i18n.changeLanguage('en')}
-  //       className={`px-3 py-1 rounded-lg text-sm ${
-  //         i18n.language === 'en' 
-  //           ? 'bg-blue-500 text-white' 
-  //           : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-  //       }`}
-  //     >
-  //       EN
-  //     </button>
-  //   </div>
-  // );
+ 
 
   /* ------- Actions ------- */
   // Construit un "article-like" avec le média en tête (pour FilePreview)
@@ -442,13 +483,96 @@ export default function Visualiseur() {
     setQpOpen(true);
   }, [selectedFile, article, buildArticleWith, t]);
 
-  const downloadCurrent = () => {
-    const u = selectedFile?.fileUrl || primaryMediaUrl(article);
-    if (!u) return;
-    const a = document.createElement("a");
-    a.href = u; a.download = "";
-    document.body.appendChild(a); a.click(); a.remove();
-  };
+ const filenameFrom = (u, fallback = 'fichier') => {
+  try {
+    const p = new URL(u, window.location.href).pathname;
+    const name = decodeURIComponent(p.split('/').pop() || '');
+    return name || fallback;
+  } catch { return fallback; }
+};
+
+const sameOrigin = (u) => {
+  try {
+    const url = new URL(u, window.location.href);
+    return url.origin === window.location.origin;
+  } catch { return true; }
+};
+
+const downloadCurrent = async () => {
+  const u = selectedFile?.fileUrl || primaryMediaUrl(article);
+  if (!u) return;
+
+  // --- Ping download avec Bearer si on a un token, sinon beacon public
+  try {
+    const fileId =
+      selectedFile?.id ??
+      (article?.media || []).find(m => toAbsolute(m.url) === u)?.id ??
+      null;
+
+    if (fileId) {
+      const url = api(`media/${fileId}/download`);
+      const payload = { dedupe_key: `${getOrCreateVuid()}:${(navigator.userAgent||'ua')}:${fileId}` };
+      const tokenGuard =localStorage.getItem("tokenGuard") || sessionStorage.getItem("tokenGuard") || null;
+      if (tokenGuard) {
+        await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${tokenGuard}`,
+          },
+          body: JSON.stringify(payload),
+          keepalive: true,
+        });
+      } else if (navigator.sendBeacon) {
+        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+        navigator.sendBeacon(url, blob); // route doit être publique dans ce cas
+      }
+    }
+  } catch (e) {
+    // no-op
+  }
+
+  // --- Téléchargement
+  const name = selectedFile?.filename || selectedFile?.original_filename || filenameFrom(u);
+
+  if (sameOrigin(u)) {
+    const a = document.createElement('a');
+    a.href = u;
+    a.download = name;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return;
+  }
+
+  // Cross-origin (prod). Nécessite CORS côté backend si tu veux blob + Bearer.
+  try {
+    const res = await fetch(u, {
+      method: 'GET',
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      credentials: 'include', // selon ton besoin (JWT: pas obligatoire)
+    });
+    if (!res.ok) throw new Error('fetch failed');
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = name;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  } catch {
+    window.open(u, '_blank', 'noopener'); // fallback
+  }
+};
+
+
+
+
 
   // Détermine le type à partir du mime OU de l'extension
   const typeFromMimeOrExt = (mime, url = "") => {
@@ -620,6 +744,33 @@ export default function Visualiseur() {
   }, [article, me, meLoading]);
 
   useEffect(() => {}, [article?.visibility]);
+
+  // In Visualiseur.jsx
+useEffect(() => {
+  if (!article?.id) return;
+
+  // On peut éviter de compter si l’article est privé et non accessible
+  const visibility = String(article.visibility || '').toLowerCase();
+  if (visibility === 'private') return;
+
+  const vuid  = getOrCreateVuid();
+  const ua    = (typeof navigator !== 'undefined' ? navigator.userAgent : 'ua');
+  const dkey  = `${vuid}:${ua}:${article.id}`;
+
+  // (Optionnel) anti-spam local: 1 hit par 2 minutes
+  const k = `viewed:${article.id}`;
+  const last = Number(sessionStorage.getItem(k) || 0);
+  if (Date.now() - last < 120000) return; // 2 minutes
+  sessionStorage.setItem(k, String(Date.now()));
+
+  axios.post(`/articles/${article.id}/view`, {
+    dedupe_key: dkey,
+    delta: 1,
+    // ttl_seconds: 300, // si tu veux forcer un TTL spécifique
+  }).catch(() => {
+    // on ignore l'erreur pour ne pas gêner la lecture
+  });
+}, [article?.id, article?.visibility]);
 
   /* ------- Ratings summary ------- */
   useEffect(() => {
@@ -879,16 +1030,34 @@ export default function Visualiseur() {
         </div> */}
 
         {/* Bascule Sidebar (desktop) */}
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          title={sidebarOpen ? t('visualiseur.sidebar.hide') : t('visualiseur.sidebar.show')}
-          aria-pressed={!sidebarOpen}
-          className="hidden lg:flex items-center gap-2 fixed left-3 top-24 px-3 py-2 rounded-full border border-slate-200/70 bg-white/80 backdrop-blur hover:bg-white shadow-md hover:shadow-lg transition-all z-50"
-        >
-          {sidebarOpen ? <FaChevronLeft className="opacity-80" /> : <FaChevronRight className="opacity-80" />}
-          <span className="text-xs font-medium text-slate-700"></span>
-        </button>
+<div className="hidden lg:block fixed left-3 top-[90px] z-50 group">
+  {/* Tooltip */}
+  <div className={`absolute left-12 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none ${
+    sidebarOpen ? 'hidden' : 'block'
+  }`}>
+    <div className="bg-slate-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+      Ouvrir le menu
+    </div>
+  </div>
+  
+  {/* Bouton */}
+  <button
+    type="button"
+    onClick={toggleSidebar}
+    title={sidebarOpen ? t('visualiseur.sidebar.hide') : t('visualiseur.sidebar.show')}
+    aria-pressed={!sidebarOpen}
+    className="flex items-center gap-3 px-4 py-3 rounded-full border-2 border-blue-500 bg-white hover:bg-blue-50 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+  >
+    {sidebarOpen ? (
+      <FaOutdent className="text-blue-600 text-lg" />
+    ) : (
+      <FaIndent className="text-blue-600 text-lg" />
+    )}
+    <span className="text-sm font-semibold text-blue-700">
+      {sidebarOpen ? 'Fermer' : 'Menu'}
+    </span>
+  </button>
+</div>
 
         <div className="flex gap-2 lg:gap-6 xl:gap-2">
           {sidebarOpen && (
