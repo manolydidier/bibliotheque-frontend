@@ -22,7 +22,7 @@ export const api = axios.create({
     "Content-Type": "application/json",
   },
 });
-
+  
 /* ===================== Gestion du token d'authentification ===================== */
 function getToken() {
   try {

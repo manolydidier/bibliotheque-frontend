@@ -4,7 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faSignInAlt, faUserPlus, faUserCircle, faCog, faSignOutAlt,
   faFileAlt, faVideo, faPodcast, faSitemap, faBullseye, faUsers, faEnvelope,
-  faChevronDown, faBell, faArrowRotateRight, faCheckDouble, faCommentDots,
+  faChevronDown, faBell, faCheckDouble, faCommentDots,
   faKey, faUserShield, faNewspaper
 } from '@fortawesome/free-solid-svg-icons';
 import { useTranslation } from 'react-i18next';
@@ -237,7 +237,7 @@ const Navbar = () => {
     return () => clearInterval(id);
   }, [recomputeNewCount, recomputePendingCount]);
 
-  /* ===== Panneau notifications façon FB ===== */
+  /* ===== Notifications ===== */
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifTab, setNotifTab] = useState('news');
 
@@ -245,13 +245,17 @@ const Navbar = () => {
   const [news, setNews] = useState({ items: [], page: 1, last: 1, loading: false, error: null });
   const [pending, setPending] = useState({ items: [], page: 1, last: 1, loading: false, error: null });
 
-  const openNotifications = async () => {
-    setNotifOpen((v) => !v);
-    if (!notifOpen) {
-      loadNews(1, true);
-      loadPending(1, true);
-      if (userId) { setLastSeenNow(userId); setNewCount(0); }
-    }
+  // ✅ Correctif : un seul toggle + chargement à l’ouverture
+  const toggleNotifications = () => {
+    setNotifOpen(prev => {
+      const next = !prev;
+      if (next) {
+        loadNews(1, true);
+        loadPending(1, true);
+        if (userId) { setLastSeenNow(userId); setNewCount(0); }
+      }
+      return next;
+    });
   };
 
   const loadNews = async (page, replace = false) => {
@@ -301,7 +305,7 @@ const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeSubmenu, setActiveSubmenu] = useState(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isDesktop, setIsDesktop] = useState(window.innerWidth > 1024);
+  const [isDesktop, setIsDesktop] = useState(typeof window !== 'undefined' ? window.innerWidth > 1024 : true);
 
   // Références pour fermer les menus au clic extérieur
   const userProfileRef = useRef(null);
@@ -310,7 +314,7 @@ const Navbar = () => {
   const burgerRef = useRef(null);
   const submenuRefs = useRef([]);
 
-  // Gestion du resize avec état figé
+  // Gestion du resize + click outside
   useEffect(() => {
     const handleResize = () => {
       const isNowDesktop = window.innerWidth > 1024;
@@ -328,47 +332,39 @@ const Navbar = () => {
       if (userProfileRef.current && !userProfileRef.current.contains(event.target)) {
         setIsProfileOpen(false);
       }
-      
       if (notifRef.current && !notifRef.current.contains(event.target)) {
         setNotifOpen(false);
       }
-      
       if (isMenuOpen && navRef.current && !navRef.current.contains(event.target)) {
         if (burgerRef.current && !burgerRef.current.contains(event.target)) {
           setIsMenuOpen(false);
           setActiveSubmenu(null);
         }
       }
-      
       if (isDesktop) {
-        const isClickInSubmenu = submenuRefs.current.some(ref => 
-          ref && ref.contains(event.target)
-        );
-        const isClickInNavLink = event.target.closest('.nav-links li');
-        
-        if (!isClickInSubmenu && !isClickInNavLink) {
-          setActiveSubmenu(null);
-        }
+        const isClickInSubmenu = submenuRefs.current.some(ref => ref && ref.contains(event.target));
+        const isClickInNavLink = event.target.closest && event.target.closest('.nav-links li');
+        if (!isClickInSubmenu && !isClickInNavLink) setActiveSubmenu(null);
       }
     };
 
     window.addEventListener('resize', handleResize);
     document.addEventListener('mousedown', handleClickOutside);
-    
-    return () => { 
-      window.removeEventListener('resize', handleResize); 
-      document.removeEventListener('mousedown', handleClickOutside); 
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isMenuOpen, isDesktop]);
 
-  // Fonctions de toggle avec état figé
-  const toggleMenu = () => { 
-    setIsMenuOpen(!isMenuOpen); 
-    if (!isMenuOpen) { 
-      setActiveSubmenu(null); 
+  // Fonctions de toggle
+  const toggleMenu = () => {
+    setIsMenuOpen(!isMenuOpen);
+    if (!isMenuOpen) {
+      setActiveSubmenu(null);
       setIsProfileOpen(false);
       setNotifOpen(false);
-    } 
+    }
   };
 
   const toggleProfile = () => {
@@ -379,42 +375,30 @@ const Navbar = () => {
     }
   };
 
-  const toggleSubmenu = (i) => { 
-    if (!isDesktop) {
-      setActiveSubmenu(activeSubmenu === i ? null : i);
-    }
+  const toggleSubmenu = (i) => {
+    if (!isDesktop) setActiveSubmenu(activeSubmenu === i ? null : i);
   };
 
-  const handleNavLinkClick = () => { 
-    if (!isDesktop) {
-      setIsMenuOpen(false);
-      setActiveSubmenu(null);
-    }
+  const handleNavLinkClick = () => {
+    if (!isDesktop) { setIsMenuOpen(false); setActiveSubmenu(null); }
   };
 
-  // Gestion hover pour desktop - état figé
   const handleSubmenuHover = (index, isHovering) => {
     if (isDesktop) {
-      if (isHovering) {
-        setActiveSubmenu(index);
-      } else {
-        setTimeout(() => {
-          setActiveSubmenu(null);
-        }, 150);
-      }
+      if (isHovering) setActiveSubmenu(index);
+      else setTimeout(() => setActiveSubmenu(null), 150);
     }
   };
 
   // Déconnexion
   const handleLogout = async () => {
-    try { 
-      await dispatch(logoutUser(i18n.language)); 
-      setIsProfileOpen(false); 
-      setIsMenuOpen(false); 
+    try {
+      await dispatch(logoutUser(i18n.language));
+      setIsProfileOpen(false);
+      setIsMenuOpen(false);
       setNotifOpen(false);
-      navigate('/auth'); 
-    }
-    catch (e) { console.error('Logout failed:', e); }
+      navigate('/auth');
+    } catch (e) { console.error('Logout failed:', e); }
   };
 
   /* ========================= Rendu ========================= */
@@ -439,42 +423,46 @@ const Navbar = () => {
   ];
 
   return (
-    <nav className="fixed top-0 left-0 w-full bg-gradient-to-r from-blue-900 to-blue-700 shadow-md flex justify-between items-center px-6 h-20 z-50">
+    <nav className="fixed top-0 left-0 w-full bg-gradient-to-r from-blue-900 via-indigo-700 to-blue-700 shadow-md flex justify-between items-center px-6 h-20 z-50 border-b border-white/10">
       {/* Logo */}
       <Link to="/" className="logo flex items-center gap-3 flex-shrink-0">
-        <div className="logo-icon w-9 h-9 bg-blue-500 rounded-lg flex items-center justify-center text-white font-bold text-lg transition-all duration-500 hover:rotate-y-180">B</div>
-        <span className="logo-text text-white text-2xl font-bold bg-gradient-to-r from-white to-blue-100 bg-clip-text text-transparent">BlueUI</span>
+        <div className="logo-icon w-9 h-9 bg-white/15 rounded-lg flex items-center justify-center text-white font-bold text-lg">
+          B
+        </div>
+        <span className="logo-text text-white text-2xl font-extrabold tracking-tight">
+          BlueUI
+        </span>
       </Link>
 
-      {/* Desktop nav - CORRECTION : Menu principal fixe */}
+      {/* Desktop nav */}
       {isDesktop && (
         <div className="flex-1 flex justify-center">
           <ul className="nav-links flex gap-8 font-medium mx-auto">
             {navLinks.map((link, i) => (
-              <li 
-                key={i} 
+              <li
+                key={i}
                 className={`${link.submenu ? 'has-submenu relative' : ''}`}
                 onMouseEnter={() => link.submenu && handleSubmenuHover(i, true)}
                 onMouseLeave={() => link.submenu && handleSubmenuHover(i, false)}
               >
-                <Link 
-                  to={link.path} 
-                  className="flex items-center py-3 text-white hover:text-white transition-colors whitespace-nowrap"
+                <Link
+                  to={link.path}
+                  className="flex items-center py-3 text-white/90 hover:text-white transition-colors whitespace-nowrap"
                 >
                   {link.name}
                 </Link>
                 {link.submenu && (
-                  <div 
+                  <div
                     ref={el => submenuRefs.current[i] = el}
-                    className={`submenu absolute top-full left-1/2 -translate-x-1/2 bg-white rounded-lg shadow-xl w-60 py-2 transition-all duration-200 border border-gray-100 ${
+                    className={`submenu absolute top-full left-1/2 -translate-x-1/2 bg-white rounded-xl shadow-xl w-60 py-2 transition-all duration-200 border border-gray-100 ${
                       activeSubmenu === i ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible translate-y-1 pointer-events-none'
                     }`}
                   >
                     {link.submenu.map((sub, j) => (
                       <div key={j}>
-                        <Link 
-                          to={sub.path} 
-                          className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-500 hover:bg-blue-50 transition-all"
+                        <Link
+                          to={sub.path}
+                          className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-600 hover:bg-blue-50 transition-all"
                           onClick={() => setActiveSubmenu(null)}
                         >
                           <FontAwesomeIcon icon={sub.icon} className="mr-3 text-blue-600 w-4" />
@@ -493,7 +481,7 @@ const Navbar = () => {
       {/* Mobile drawer */}
       {!isDesktop && (
         <>
-          <ul 
+          <ul
             ref={navRef}
             className={`fixed top-0 left-0 w-80 h-screen bg-white flex flex-col items-start p-6 pt-20 gap-0 shadow-lg transform transition-all duration-300 z-40 ${
               isMenuOpen ? 'translate-x-0' : '-translate-x-full'
@@ -503,30 +491,28 @@ const Navbar = () => {
               <li key={i} className="w-full border-b border-gray-100 last:border-b-0">
                 {link.submenu ? (
                   <>
-                    <div 
+                    <div
                       className={`flex items-center justify-between py-4 text-gray-800 cursor-pointer ${
                         activeSubmenu === i ? 'bg-blue-50' : ''
                       }`}
                       onClick={() => toggleSubmenu(i)}
                     >
                       <span className="font-medium">{link.name}</span>
-                      <FontAwesomeIcon 
-                        icon={faChevronDown} 
-                        className={`ml-2 transition-transform duration-200 ${
-                          activeSubmenu === i ? 'rotate-180' : ''
-                        }`} 
+                      <FontAwesomeIcon
+                        icon={faChevronDown}
+                        className={`ml-2 transition-transform duration-200 ${activeSubmenu === i ? 'rotate-180' : ''}`}
                       />
                     </div>
-                    <div 
+                    <div
                       className={`overflow-hidden transition-all duration-300 bg-blue-50 bg-opacity-30 rounded-lg mx-2 ${
                         activeSubmenu === i ? 'max-h-96 py-2' : 'max-h-0'
                       }`}
                     >
                       {link.submenu.map((sub,j) => (
                         <div key={j}>
-                          <Link 
-                            to={sub.path} 
-                            className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-500 hover:bg-blue-50 transition-all"
+                          <Link
+                            to={sub.path}
+                            className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-600 hover:bg-blue-50 transition-all"
                             onClick={handleNavLinkClick}
                           >
                             <FontAwesomeIcon icon={sub.icon} className="mr-3 text-blue-600 w-4" />
@@ -537,9 +523,9 @@ const Navbar = () => {
                     </div>
                   </>
                 ) : (
-                  <Link 
-                    to={link.path} 
-                    className="flex items-center py-4 text-gray-800 font-medium hover:text-blue-500 transition-colors"
+                  <Link
+                    to={link.path}
+                    className="flex items-center py-4 text-gray-800 font-medium hover:text-blue-600 transition-colors"
                     onClick={handleNavLinkClick}
                   >
                     {link.name}
@@ -548,36 +534,42 @@ const Navbar = () => {
               </li>
             ))}
           </ul>
-          
+
           {/* Overlay */}
-          <div 
+          <div
             className={`fixed top-0 left-0 w-full h-full bg-black bg-opacity-50 backdrop-blur-sm transition-all z-30 ${
               isMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'
-            }`} 
+            }`}
             onClick={toggleMenu}
           />
         </>
       )}
 
-      {/* Right section - CORRECTION : Position fixe */}
+      {/* Right section */}
       <div className="flex items-center gap-4 flex-shrink-0">
-        {/* Search - CORRECTION : Position absolue pour ne pas déplacer le menu */}
+        {/* Search */}
         <div className="relative">
-          <ArticleSearchBox 
-            placeholder={t('search')}
-            perPage={8}
-          />
+          <ArticleSearchBox placeholder={t('search')} perPage={8} />
         </div>
 
         {/* Lang */}
         <LanguageSwitcher />
 
-        {/* Notifs bell */}
+        {/* Chip nom user */}
+        {isAuthenticated && (
+          <div className="hidden sm:flex items-center">
+            <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-white/10 text-white border border-white/20">
+              {t('hello','Bonjour')}{' '}{user?.username || '—'}
+            </span>
+          </div>
+        )}
+
+        {/* Notifications (fix: onClick={toggleNotifications}) */}
         {isAuthenticated && (
           <div className="relative" ref={notifRef}>
-            <button 
-              onClick={openNotifications}
-              className="relative text-white hover:text-blue-200 transition-colors p-2 rounded-full hover:bg-white/10"
+            <button
+              onClick={toggleNotifications}
+              className="relative text-white hover:text-blue-100 transition-colors p-2 rounded-full hover:bg-white/10"
             >
               <FontAwesomeIcon icon={faBell} />
               {(newCount > 0 || pendingCount > 0) && (
@@ -589,76 +581,74 @@ const Navbar = () => {
 
             {/* Panel notifications */}
             {notifOpen && (
-              <div className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-2xl ring-1 ring-black/5 overflow-hidden z-50">
-                <div className="px-4 py-3 flex items-center justify-between border-b border-gray-100">
+              <div className="absolute right-0 mt-2 w-96 bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 overflow-hidden z-50">
+                {/* Header avec dégradé + actions */}
+                <div className="px-4 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-gray-900">{t('notifications','Notifications')}</span>
-                    {newCount > 0 && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{newCount}</span>}
-                    {pendingCount > 0 && <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">{pendingCount} {t('to_moderate','à modérer')}</span>}
+                    <span className="font-semibold">{t('notifications','Notifications')}</span>
+                    {newCount > 0 && <span className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full">{newCount}</span>}
+                    {pendingCount > 0 && <span className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full">{pendingCount} {t('to_moderate','à modérer')}</span>}
                   </div>
                   <div className="flex items-center gap-2">
-                    <button 
+                    <button
                       onClick={()=>{ setNotifOpen(false); navigate('/settings'); }}
-                      className="text-xs text-blue-600 hover:underline"
+                      className="text-xs underline decoration-white/50 underline-offset-2 hover:decoration-white"
                     >
                       {t('see_all','Tout voir')}
                     </button>
-                    <button 
+                    <button
                       onClick={markAllRead}
-                      className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+                      className="text-xs bg-white/10 hover:bg-white/20 transition rounded-full px-2 py-0.5"
                     >
-                      <FontAwesomeIcon icon={faCheckDouble} size="xs" /> 
                       {t('mark_all_read','Tout marquer lu')}
                     </button>
                   </div>
                 </div>
 
+                {/* Onglets */}
                 <div className="px-4 pt-3 flex gap-2">
                   <button
-                    className={`px-3 py-1.5 rounded-full text-sm ${notifTab==='news' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                    className={`px-3 py-1.5 rounded-full text-sm ${notifTab==='news' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                     onClick={()=>setNotifTab('news')}
                   >
                     {t('activities','Activités')}
                   </button>
                   <button
-                    className={`px-3 py-1.5 rounded-full text-sm ${notifTab==='pending' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                    className={`px-3 py-1.5 rounded-full text-sm ${notifTab==='pending' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                     onClick={()=>setNotifTab('pending')}
                   >
                     {t('to_moderate','À modérer')}
                   </button>
                 </div>
 
+                {/* Liste */}
                 <div className="max-h-96 overflow-auto">
                   {notifTab==='news' ? (
                     <>
-                      {news.items.length === 0 && !news.loading && <div className="p-4 text-sm text-gray-500">{t('no_activity','Aucune activité')}</div>}
+                      {news.items.length === 0 && !news.loading && (
+                        <div className="p-6 text-sm text-gray-500 flex items-center justify-center gap-2">
+                          <span>🥳</span> <span>{t('no_activity','Aucune activité pour le moment')}</span>
+                        </div>
+                      )}
                       {news.items.map((a)=> {
                         const href = toFrontPath(buildActivityLink(a) || a.url || a.link) || '/settings';
                         const isRel = String(href).startsWith('/');
+                        const Row = (
+                          <div className="flex items-start gap-3 p-4 hover:bg-gray-50 transition-colors">
+                            <div className="flex-shrink-0 w-9 h-9 bg-blue-50 rounded-full flex items-center justify-center">
+                              <FontAwesomeIcon icon={typeIcon(a.type)} className="text-blue-600" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-sm text-gray-900 line-clamp-2">{a.title || t('notification','Notification')}</div>
+                              {a.subtitle && <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{a.subtitle}</div>}
+                              <div className="text-xs text-gray-400 mt-1">{timeAgo(a.created_at, t)}</div>
+                            </div>
+                          </div>
+                        );
                         return isRel ? (
-                          <Link key={a.id} to={href} onClick={()=> setNotifOpen(false)}
-                                className="flex items-start gap-3 p-4 hover:bg-gray-50 transition">
-                            <div className="flex-shrink-0 w-9 h-9 bg-blue-50 rounded-full flex items-center justify-center">
-                              <FontAwesomeIcon icon={typeIcon(a.type)} className="text-blue-600" />
-                            </div>
-                            <div className="min-w-0">
-                              <div className="text-sm text-gray-900 line-clamp-2">{a.title || t('notification','Notification')}</div>
-                              {a.subtitle && <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{a.subtitle}</div>}
-                              <div className="text-xs text-gray-400 mt-1">{timeAgo(a.created_at, t)}</div>
-                            </div>
-                          </Link>
+                          <Link key={a.id} to={href} onClick={()=> setNotifOpen(false)}>{Row}</Link>
                         ) : (
-                          <a key={a.id} href={href} onClick={()=> setNotifOpen(false)}
-                             className="flex items-start gap-3 p-4 hover:bg-gray-50 transition">
-                            <div className="flex-shrink-0 w-9 h-9 bg-blue-50 rounded-full flex items-center justify-center">
-                              <FontAwesomeIcon icon={typeIcon(a.type)} className="text-blue-600" />
-                            </div>
-                            <div className="min-w-0">
-                              <div className="text-sm text-gray-900 line-clamp-2">{a.title || t('notification','Notification')}</div>
-                              {a.subtitle && <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{a.subtitle}</div>}
-                              <div className="text-xs text-gray-400 mt-1">{timeAgo(a.created_at, t)}</div>
-                            </div>
-                          </a>
+                          <a key={a.id} href={href} onClick={()=> setNotifOpen(false)}>{Row}</a>
                         );
                       })}
                       <div className="p-3 border-t flex justify-center">
@@ -673,35 +663,31 @@ const Navbar = () => {
                     </>
                   ) : (
                     <>
-                      {pending.items.length === 0 && !pending.loading && <div className="p-4 text-sm text-gray-500">{t('nothing_to_moderate','Rien à modérer')}</div>}
+                      {pending.items.length === 0 && !pending.loading && (
+                        <div className="p-6 text-sm text-gray-500 flex items-center justify-center gap-2">
+                          <span>🧹</span> <span>{t('nothing_to_moderate','Rien à modérer')}</span>
+                        </div>
+                      )}
                       {pending.items.map((p)=> {
                         const hrefCandidate = buildPendingLink(p);
                         const href = toFrontPath(hrefCandidate) || '/settings';
                         const isRel = String(href).startsWith('/');
+                        const Row = (
+                          <div className="flex items-start gap-3 p-4 hover:bg-gray-50 transition-colors">
+                            <div className="flex-shrink-0 w-9 h-9 bg-amber-50 rounded-full flex items-center justify-center">
+                              <FontAwesomeIcon icon={faCommentDots} className="text-amber-600" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-sm text-gray-900 line-clamp-2">{p.title || t('pending_item','Élément à modérer')}</div>
+                              {p.subtitle && <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{p.subtitle}</div>}
+                              <div className="text-xs text-gray-400 mt-1">{timeAgo(p.created_at, t)}</div>
+                            </div>
+                          </div>
+                        );
                         return isRel ? (
-                          <Link key={p.id} to={href} onClick={()=> setNotifOpen(false)}
-                                className="flex items-start gap-3 p-4 hover:bg-gray-50 transition">
-                            <div className="flex-shrink-0 w-9 h-9 bg-amber-50 rounded-full flex items-center justify-center">
-                              <FontAwesomeIcon icon={faCommentDots} className="text-amber-600" />
-                            </div>
-                            <div className="min-w-0">
-                              <div className="text-sm text-gray-900 line-clamp-2">{p.title || t('pending_item','Élément à modérer')}</div>
-                              {p.subtitle && <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{p.subtitle}</div>}
-                              <div className="text-xs text-gray-400 mt-1">{timeAgo(p.created_at, t)}</div>
-                            </div>
-                          </Link>
+                          <Link key={p.id} to={href} onClick={()=> setNotifOpen(false)}>{Row}</Link>
                         ) : (
-                          <a key={p.id} href={href} onClick={()=> setNotifOpen(false)}
-                             className="flex items-start gap-3 p-4 hover:bg-gray-50 transition">
-                            <div className="flex-shrink-0 w-9 h-9 bg-amber-50 rounded-full flex items-center justify-center">
-                              <FontAwesomeIcon icon={faCommentDots} className="text-amber-600" />
-                            </div>
-                            <div className="min-w-0">
-                              <div className="text-sm text-gray-900 line-clamp-2">{p.title || t('pending_item','Élément à modérer')}</div>
-                              {p.subtitle && <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{p.subtitle}</div>}
-                              <div className="text-xs text-gray-400 mt-1">{timeAgo(p.created_at, t)}</div>
-                            </div>
-                          </a>
+                          <a key={p.id} href={href} onClick={()=> setNotifOpen(false)}>{Row}</a>
                         );
                       })}
                       <div className="p-3 border-t flex justify-center">
@@ -724,14 +710,14 @@ const Navbar = () => {
         {/* Auth (non connecté) */}
         {!isAuthenticated && (
           <div className="flex gap-2">
-            <Link 
-              to="/auth" 
+            <Link
+              to="/auth"
               className="border border-white/30 rounded-lg px-3 py-2 text-white hover:bg-white/10 hover:border-white/50 transition-colors"
             >
               <FontAwesomeIcon icon={faSignInAlt} />
             </Link>
-            <Link 
-              to="/auth" 
+            <Link
+              to="/auth"
               className="bg-blue-500 text-white rounded-lg px-3 py-2 hover:bg-blue-600 transition-colors"
             >
               <FontAwesomeIcon icon={faUserPlus} />
@@ -745,34 +731,44 @@ const Navbar = () => {
             <img
               src={avatarSrc}
               alt="User"
-              className="w-10 h-10 rounded-full border-2 border-white/30 hover:border-blue-500 cursor-pointer object-cover transition-colors"
+              className="w-10 h-10 rounded-full border-2 border-white/40 hover:border-white cursor-pointer object-cover transition-colors"
               onClick={toggleProfile}
               onError={handleImgError}
             />
-            <div 
-              className={`absolute top-full right-0 bg-white rounded-lg shadow-xl w-56 py-2 transition-all duration-200 border border-gray-100 ${
+            <div
+              className={`absolute top-full right-0 bg-white rounded-2xl shadow-2xl w-72 overflow-hidden border border-gray-100 transition-all duration-200 ${
                 isProfileOpen ? 'opacity-100 visible translate-y-2' : 'opacity-0 invisible translate-y-1 pointer-events-none'
               }`}
             >
-              <Link 
-                to="/settings" 
-                className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-500 hover:bg-blue-50 transition-all"
+              <div className="px-4 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white">
+                <div className="flex items-center gap-3">
+                  <img src={avatarSrc} alt="avatar" className="w-9 h-9 rounded-full ring-2 ring-white/30 object-cover" />
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold truncate">{user?.name || t('profile','Profil')}</div>
+                    <div className="text-xs text-white/80 truncate">{user?.email || '—'}</div>
+                  </div>
+                </div>
+              </div>
+
+              <Link
+                to="/settings"
+                className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-600 hover:bg-blue-50 transition-all"
                 onClick={() => setIsProfileOpen(false)}
               >
                 <FontAwesomeIcon icon={faUserCircle} className="mr-3 text-blue-600 w-4" />
                 <span className="flex-1">{t('profile')}</span>
               </Link>
-              <Link 
-                to="/articlescontroler" 
-                className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-500 hover:bg-blue-50 transition-all"
+              <Link
+                to="/articlescontroler"
+                className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-600 hover:bg-blue-50 transition-all"
                 onClick={() => setIsProfileOpen(false)}
               >
                 <FontAwesomeIcon icon={faCog} className="mr-3 text-blue-600 w-4" />
                 <span className="flex-1">{t('settings')}</span>
               </Link>
-              <button 
-                onClick={handleLogout} 
-                className="w-full flex items-center px-6 py-3 text-gray-800 hover:text-blue-500 hover:bg-blue-50 transition-all text-left"
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center px-6 py-3 text-gray-800 hover:text-blue-600 hover:bg-blue-50 transition-all text-left"
               >
                 <FontAwesomeIcon icon={faSignOutAlt} className="mr-3 text-blue-600 w-4" />
                 <span className="flex-1">{t('logout')}</span>
@@ -783,26 +779,14 @@ const Navbar = () => {
 
         {/* Burger menu */}
         {!isDesktop && (
-          <div 
-            ref={burgerRef} 
-            className="flex flex-col justify-between w-7 h-5 cursor-pointer relative z-50 ml-2" 
+          <div
+            ref={burgerRef}
+            className="flex flex-col justify-between w-7 h-5 cursor-pointer relative z-50 ml-2"
             onClick={toggleMenu}
           >
-            <div 
-              className={`h-0.5 bg-white rounded transition-all ${
-                isMenuOpen ? 'rotate-45 translate-y-2 bg-blue-500' : 'bg-white'
-              }`} 
-            />
-            <div 
-              className={`h-0.5 bg-white rounded transition-all ${
-                isMenuOpen ? 'opacity-0 scale-x-0' : 'opacity-100 scale-x-100'
-              }`} 
-            />
-            <div 
-              className={`h-0.5 bg-white rounded transition-all ${
-                isMenuOpen ? '-rotate-45 -translate-y-2 bg-blue-500' : 'bg-white'
-              }`} 
-            />
+            <div className={`h-0.5 rounded transition-all ${isMenuOpen ? 'rotate-45 translate-y-2 bg-white' : 'bg-white'}`} />
+            <div className={`h-0.5 rounded transition-all ${isMenuOpen ? 'opacity-0 scale-x-0' : 'opacity-100 scale-x-100 bg-white'}`} />
+            <div className={`h-0.5 rounded transition-all ${isMenuOpen ? '-rotate-45 -translate-y-2 bg-white' : 'bg-white'}`} />
           </div>
         )}
       </div>

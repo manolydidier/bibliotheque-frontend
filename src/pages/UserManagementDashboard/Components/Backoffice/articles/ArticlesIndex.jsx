@@ -7,8 +7,7 @@ import Toast from '../../../../../component/toast/Toaster';
 import {
   FaEye, FaCalendarAlt, FaTag, FaUser, FaEdit, FaTrashAlt, FaTrash,
   FaExternalLinkAlt, FaThumbsUp, FaFilter, FaUndo, FaCheckSquare, FaSquare,
-  FaSort, FaSortUp, FaSortDown, FaTimes, FaSpinner, FaCheck,
-  FaColumns,
+  FaSort, FaSortUp, FaSortDown, FaTimes, FaSpinner, FaCheck, FaColumns,
 } from 'react-icons/fa';
 import {
   FiRefreshCw, FiPlus, FiTrash2, FiFilter as FiFilterIcon,
@@ -22,7 +21,7 @@ import FiltersBar from './FiltersBar';
    Axios de base
 ========================= */
 axios.defaults.baseURL = axios.defaults.baseURL || '/api';
-const API = '/articles-index'; // <<< nouveau endpoint d’index
+const API = '/articles-index'; // <<< endpoint d’index
 
 /* =========================
    CSRF (optionnel)
@@ -84,7 +83,15 @@ function normalizeList(payload, fallbackPerPage = 24) {
 
   return {
     items,
-    meta: { current_page: currentPage, last_page: lastPage, total, per_page: perPage, facets: rawMeta.facets ?? null, has_next: hasNext, has_prev: hasPrev },
+    meta: {
+      current_page: currentPage,
+      last_page: lastPage,
+      total,
+      per_page: perPage,
+      facets: rawMeta.facets ?? null,
+      has_next: hasNext,
+      has_prev: hasPrev
+    },
   };
 }
 
@@ -139,17 +146,17 @@ function buildQuery({ page, per_page, search, filters, sortBy, sortDir }) {
   if (rmin !== undefined && rmin > 0) q.rating_min = rmin;
   if (rmax !== undefined && rmax < 5) q.rating_max = rmax;
 
-  // ⚠️ important: on passe status (published par défaut)
+  // ⚠️ status (published par défaut)
   if (filters?.status) q.status = filters.status;
   if (filters?.visibility) q.visibility = filters.visibility;
 
   return q;
 }
 
-async function apiList({ page, per_page, search, filters, sortBy, sortDir }) {
-  const params = buildQuery({ page, per_page, search, filters, sortBy, sortDir });
+async function apiList(args) {
+  const params = buildQuery(args);
   const { data } = await axios.get(API, { params });
-  return normalizeList(data, per_page);
+  return normalizeList(data, args.per_page);
 }
 async function apiSoftDelete(id) { await ensureCsrf(); return axios.post(`/articles/${id}/soft-delete`); }
 async function apiForceDelete(id) {
@@ -212,15 +219,10 @@ function Collapse({ open, children, duration = 260 }) {
   return (
     <div
       className="grid transition-[grid-template-rows] ease-in-out"
-      style={{
-        gridTemplateRows: open ? '1fr' : '0fr',
-        transitionDuration: `${duration}ms`,
-      }}
+      style={{ gridTemplateRows: open ? '1fr' : '0fr', transitionDuration: `${duration}ms` }}
       aria-hidden={!open}
     >
-      <div className="overflow-hidden">
-        {children}
-      </div>
+      <div className="overflow-hidden">{children}</div>
     </div>
   );
 }
@@ -244,7 +246,6 @@ const ArticlesIndex = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Ids restaurés (glow jusqu'à interaction)
   const [restoredIds, setRestoredIds] = useState(new Set());
   useEffect(() => {
     const ids = Array.isArray(location.state?.restoredIds) ? location.state.restoredIds : [];
@@ -296,10 +297,7 @@ const ArticlesIndex = () => {
     if (sortBy === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
     else { setSortBy(key); setSortDir('asc'); }
   };
-  const SortIcon = ({ col }) => {
-    if (sortBy !== col) return <FaSort className="opacity-40" />;
-    return sortDir === 'asc' ? <FaSortUp /> : <FaSortDown />;
-  };
+  const SortIcon = ({ col }) => (sortBy !== col ? <FaSort className="opacity-40" /> : (sortDir === 'asc' ? <FaSortUp /> : <FaSortDown />));
 
   // Données + facettes
   const [data, setData] = useState({ items: [], meta: { total: 0, current_page: 1, last_page: 1, per_page: 24, facets: { categories: [], tags: [], authors: [] }, has_next: false, has_prev: false } });
@@ -315,7 +313,6 @@ const ArticlesIndex = () => {
   const [confirmDelete, setConfirmDelete] = useState(null); // { id|ids, mode, title }
 
   // Drag & Drop
-  const [draggingId, setDraggingId] = useState(null);
   const [overSoft, setOverSoft] = useState(false);
   const [overHard, setOverHard] = useState(false);
   const [shakeHard, setShakeHard] = useState(false);
@@ -392,7 +389,7 @@ const ArticlesIndex = () => {
         const { data } = await axios.get('/articles', { params: { trashed: 'only', per_page: 1 } });
         const { meta } = normalizeList(data, 1);
         setTrashCount(Number(meta?.total || 0));
-      } catch (err2) {}
+      } catch {}
     }
   }
   useEffect(() => { fetchTrashCount(); }, []);
@@ -450,28 +447,13 @@ const ArticlesIndex = () => {
     }
   };
 
-  // ESC + raccourcis
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === 'Escape') { if (confirmDelete) closeConfirm(); }
-      if (selectedIds.size > 0) {
-        if (e.key === 'Delete' && !e.shiftKey) { e.preventDefault(); openConfirm('soft-many', Array.from(selectedIds)); }
-        if (e.key === 'Delete' && e.shiftKey)  { e.preventDefault(); openConfirm('hard-many', Array.from(selectedIds)); }
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [confirmDelete, selectedIds]);
-
   /* ===================
      Drag & Drop events
   =================== */
   const onDragStartRow = (e, article) => {
-    setDraggingId(article.id);
     e.dataTransfer.setData('text/plain', JSON.stringify({ id: article.id, title: article.title }));
     e.dataTransfer.effectAllowed = 'move';
   };
-  const onDragEndRow = () => { setDraggingId(null); setOverSoft(false); setOverHard(false); };
   const onDropSoft = async (e) => {
     e.preventDefault(); setOverSoft(false);
     try {
@@ -480,10 +462,8 @@ const ArticlesIndex = () => {
       await apiSoftDelete(payload.id);
       setLastSoftDeletedIds([payload.id]);
       setToast({ type: 'success', message: `Article "${payload.title || payload.id}" → corbeille` });
-      await load();
-      await fetchTrashCount();
+      await load(); await fetchTrashCount();
     } catch { setToast({ type: 'error', message: 'Erreur lors de l’envoi à la corbeille' }); }
-    finally { setDraggingId(null); }
   };
   const onDropHard = async (e) => {
     e.preventDefault(); setOverHard(false);
@@ -492,10 +472,7 @@ const ArticlesIndex = () => {
       if (!payload?.id) return;
       openConfirm('hard', { id: payload.id, title: payload.title });
     } catch { setToast({ type: 'error', message: 'Erreur lors de la suppression' }); }
-    finally { setDraggingId(null); }
   };
-
-  const rows = useMemo(() => data.items || [], [data.items]);
 
   /* =========================
      Filtres ↔ URL (shareable)
@@ -514,11 +491,7 @@ const ArticlesIndex = () => {
     if ((filters.ratingMax ?? 5) < 5) params.set('rmax', String(filters.ratingMax));
     if (filters.status) params.set('status', String(filters.status));
     if (filters.visibility) params.set('visibility', String(filters.visibility));
-
-    // >>> Persistance accordéon
-    if (showFilters) params.set('filters_open', '1');
-    else params.set('filters_open', '0');
-
+    params.set('filters_open', showFilters ? '1' : '0');
     params.set('sort', sortBy);
     params.set('dir', sortDir);
     params.set('page', String(page));
@@ -543,7 +516,6 @@ const ArticlesIndex = () => {
       dateTo: params.get('to') || '',
       ratingMin: Number(params.get('rmin') ?? 0) || 0,
       ratingMax: Number(params.get('rmax') ?? 5) || 5,
-      // ⚠️ défaut published si non présent dans l'URL
       status: params.get('status') || 'published',
       visibility: params.get('visibility') || undefined,
     };
@@ -554,8 +526,6 @@ const ArticlesIndex = () => {
     setPage(Number(params.get('page') ?? 1));
     setPerPage(Number(params.get('pp') ?? 24));
     setViewMode(params.get('view') === 'grid' ? 'grid' : 'table');
-
-    // >>> lecture de l'état d'accordéon dans l'URL
     const openFlag = params.get('filters_open');
     if (openFlag === '1') setShowFilters(true);
     else if (openFlag === '0') setShowFilters(false);
@@ -574,11 +544,7 @@ const ArticlesIndex = () => {
   const [newViewName, setNewViewName] = useState('');
 
   const saveCurrentView = () => {
-    const payload = {
-      name: newViewName || `Vue ${new Date().toLocaleString()}`,
-      search, filters, sortBy, sortDir, perPage, viewMode,
-      createdAt: Date.now()
-    };
+    const payload = { name: newViewName || `Vue ${new Date().toLocaleString()}`, search, filters, sortBy, sortDir, perPage, viewMode, createdAt: Date.now() };
     const next = [payload, ...views];
     setViews(next); saveViews(next);
     setNewViewName(''); setViewsModal(false);
@@ -613,7 +579,6 @@ const ArticlesIndex = () => {
   const colsBtnRef = useRef(null);
   const colsMenuRef = useRef(null);
 
-  // Position du menu (Portal)
   const [colsPos, setColsPos] = useState({ top: 0, left: 0, width: 0 });
   useEffect(() => {
     if (!colsOpen || !colsBtnRef.current) return;
@@ -647,49 +612,23 @@ const ArticlesIndex = () => {
     };
   }, [colsOpen]);
 
-  // Nombre de colonnes visibles pour colSpan
-  const visibleColCount = useMemo(() => {
-    return Object.values(visibleCols).filter(Boolean).length;
-  }, [visibleCols]);
+  const visibleColCount = useMemo(() => Object.values(visibleCols).filter(Boolean).length, [visibleCols]);
 
   /* ===================
      Rendu
   =================== */
   return (
-    <div className="relative bg-white rounded-xl shadow-sm ring-1 ring-slate-200/70">
+    <div className="relative bg-white rounded-xl shadow-sm ring-1 ring-slate-200/70 flex flex-col">
       {toast && <Toast {...toast} onClose={()=>setToast(null)} />}
 
-      {/* Glow restored */}
+      {/* Styles anim */}
       <style>{`
-        @keyframes restoredPulse {
-          0%   { box-shadow: 0 0 0 0 rgba(16,185,129,.55); background: #ecfdf5; }
-          60%  { box-shadow: 0 0 0 6px rgba(16,185,129,.0); }
-          100% { box-shadow: 0 0 0 0 rgba(16,185,129,.0); background: transparent; }
-        }
-        @keyframes restoredIdle {
-          0%   { box-shadow: 0 0 0 0 rgba(16,185,129,.25); background: #f0fdf4; }
-          50%  { box-shadow: 0 0 0 6px rgba(16,185,129,0); background: #ffffff; }
-          100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); background: #f0fdf4; }
-        }
-        tr.row-restored-hold {
-          animation:
-            restoredPulse 900ms ease-out 0s 1 both,
-            restoredIdle 2400ms ease-in-out 900ms infinite both;
-        }
-        .card-restored-hold {
-          animation:
-            restoredPulse 900ms ease-out 0s 1 both,
-            restoredIdle 2400ms ease-in-out 900ms infinite both;
-          border-radius: 12px;
-        }
-        @media (prefers-reduced-motion: reduce) {
-          tr.row-restored-hold, .card-restored-hold { animation: none !important; outline: 2px solid #34d399; background: #ecfdf5; }
-        }
-        @keyframes wiggle {
-          0%{transform:rotate(0)}15%{transform:rotate(-1.5deg) scale(1.01)}
-          30%{transform:rotate(1.5deg) scale(1.01)}45%{transform:rotate(-1deg)}
-          60%{transform:rotate(1deg)}75%{transform:rotate(-.5deg)}100%{transform:rotate(0)}
-        }
+        @keyframes restoredPulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,.55);background:#ecfdf5}60%{box-shadow:0 0 0 6px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0);background:transparent}}
+        @keyframes restoredIdle{0%{box-shadow:0 0 0 0 rgba(16,185,129,.25);background:#f0fdf4}50%{box-shadow:0 0 0 6px rgba(16,185,129,0);background:#fff}100%{box-shadow:0 0 0 0 rgba(16,185,129,0);background:#f0fdf4}}
+        tr.row-restored-hold{animation:restoredPulse .9s ease-out 0s 1 both,restoredIdle 2.4s ease-in-out .9s infinite both}
+        .card-restored-hold{animation:restoredPulse .9s ease-out 0s 1 both,restoredIdle 2.4s ease-in-out .9s infinite both;border-radius:12px}
+        @media(prefers-reduced-motion:reduce){tr.row-restored-hold,.card-restored-hold{animation:none!important;outline:2px solid #34d399;background:#ecfdf5}}
+        @keyframes wiggle{0%{transform:rotate(0)}15%{transform:rotate(-1.5deg) scale(1.01)}30%{transform:rotate(1.5deg) scale(1.01)}45%{transform:rotate(-1deg)}60%{transform:rotate(1deg)}75%{transform:rotate(-.5deg)}100%{transform:rotate(0)}}
       `}</style>
 
       {/* ===== Header ===== */}
@@ -706,20 +645,17 @@ const ArticlesIndex = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-             <Link
-              to="/articles/new"
-              className="px-3 py-2 rounded-xl bg-white text-blue-700 hover:bg-white/95 border border-white/40 shadow-sm inline-flex items-center gap-2 transition"
-              title="Créer un article"
-            >
+            <Link to="/articles/new" className="px-3 py-2 rounded-xl bg-white text-blue-700 hover:bg-white/95 border border-white/40 shadow-sm inline-flex items-center gap-2 transition" title="Créer un article">
               <FiPlus /> Créer
             </Link>
-            {/* === Colonnes visibles === */}
+
+            {/* Colonnes */}
             <div className="relative z-50">
               <button
                 ref={colsBtnRef}
                 onClick={() => setColsOpen(v => !v)}
                 className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-sm inline-flex items-center gap-2 transition text-white"
-                title="Choisir les colonnes à afficher"
+                title="Colonnes visibles"
                 type="button"
               >
                 <FaColumns className="opacity-90" />
@@ -730,13 +666,7 @@ const ArticlesIndex = () => {
                 <Portal>
                   <div
                     ref={colsMenuRef}
-                    style={{
-                      position: 'absolute',
-                      top: colsPos.top,
-                      left: colsPos.left,
-                      minWidth: Math.max(256, colsPos.width),
-                      zIndex: 9999
-                    }}
+                    style={{ position: 'absolute', top: colsPos.top, left: colsPos.left, minWidth: Math.max(256, colsPos.width), zIndex: 9999 }}
                     className="rounded-xl border bg-white/95 backdrop-blur shadow-xl p-3 text-slate-800"
                     role="menu"
                     aria-label="Sélection des colonnes"
@@ -744,34 +674,16 @@ const ArticlesIndex = () => {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-semibold">Colonnes visibles</span>
                       <div className="flex gap-2">
-                        <button
-                          className="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50"
-                          onClick={() => setVisibleCols(prev => {
-                            const allOn = Object.fromEntries(Object.keys(prev).map(k => [k, true]));
-                            return allOn;
-                          })}
-                          type="button"
-                        >
+                        <button className="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50"
+                          onClick={() => setVisibleCols(prev => Object.fromEntries(Object.keys(prev).map(k => [k, true])))} type="button">
                           Tout
                         </button>
-                        <button
-                          className="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50"
-                          onClick={() => setVisibleCols(prev => {
-                            const allOff = Object.fromEntries(Object.keys(prev).map(k => [k, false]));
-                            allOff.select = true; // sécurité UX
-                            allOff.actions = true;
-                            return allOff;
-                          })}
-                          type="button"
-                        >
+                        <button className="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50"
+                          onClick={() => setVisibleCols(prev => { const allOff = Object.fromEntries(Object.keys(prev).map(k => [k, false])); allOff.select = true; allOff.actions = true; return allOff; })}
+                          type="button">
                           Aucun
                         </button>
-                        <button
-                          className="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50"
-                          onClick={() => setVisibleCols(defaultCols)}
-                          type="button"
-                          title="Réinitialiser"
-                        >
+                        <button className="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50" onClick={() => setVisibleCols(defaultCols)} type="button" title="Réinitialiser">
                           Reset
                         </button>
                       </div>
@@ -779,24 +691,11 @@ const ArticlesIndex = () => {
 
                     <div className="grid grid-cols-1 gap-1 text-sm">
                       {[
-                        ['select',       'Sélection'],
-                        ['image',        'Image'],
-                        ['title',        'Titre'],
-                        ['author',       'Auteur'],
-                        ['category',     'Catégorie'],
-                        ['published_at', 'Publié le'],
-                        ['views',        'Vues'],
-                        ['rating',       'Note'],
-                        ['status',       'Statut'],
-                        ['actions',      'Actions'],
+                        ['select','Sélection'],['image','Image'],['title','Titre'],['author','Auteur'],['category','Catégorie'],
+                        ['published_at','Publié le'],['views','Vues'],['rating','Note'],['status','Statut'],['actions','Actions'],
                       ].map(([key, label]) => (
                         <label key={key} className="inline-flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-50 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            className="accent-blue-600"
-                            checked={!!visibleCols[key]}
-                            onChange={() => setVisibleCols(prev => ({ ...prev, [key]: !prev[key] }))}
-                          />
+                          <input type="checkbox" className="accent-blue-600" checked={!!visibleCols[key]} onChange={() => setVisibleCols(p => ({ ...p, [key]: !p[key] }))} />
                           <span>{label}</span>
                         </label>
                       ))}
@@ -806,22 +705,12 @@ const ArticlesIndex = () => {
               )}
             </div>
 
-            <button
-              onClick={load}
-              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-sm inline-flex items-center gap-2 transition"
-              title="Actualiser"
-            >
+            <button onClick={load} className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-sm inline-flex items-center gap-2 transition" title="Actualiser">
               <FiRefreshCw className={loading ? 'animate-spin' : ''} />
               Actualiser
             </button>
 
-           
-
-            <button
-              onClick={() => setViewsModal(true)}
-              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-sm inline-flex items-center gap-2 transition"
-              title="Vues enregistrées"
-            >
+            <button onClick={() => setViewsModal(true)} className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-sm inline-flex items-center gap-2 transition" title="Vues enregistrées">
               <FiSave /> Vues
             </button>
 
@@ -832,22 +721,17 @@ const ArticlesIndex = () => {
             >
               <FiFilterIcon />
               <span>Filtres</span>
-              <span className="inline-flex items-center justify-center min-w-5 h-5 text-[11px] font-semibold rounded-full bg-white/20 px-1">
-                {activeFiltersCount}
-              </span>
+              <span className="inline-flex items-center justify-center min-w-5 h-5 text-[11px] font-semibold rounded-full bg-white/20 px-1">{activeFiltersCount}</span>
               {showFilters ? <FiChevronUpFi /> : <FiChevronDownFi />}
             </button>
 
-            {/* Filtre Statut (par défaut: published) */}
+            {/* Filtre Statut */}
             <div className="ml-2">
               <label className="sr-only" htmlFor="statusFilter">Statut</label>
               <select
                 id="statusFilter"
                 value={filters.status || 'published'}
-                onChange={(e) => {
-                  const v = e.target.value || 'published';
-                  setFilters(f => ({ ...f, status: v }));
-                }}
+                onChange={(e) => setFilters(f => ({ ...f, status: e.target.value || 'published' }))}
                 className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white backdrop-blur-sm"
                 title="Filtrer par statut"
               >
@@ -859,28 +743,8 @@ const ArticlesIndex = () => {
             </div>
 
             <div className="ml-2 inline-flex rounded-xl bg-white/10 p-1 border border-white/20 backdrop-blur-sm">
-              <button
-                className={`px-3 py-2 rounded-lg flex items-center gap-2 transition ${
-                  viewMode === 'table'
-                    ? 'bg-white text-blue-700 shadow-sm'
-                    : 'text-white/90 hover:bg-white/10'
-                }`}
-                onClick={() => setViewMode('table')}
-                title="Vue table"
-              >
-                <FiListIcon /> Table
-              </button>
-              <button
-                className={`px-3 py-2 rounded-lg flex items-center gap-2 transition ${
-                  viewMode === 'grid'
-                    ? 'bg-white text-blue-700 shadow-sm'
-                    : 'text-white/90 hover:bg-white/10'
-                }`}
-                onClick={() => setViewMode('grid')}
-                title="Vue grid"
-              >
-                <FiGridIcon /> Grid
-              </button>
+              <button className={`px-3 py-2 rounded-lg flex items-center gap-2 transition ${viewMode === 'table' ? 'bg-white text-blue-700 shadow-sm' : 'text-white/90 hover:bg-white/10'}`} onClick={() => setViewMode('table')} title="Vue table"><FiListIcon /> Table</button>
+              <button className={`px-3 py-2 rounded-lg flex items-center gap-2 transition ${viewMode === 'grid' ? 'bg-white text-blue-700 shadow-sm' : 'text-white/90 hover:bg-white/10'}`} onClick={() => setViewMode('grid')} title="Vue grid"><FiGridIcon /> Grid</button>
             </div>
           </div>
         </div>
@@ -888,7 +752,6 @@ const ArticlesIndex = () => {
 
       {/* ===== Accordéon Filtres ===== */}
       <div className="border-b bg-white">
-        {/* Entête accordéon */}
         <button
           type="button"
           onClick={() => setShowFilters(v => !v)}
@@ -898,23 +761,17 @@ const ArticlesIndex = () => {
         >
           <span className="inline-flex items-center gap-2 font-medium">
             <FaFilter className="text-slate-500" /> Filtres
-            <span className="ml-2 inline-flex items-center justify-center min-w-5 h-5 text-[11px] font-semibold rounded-full bg-slate-100 text-slate-700 px-1">
-              {activeFiltersCount}
-            </span>
+            <span className="ml-2 inline-flex items-center justify-center min-w-5 h-5 text-[11px] font-semibold rounded-full bg-slate-100 text-slate-700 px-1">{activeFiltersCount}</span>
           </span>
           <span className="text-slate-500">{showFilters ? <FiChevronUpFi /> : <FiChevronDownFi />}</span>
         </button>
 
-        {/* Contenu avec Collapse grid (stable) */}
         <Collapse open={showFilters}>
           <div id="filters-panel">
             <FiltersBar
-              search={search}
-              setSearch={setSearch}
-              filters={filters}
-              setFilters={setFilters}
-              perPage={perPage}
-              setPerPage={setPerPage}
+              search={search} setSearch={setSearch}
+              filters={filters} setFilters={setFilters}
+              perPage={perPage} setPerPage={setPerPage}
               facets={data?.meta?.facets || {}}
               onExportClick={handleExport}
             />
@@ -922,109 +779,274 @@ const ArticlesIndex = () => {
         </Collapse>
       </div>
 
-      {/* Bandeau quand filtres masqués */}
-      {!showFilters && (
-        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center justify-between">
-          <div className="text-sm text-slate-600">
-            Filtres masqués. Actifs : <b>{activeFiltersCount}</b>
+      {/* ===== Zone scrollable (tu retrouves bien le scroll) ===== */}
+      <div
+        className="flex-1 overflow-y-auto pb-36"
+        // Ajuste la hauteur max pour garder header/filters visibles et montrer la pagination sticky
+        style={{ maxHeight: 'calc(100vh - 220px)' }}
+      >
+        {loading && (
+          <div className="bg-amber-50 border-y border-amber-200 text-amber-800 px-4 py-2">Chargement en cours…</div>
+        )}
+
+        {/* === VUE TABLE === */}
+        {viewMode === 'table' && (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200">
+              <thead className="bg-slate-50">
+                <tr>
+                  {visibleCols.select && (
+                    <th className="px-3 py-3 text-xs font-medium text-slate-600">
+                      <button
+                        className="inline-flex items-center gap-2 select-none"
+                        onClick={()=>{
+                          const ids = (data.items || []).map(a => a.id);
+                          setSelectedIds(prev => {
+                            const next = new Set(prev);
+                            if (ids.length && ids.every(id => next.has(id))) ids.forEach(id => next.delete(id));
+                            else ids.forEach(id => next.add(id));
+                            return next;
+                          });
+                        }}
+                      >
+                        {allSelectedOnPage ? <FaCheckSquare /> : <FaSquare />} Sélect.
+                      </button>
+                    </th>
+                  )}
+
+                  {visibleCols.image && <th className="px-3 py-3 text-xs font-medium text-slate-600">Image</th>}
+
+                  {visibleCols.title && (
+                    <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
+                      <button onClick={()=>toggleSort('title')} className="inline-flex items-center gap-1 hover:underline">
+                        Titre <SortIcon col="title" />
+                      </button>
+                    </th>
+                  )}
+
+                  {visibleCols.author && <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">Auteur</th>}
+                  {visibleCols.category && <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">Catégorie</th>}
+
+                  {visibleCols.published_at && (
+                    <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
+                      <button onClick={()=>toggleSort('published_at')} className="inline-flex items-center gap-1 hover:underline">
+                        Publié le <SortIcon col="published_at" />
+                      </button>
+                    </th>
+                  )}
+
+                  {visibleCols.views && (
+                    <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
+                      <button onClick={()=>toggleSort('view_count')} className="inline-flex items-center gap-1 hover:underline">
+                        Vues <SortIcon col="view_count" />
+                      </button>
+                    </th>
+                  )}
+
+                  {visibleCols.rating && (
+                    <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
+                      <button onClick={()=>toggleSort('rating_average')} className="inline-flex items-center gap-1 hover:underline">
+                        Note <SortIcon col="rating_average" />
+                      </button>
+                    </th>
+                  )}
+
+                  {visibleCols.status && (
+                    <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
+                      <button onClick={()=>toggleSort('status')} className="inline-flex items-center gap-1 hover:underline">
+                        Statut <SortIcon col="status" />
+                      </button>
+                    </th>
+                  )}
+
+                  {visibleCols.actions && <th className="px-3 py-3 text-right text-xs font-medium text-slate-600">Actions</th>}
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {(data.items || []).map((article) => {
+                  const publicTo = buildPublicPath(article);
+                  const formattedViewCount = Number(article.view_count || 0) > 1000 ? `${(Number(article.view_count) / 1000).toFixed(1)}k` : `${article.view_count ?? 0}`;
+                  const formattedRating = article.rating_average ? parseFloat(article.rating_average).toFixed(1) : '0.0';
+                  const publishedAt = toDate(article.published_at);
+                  const createdAt   = toDate(article.created_at);
+                  const updatedAt   = toDate(article.updated_at);
+                  const pubDate = publishedAt ? formatDate(publishedAt) : '—';
+                  const pubTime = publishedAt ? formatTime(publishedAt) : '';
+                  const pubRel  = publishedAt ? formatRelative(publishedAt) : '';
+                  const updRel  = updatedAt ? formatRelative(updatedAt) : null;
+                  const creRel  = createdAt ? formatRelative(createdAt) : null;
+
+                  const uiStatus = article.ui_status
+                    ? String(article.ui_status).toLowerCase()
+                    : (article.deleted_at ? 'archived' : String(article.status || 'draft').toLowerCase());
+                  const isArchived = uiStatus === 'archived';
+
+                  return (
+                    <tr
+                      key={article.id}
+                      className={`transition-all duration-200 group hover:bg-slate-50/50 ${restoredIds.has(article.id) ? 'row-restored-hold' : ''}`}
+                      draggable
+                      onDragStart={(e)=> onDragStartRow(e, article)}
+                    >
+                      {visibleCols.select && (
+                        <td className="px-3 py-4">
+                          <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              className="accent-blue-600"
+                              checked={selectedIds.has(article.id)}
+                              onChange={()=> setSelectedIds(prev => { const n=new Set(prev); n.has(article.id)?n.delete(article.id):n.add(article.id); return n; })}
+                            />
+                          </label>
+                        </td>
+                      )}
+
+                      {visibleCols.image && (
+                        <td className="px-3 py-4 cursor-grab active:cursor-grabbing">
+                          <Thumb src={article.featured_image_url || article.featured_image || null} alt={article.featured_image_alt || article.title} className="w-12 h-12" />
+                        </td>
+                      )}
+
+                      {visibleCols.title && (
+                        <td className="px-3 py-4">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <Link to={publicTo} className="font-semibold text-slate-900 hover:text-blue-600 transition-colors duration-200 block truncate" title={article.title} target="_blank" rel="noopener noreferrer">
+                                {article.title || <span className="text-gray-400 italic">Sans titre</span>}
+                              </Link>
+                              <a href={publicTo} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800" title="Ouvrir l'article"><FaExternalLinkAlt size={12} /></a>
+                            </div>
+                            {article.excerpt && <div className="text-xs text-slate-500 truncate max-w-[420px] mt-1">{article.excerpt}</div>}
+                            <div className="flex gap-1 mt-2">
+                              {article.is_featured && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">⭐ À la une</span>)}
+                              {article.is_sticky && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">📌 Épinglé</span>)}
+                              {article.visibility && article.visibility !== 'public' && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">🔒 {article.visibility}</span>)}
+                            </div>
+                          </div>
+                        </td>
+                      )}
+
+                      {visibleCols.author && (
+                        <td className="px-3 py-4 text-sm">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"><FaUser className="text-slate-500" size={12} /></div>
+                            <div>
+                              <div className="font-medium text-slate-900">{article.author_name || `Auteur #${article.author_id || '—'}`}</div>
+                              {article.author_id && (<div className="text-xs text-slate-500">ID: {article.author_id}</div>)}
+                            </div>
+                          </div>
+                        </td>
+                      )}
+
+                      {visibleCols.category && (
+                        <td className="px-3 py-4 text-sm">
+                          <span className="inline-flex items-center px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-xs font-medium transition-colors duration-200">
+                            <FaTag className="mr-1" size={10} />{getCategoryFromTitle(article.title)}
+                          </span>
+                        </td>
+                      )}
+
+                      {visibleCols.published_at && (
+                        <td className="px-3 py-4 text-sm">
+                          <div className="flex items-center gap-2">
+                            <FaCalendarAlt className="text-slate-400" size={12} />
+                            <div>
+                              <div className="font-medium text-slate-900">{pubDate}</div>
+                              <div className="text-xs text-slate-500">{publishedAt ? `${pubTime} • ${pubRel}` : '—'}</div>
+                            </div>
+                          </div>
+                        </td>
+                      )}
+
+                      {visibleCols.views && (
+                        <td className="px-3 py-4 text-sm">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-blue-600"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+                            </div>
+                            <div>
+                              <div className="font-bold text-blue-700">{formattedViewCount}</div>
+                              <div className="text-xs text-slate-500">vues</div>
+                            </div>
+                          </div>
+                        </td>
+                      )}
+
+                      {visibleCols.rating && (
+                        <td className="px-3 py-4 text-sm">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center"><FaThumbsUp className="text-amber-600" size={12} /></div>
+                            <div>
+                              <div className="font-bold text-amber-700">{formattedRating}/5</div>
+                              <div className="text-xs text-slate-500">{article.rating_count || 0} avis</div>
+                            </div>
+                          </div>
+                        </td>
+                      )}
+
+                      {visibleCols.status && (
+                        <td className="px-3 py-4 text-sm">
+                          <div className="space-y-1">
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${badgeClass(uiStatus)}`}>{uiStatus}</span>
+                            <div className="text-xs text-slate-500 space-y-0.5">
+                              {creRel && (<div>Créé {creRel} • {formatDate(toDate(article.created_at))} {formatTime(toDate(article.created_at))}</div>)}
+                              {updRel && (<div>Maj {updRel} • {formatDate(toDate(article.updated_at))} {formatTime(toDate(article.updated_at))}</div>)}
+                            </div>
+                          </div>
+                        </td>
+                      )}
+
+                      {visibleCols.actions && (
+                        <td className="px-3 py-4 text-right">
+                          <div className="flex items-center gap-1 justify-end">
+                            <Link to={publicTo} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg border text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100 transition" title="Voir l'article"><FaEye size={14} /></Link>
+
+                            <button
+                              className={`p-2 rounded-lg border transition ${isArchived ? 'text-slate-400 bg-slate-50 border-slate-200 cursor-not-allowed' : 'text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'}`}
+                              onClick={()=>{ if (!isArchived) navigate(`/articles/${article.id}/edit`, { state: { article } }); }}
+                              title={isArchived ? 'Édition interdite (archived)' : 'Éditer'}
+                              disabled={isArchived}
+                            >
+                              <FaEdit size={14} />
+                            </button>
+
+                            <button className="p-2 rounded-lg border text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100 transition" onClick={()=>openConfirm('soft', article)} title="Envoyer à la corbeille"><FaTrashAlt size={14} /></button>
+                            <button className="p-2 rounded-lg border text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100 transition" onClick={()=>openConfirm('hard', article)} title="Supprimer définitivement"><FaTrash size={14} /></button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+
+                {(!loading && (data.items || []).length === 0) && (
+                  <tr>
+                    <td className="p-10 text-center text-slate-500" colSpan={visibleColCount}>
+                      <div className="inline-flex flex-col items-center gap-2">
+                        <div className="text-6xl mb-2">📝</div>
+                        <p className="text-lg">Aucun article</p>
+                        <button onClick={()=>{ setPage(1); load(); }} className="text-blue-600 hover:text-blue-800 text-sm">Actualiser</button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
-          <button
-            onClick={()=> setShowFilters(true)}
-            className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-sm inline-flex items-center gap-2"
-            title="Afficher les filtres"
-          >
-            <FaFilter /> Afficher
-          </button>
-        </div>
-      )}
+        )}
 
-      {/* Loading */}
-      {loading && <div className="bg-amber-50 border-y border-amber-200 text-amber-800 px-4 py-2">Chargement en cours…</div>}
-
-      {/* === VUE TABLE === */}
-      {viewMode === 'table' && (
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200">
-            <thead className="bg-slate-50">
-              <tr>
-                {visibleCols.select && (
-                  <th className="px-3 py-3 text-xs font-medium text-slate-600">
-                    <button className="inline-flex items-center gap-2 select-none" onClick={()=>{
-                      const ids = (data.items || []).map(a => a.id);
-                      setSelectedIds(prev => {
-                        const next = new Set(prev);
-                        if (ids.length && ids.every(id => next.has(id))) ids.forEach(id => next.delete(id));
-                        else ids.forEach(id => next.add(id));
-                        return next;
-                      });
-                    }}>
-                      {allSelectedOnPage ? <FaCheckSquare /> : <FaSquare />} Sélect.
-                    </button>
-                  </th>
-                )}
-
-                {visibleCols.image && <th className="px-3 py-3 text-xs font-medium text-slate-600">Image</th>}
-
-                {visibleCols.title && (
-                  <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
-                    <button onClick={()=>toggleSort('title')} className="inline-flex items-center gap-1 hover:underline">
-                      Titre <SortIcon col="title" />
-                    </button>
-                  </th>
-                )}
-
-                {visibleCols.author && <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">Auteur</th>}
-                {visibleCols.category && <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">Catégorie</th>}
-
-                {visibleCols.published_at && (
-                  <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
-                    <button onClick={()=>toggleSort('published_at')} className="inline-flex items-center gap-1 hover:underline">
-                      Publié le <SortIcon col="published_at" />
-                    </button>
-                  </th>
-                )}
-
-                {visibleCols.views && (
-                  <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
-                    <button onClick={()=>toggleSort('view_count')} className="inline-flex items-center gap-1 hover:underline">
-                      Vues <SortIcon col="view_count" />
-                    </button>
-                  </th>
-                )}
-
-                {visibleCols.rating && (
-                  <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
-                    <button onClick={()=>toggleSort('rating_average')} className="inline-flex items-center gap-1 hover:underline">
-                      Note <SortIcon col="rating_average" />
-                    </button>
-                  </th>
-                )}
-
-                {visibleCols.status && (
-                  <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">
-                    <button onClick={()=>toggleSort('status')} className="inline-flex items-center gap-1 hover:underline">
-                      Statut <SortIcon col="status" />
-                    </button>
-                  </th>
-                )}
-
-                {visibleCols.actions && <th className="px-3 py-3 text-right text-xs font-medium text-slate-600">Actions</th>}
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-100 bg-white">
+        {/* === VUE GRID === */}
+        {viewMode === 'grid' && (
+          <div className="p-4">
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {(data.items || []).map((article) => {
                 const publicTo = buildPublicPath(article);
                 const formattedViewCount = Number(article.view_count || 0) > 1000 ? `${(Number(article.view_count) / 1000).toFixed(1)}k` : `${article.view_count ?? 0}`;
                 const formattedRating = article.rating_average ? parseFloat(article.rating_average).toFixed(1) : '0.0';
                 const publishedAt = toDate(article.published_at);
-                const createdAt   = toDate(article.created_at);
-                const updatedAt   = toDate(article.updated_at);
                 const pubDate = publishedAt ? formatDate(publishedAt) : '—';
-                const pubTime = publishedAt ? formatTime(publishedAt) : '';
                 const pubRel  = publishedAt ? formatRelative(publishedAt) : '';
-                const updRel  = updatedAt ? formatRelative(updatedAt) : null;
-                const creRel  = createdAt ? formatRelative(createdAt) : null;
 
                 const uiStatus = article.ui_status
                   ? String(article.ui_status).toLowerCase()
@@ -1032,265 +1054,80 @@ const ArticlesIndex = () => {
                 const isArchived = uiStatus === 'archived';
 
                 return (
-                  <tr
+                  <div
                     key={article.id}
-                    className={`transition-all duration-200 group hover:bg-slate-50/50
-                      ${restoredIds.has(article.id) ? 'row-restored-hold' : ''}`}
+                    className={`relative rounded-xl border bg-white p-3 shadow-sm transition-all duration-200 border-slate-200 hover:shadow-md ${restoredIds.has(article.id) ? 'card-restored-hold' : ''}`}
                     draggable
-                    onDragStart={(e)=> onDragStartRow(e, article)}
-                    onDragEnd={onDragEndRow}
+                    title="Glisser vers le dock (corbeille / supprimer)"
                   >
-                    {visibleCols.select && (
-                      <td className="px-3 py-4">
-                        <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            className="accent-blue-600"
-                            checked={selectedIds.has(article.id)}
-                            onChange={()=> setSelectedIds(prev => { const n=new Set(prev); n.has(article.id)?n.delete(article.id):n.add(article.id); return n; })}
-                          />
-                        </label>
-                      </td>
-                    )}
+                    <label className="absolute top-2 left-2 inline-flex items-center gap-2 cursor-pointer select-none z-10">
+                      <input
+                        type="checkbox"
+                        className="accent-blue-600 w-4 h-4"
+                        checked={selectedIds.has(article.id)}
+                        onChange={()=> setSelectedIds(prev => { const n=new Set(prev); n.has(article.id)?n.delete(article.id):n.add(article.id); return n; })}
+                      />
+                    </label>
 
-                    {visibleCols.image && (
-                      <td className="px-3 py-4 cursor-grab active:cursor-grabbing">
-                        <Thumb src={article.featured_image_url || article.featured_image || null} alt={article.featured_image_alt || article.title} className="w-12 h-12" />
-                      </td>
-                    )}
+                    <div className="aspect-[16/9] w-full overflow-hidden rounded-lg mb-3">
+                      <Thumb src={article.featured_image_url || article.featured_image || null} alt={article.featured_image_alt || article.title} className="w-full h-full" />
+                    </div>
 
-                    {visibleCols.title && (
-                      <td className="px-3 py-4">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <Link to={publicTo} className="font-semibold text-slate-900 hover:text-blue-600 transition-colors duration-200 block truncate" title={article.title} target="_blank" rel="noopener noreferrer">
-                              {article.title || <span className="text-gray-400 italic">Sans titre</span>}
-                            </Link>
-                            <a href={publicTo} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800" title="Ouvrir l'article"><FaExternalLinkAlt size={12} /></a>
-                          </div>
-                          {article.excerpt && <div className="text-xs text-slate-500 truncate max-w-[420px] mt-1">{article.excerpt}</div>}
-                          <div className="flex gap-1 mt-2">
-                            {article.is_featured && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">⭐ À la une</span>)}
-                            {article.is_sticky && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">📌 Épinglé</span>)}
-                            {article.visibility && article.visibility !== 'public' && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">🔒 {article.visibility}</span>)}
-                          </div>
-                        </div>
-                      </td>
-                    )}
+                    <div className="mb-2">
+                      <Link to={publicTo} target="_blank" rel="noopener noreferrer" className="font-semibold text-slate-900 hover:text-blue-600 line-clamp-2">
+                        {article.title || <span className="text-gray-400 italic">Sans titre</span>}
+                      </Link>
+                    </div>
 
-                    {visibleCols.author && (
-                      <td className="px-3 py-4 text-sm">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"><FaUser className="text-slate-500" size={12} /></div>
-                          <div>
-                            <div className="font-medium text-slate-900">{article.author_name || `Auteur #${article.author_id || '—'}`}</div>
-                            {article.author_id && (<div className="text-xs text-slate-500">ID: {article.author_id}</div>)}
-                          </div>
-                        </div>
-                      </td>
-                    )}
+                    <div className="text-xs text-slate-600 flex items-center gap-2 mb-2">
+                      <FaCalendarAlt className="text-slate-400" />
+                      <span>{pubDate} • {pubRel}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs mb-2">
+                      <span className="inline-flex items-center gap-1"><FaEye /> {formattedViewCount}</span>
+                      <span className="inline-flex items-center gap-1"><FaThumbsUp className="text-amber-600" /> {formattedRating}/5</span>
+                      <span className={`px-2 py-0.5 rounded-full border ${badgeClass(uiStatus)}`}>{uiStatus}</span>
+                    </div>
 
-                    {visibleCols.category && (
-                      <td className="px-3 py-4 text-sm">
-                        <span className="inline-flex items-center px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-xs font-medium transition-colors duration-200">
-                          <FaTag className="mr-1" size={10} />{getCategoryFromTitle(article.title)}
-                        </span>
-                      </td>
-                    )}
+                    <div className="flex items-center justify-end gap-2">
+                      <Link to={publicTo} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg border text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100 transition">
+                        <FaEye size={14} />
+                      </Link>
 
-                    {visibleCols.published_at && (
-                      <td className="px-3 py-4 text-sm">
-                        <div className="flex items-center gap-2">
-                          <FaCalendarAlt className="text-slate-400" size={12} />
-                          <div>
-                            <div className="font-medium text-slate-900">{pubDate}</div>
-                            <div className="text-xs text-slate-500">{publishedAt ? `${pubTime} • ${pubRel}` : '—'}</div>
-                          </div>
-                        </div>
-                      </td>
-                    )}
+                      <button
+                        className={`p-2 rounded-lg border transition ${isArchived ? 'text-slate-400 bg-slate-50 border-slate-200 cursor-not-allowed' : 'text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'}`}
+                        onClick={()=>{ if (!isArchived) navigate(`/articles/${article.id}/edit`, { state: { article } }); }}
+                        title={isArchived ? 'Édition interdite (archived)' : 'Éditer'}
+                        disabled={isArchived}
+                      >
+                        <FaEdit size={14} />
+                      </button>
 
-                    {visibleCols.views && (
-                      <td className="px-3 py-4 text-sm">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-blue-600"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
-                          </div>
-                          <div>
-                            <div className="font-bold text-blue-700">{formattedViewCount}</div>
-                            <div className="text-xs text-slate-500">vues</div>
-                          </div>
-                        </div>
-                      </td>
-                    )}
-
-                    {visibleCols.rating && (
-                      <td className="px-3 py-4 text-sm">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center"><FaThumbsUp className="text-amber-600" size={12} /></div>
-                          <div>
-                            <div className="font-bold text-amber-700">{formattedRating}/5</div>
-                            <div className="text-xs text-slate-500">{article.rating_count || 0} avis</div>
-                          </div>
-                        </div>
-                      </td>
-                    )}
-
-                    {visibleCols.status && (
-                      <td className="px-3 py-4 text-sm">
-                        <div className="space-y-1">
-                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${badgeClass(uiStatus)}`}>{uiStatus}</span>
-                          <div className="text-xs text-slate-500 space-y-0.5">
-                            {creRel && (<div>Créé {creRel} • {formatDate(toDate(article.created_at))} {formatTime(toDate(article.created_at))}</div>)}
-                            {updRel && (<div>Maj {updRel} • {formatDate(toDate(article.updated_at))} {formatTime(toDate(article.updated_at))}</div>)}
-                          </div>
-                        </div>
-                      </td>
-                    )}
-
-                    {visibleCols.actions && (
-                      <td className="px-3 py-4 text-right">
-                        <div className="flex items-center gap-1 justify-end">
-                          <Link to={publicTo} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg border text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100 transition" title="Voir l'article"><FaEye size={14} /></Link>
-
-                          {/* EDIT — désactivé si archived */}
-                          <button
-                            className={`p-2 rounded-lg border transition ${
-                              isArchived
-                                ? 'text-slate-400 bg-slate-50 border-slate-200 cursor-not-allowed'
-                                : 'text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
-                            }`}
-                            onClick={()=>{ if (!isArchived) navigate(`/articles/${article.id}/edit`, { state: { article } }); }}
-                            title={isArchived ? 'Édition interdite (archived)' : 'Éditer'}
-                            disabled={isArchived}
-                          >
-                            <FaEdit size={14} />
-                          </button>
-
-                          <button className="p-2 rounded-lg border text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100 transition" onClick={()=>openConfirm('soft', article)} title="Envoyer à la corbeille"><FaTrashAlt size={14} /></button>
-                          <button className="p-2 rounded-lg border text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100 transition" onClick={()=>openConfirm('hard', article)} title="Supprimer définitivement"><FaTrash size={14} /></button>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
+                      <button className="p-2 rounded-lg border text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100 transition" onClick={()=>openConfirm('soft', article)}>
+                        <FaTrashAlt size={14} />
+                      </button>
+                      <button className="p-2 rounded-lg border text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100 transition" onClick={()=>openConfirm('hard', article)}>
+                        <FaTrash size={14} />
+                      </button>
+                    </div>
+                  </div>
                 );
               })}
 
               {(!loading && (data.items || []).length === 0) && (
-                <tr>
-                  <td className="p-10 text-center text-slate-500" colSpan={visibleColCount}>
-                    <div className="inline-flex flex-col items-center gap-2">
-                      <div className="text-6xl mb-2">📝</div>
-                      <p className="text-lg">Aucun article</p>
-                      <button onClick={()=>{ setPage(1); load(); }} className="text-blue-600 hover:text-blue-800 text-sm">Actualiser</button>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* === VUE GRID === */}
-      {viewMode === 'grid' && (
-        <div className="p-4">
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {(data.items || []).map((article) => {
-              const publicTo = buildPublicPath(article);
-              const formattedViewCount = Number(article.view_count || 0) > 1000 ? `${(Number(article.view_count) / 1000).toFixed(1)}k` : `${article.view_count ?? 0}`;
-              const formattedRating = article.rating_average ? parseFloat(article.rating_average).toFixed(1) : '0.0';
-              const publishedAt = toDate(article.published_at);
-              const pubDate = publishedAt ? formatDate(publishedAt) : '—';
-              const pubRel  = publishedAt ? formatRelative(publishedAt) : '';
-
-              const uiStatus = article.ui_status
-                ? String(article.ui_status).toLowerCase()
-                : (article.deleted_at ? 'archived' : String(article.status || 'draft').toLowerCase());
-              const isArchived = uiStatus === 'archived';
-
-              return (
-                <div
-                  key={article.id}
-                  className={`relative rounded-xl border bg-white p-3 shadow-sm transition-all duration-200 border-slate-200 hover:shadow-md
-                    ${restoredIds.has(article.id) ? 'card-restored-hold' : ''}`}
-                  draggable
-                  onDragStart={(e)=> onDragStartRow(e, article)}
-                  onDragEnd={onDragEndRow}
-                  title="Glisser vers le dock (corbeille / supprimer)"
-                >
-                  <label className="absolute top-2 left-2 inline-flex items-center gap-2 cursor-pointer select-none z-10">
-                    <input
-                      type="checkbox"
-                      className="accent-blue-600 w-4 h-4"
-                      checked={selectedIds.has(article.id)}
-                      onChange={()=> setSelectedIds(prev => { const n=new Set(prev); n.has(article.id)?n.delete(article.id):n.add(article.id); return n; })}
-                    />
-                  </label>
-
-                  <div className="aspect-[16/9] w-full overflow-hidden rounded-lg mb-3 cursor-grab active:cursor-grabbing">
-                    <Thumb src={article.featured_image_url || article.featured_image || null} alt={article.featured_image_alt || article.title} className="w-full h-full" />
-                  </div>
-
-                  <div className="mb-2">
-                    <Link to={publicTo} target="_blank" rel="noopener noreferrer" className="font-semibold text-slate-900 hover:text-blue-600 line-clamp-2">
-                      {article.title || <span className="text-gray-400 italic">Sans titre</span>}
-                    </Link>
-                  </div>
-
-                  <div className="text-xs text-slate-600 flex items-center gap-2 mb-2">
-                    <FaCalendarAlt className="text-slate-400" />
-                    <span>{pubDate} • {pubRel}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs mb-2">
-                    <span className="inline-flex items-center gap-1"><FaEye /> {formattedViewCount}</span>
-                    <span className="inline-flex items-center gap-1"><FaThumbsUp className="text-amber-600" /> {formattedRating}/5</span>
-                    <span className={`px-2 py-0.5 rounded-full border ${badgeClass(uiStatus)}`}>{uiStatus}</span>
-                  </div>
-
-                  <div className="flex items-center justify-end gap-2">
-                    <Link to={publicTo} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg border text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100 transition">
-                      <FaEye size={14} />
-                    </Link>
-
-                    {/* EDIT — désactivé si archived */}
-                    <button
-                      className={`p-2 rounded-lg border transition ${
-                        isArchived
-                          ? 'text-slate-400 bg-slate-50 border-slate-200 cursor-not-allowed'
-                          : 'text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
-                      }`}
-                      onClick={()=>{ if (!isArchived) navigate(`/articles/${article.id}/edit`, { state: { article } }); }}
-                      title={isArchived ? 'Édition interdite (archived)' : 'Éditer'}
-                      disabled={isArchived}
-                    >
-                      <FaEdit size={14} />
-                    </button>
-
-                    <button className="p-2 rounded-lg border text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100 transition" onClick={()=>openConfirm('soft', article)}>
-                      <FaTrashAlt size={14} />
-                    </button>
-                    <button className="p-2 rounded-lg border text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100 transition" onClick={()=>openConfirm('hard', article)}>
-                      <FaTrash size={14} />
-                    </button>
-                  </div>
+                <div className="col-span-full py-16 text-center text-slate-500">
+                  <div className="text-6xl mb-2">📝</div>
+                  <p className="text-lg">Aucun article</p>
+                  <button onClick={()=>{ setPage(1); load(); }} className="text-blue-600 hover:text-blue-800 text-sm mt-2">Actualiser</button>
                 </div>
-              );
-            })}
-
-            {(!loading && (data.items || []).length === 0) && (
-              <div className="col-span-full py-16 text-center text-slate-500">
-                <div className="text-6xl mb-2">📝</div>
-                <p className="text-lg">Aucun article</p>
-                <button onClick={()=>{ setPage(1); load(); }} className="text-blue-600 hover:text-blue-800 text-sm mt-2">Actualiser</button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Pagination */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-50 border-t">
+      {/* Pagination sticky (toujours visible) */}
+      <div className="absolute w-full bottom-0 z-20 flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-50/95 backdrop-blur border-t rounded-b-xl shadow-[0_-4px_12px_rgba(0,0,0,0.03)]">
         <div className="text-sm text-slate-600">
           Total : <b>{data.meta.total || 0}</b> • Page <b>{data.meta.current_page || 1}</b> / <b>{data.meta.last_page || 1}</b>
         </div>
@@ -1355,9 +1192,7 @@ const ArticlesIndex = () => {
           <div className="leading-tight">
             <div className="font-semibold tracking-tight flex items-center gap-2">
               <span>Corbeille</span>
-              <span className="inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full text-[11px] font-semibold bg-white/20">
-                {trashCount}
-              </span>
+              <span className="inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full text-[11px] font-semibold bg-white/20">{trashCount}</span>
             </div>
             <div className="text-[10px] text-white/80">Soft delete</div>
           </div>
@@ -1402,8 +1237,7 @@ const ArticlesIndex = () => {
                 setRestoredIds(new Set(ids));
                 setToast({ type: 'success', message: `Restauration : ${ids.length}/${ids.length}` });
                 setLastSoftDeletedIds([]);
-                await load();
-                await fetchTrashCount();
+                await load(); await fetchTrashCount();
               } catch (e) { setToast({ type: 'error', message: 'Erreur lors de la restauration' }); }
             }} className="px-3 py-1 rounded bg-white/10 hover:bg-white/20 inline-flex items-center gap-2" title="Annuler"><FaUndo /> Annuler</button>
             <button onClick={()=> setLastSoftDeletedIds([])} className="ml-2 text-white/70 hover:text-white" aria-label="Fermer"><FaTimes /></button>
@@ -1415,7 +1249,7 @@ const ArticlesIndex = () => {
 };
 
 /* =========================
-   Helpers UI (après composant)
+   Helpers UI
 ========================= */
 const badgeClass = (status) => {
   switch (String(status || '').toLowerCase()) {

@@ -1,6 +1,7 @@
 // src/pages/articles/ArticleForm.jsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import {
   FiCalendar, FiEye, FiEyeOff, FiLock, FiUpload, FiUser, FiTag,
   FiFolder, FiSettings, FiEdit3, FiStar, FiMessageCircle,
@@ -252,6 +253,28 @@ async function updateArticleWithFiles(id, fd) {
     headers: { 'Content-Type': 'multipart/form-data' }
   });
 }
+
+// ---- Portal utilitaire pour sortir du stacking context ----
+const Portal = ({ children, id = 'editor-modal-root' }) => {
+  const elRef = useRef(null);
+  if (!elRef.current && typeof document !== 'undefined') {
+    const el = document.createElement('div');
+    el.setAttribute('id', id);
+    // on peut forcer un z-index “ultime” côté style inline aussi si besoin
+    el.style.zIndex = '2147483647';
+    elRef.current = el;
+  }
+  useEffect(() => {
+    const node = elRef.current;
+    if (!node) return;
+    document.body.appendChild(node);
+    return () => {
+      try { document.body.removeChild(node); } catch {}
+    };
+  }, []);
+  return elRef.current ? createPortal(children, elRef.current) : null;
+};
+
 /* ===============================
    Composant principal
 =============================== */
@@ -993,9 +1016,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
                   {isEdit ? "Modifier l'article" : 'Nouvel article'}
                 </h1>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${computedBadge.cls} flex items-center gap-2`}>
-                    <span>{computedBadge.icon}</span>{computedBadge.label}
-                  </span>
+                  
                   <span className={`px-3 py-1 rounded-full text-xs font-semibold border-2 ${currentStatus.bg} ${currentStatus.text} ${currentStatus.border} hidden sm:flex items-center gap-2`}>
                     <span>{currentStatus.icon}</span>
                     {model.status === 'draft' && 'Brouillon'}
@@ -1226,33 +1247,37 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
               <FieldError name="content" />
             </div>
 
-            {/* MODAL plein écran */}
-            {isEditorModalOpen && (
-              <div className="fixed inset-0 z-[10000] bg-slate-900/70 backdrop-blur-sm">
-                <div className="absolute inset-0 p-4 md:p-6 flex flex-col">
-                  <div className="flex items-center justify-between px-3 py-2 rounded-2xl bg-white/90 border border-slate-200 shadow">
-                    <div className="text-sm font-semibold text-slate-800">Édition en plein écran</div>
-                    <button
-                      type="button"
-                      onClick={() => setIsEditorModalOpen(false)}
-                      className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white hover:bg-slate-50"
-                      title="Fermer"
-                    >
-                      <FiX className="inline-block mr-1" /> Fermer
-                    </button>
+             {/* MODAL plein écran (porté dans <body>) */}
+              {isEditorModalOpen && (
+                <Portal id="editor-modal-root">
+                  <div
+                    className="fixed inset-0 z-[2147483647] bg-slate-900/70 backdrop-blur-sm"
+                    aria-modal="true"
+                    role="dialog"
+                  >
+                    <div className="absolute inset-0 p-4 md:p-6 flex flex-col">
+                      <div className="flex items-center justify-between px-3 py-2 rounded-2xl bg-white/90 border border-slate-200 shadow">
+                        <div className="text-sm font-semibold text-slate-800">Édition en plein écran</div>
+                        <button
+                          type="button"
+                          onClick={() => setIsEditorModalOpen(false)}
+                          className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white hover:bg-slate-50"
+                          title="Fermer"
+                        >
+                          <FiX className="inline-block mr-1" /> Fermer
+                        </button>
+                      </div>
+                      <div className="flex-1 min-h-0 mt-3 rounded-2xl bg-white border border-slate-200 overflow-hidden">
+                        <RichTextEditor
+                          value={model.content || ""}
+                          onChange={(html) => onChange("content", html)}
+                          height={Math.max(360, (typeof window !== 'undefined' ? window.innerHeight : 800) - 160)}
+                        />
+                      </div>
+                    </div>
                   </div>
-
-                  <div className="flex-1 min-h-0 mt-3 rounded-2xl bg-white border border-slate-200 overflow-hidden">
-                    <RichTextEditor
-                      value={model.content || ""}
-                      onChange={(html) => onChange("content", html)}
-                      height={Math.max(360, (typeof window !== 'undefined' ? window.innerHeight : 800) - 160)}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
+                </Portal>
+              )}         
             {/* SEO — version propre et minimale */}
             <section className={`${card} p-8 lg:col-span-2`}>
               <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-3">
