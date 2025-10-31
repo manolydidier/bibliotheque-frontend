@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+// src/media-library/components/Toolbar.jsx
+import React, { useState, useEffect, useCallback } from "react";
 import {
   FaArrowLeft,
   FaArrowRight,
@@ -6,11 +7,15 @@ import {
   FaExpand,
   FaDownload,
   FaShareAlt,
+  FaPalette,
 } from "react-icons/fa";
 import ShareButton from "../share/ShareButton";
 
+const STORAGE_KEY = "gridcard-color-enabled";
+
 /* =========================================================
    Barre d’outils universelle (responsive + autoCompact)
+   + Toggle palette couleur global
    ========================================================= */
 export default function Toolbar({
   onBack,
@@ -23,6 +28,43 @@ export default function Toolbar({
   autoCompact = true,  // Active le mode dock auto sur mobile
 }) {
   const [isCompact, setIsCompact] = useState(compact);
+
+  // --- Palette globale (ON par défaut) ---
+  const [paletteOn, setPaletteOn] = useState(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw == null ? true : JSON.parse(raw);
+    } catch { return true; }
+  });
+
+  // Applique la classe globale + broadcast immédiatement au montage et à chaque changement
+ const applyPalette = useCallback((enabled) => {
+  const html = document.documentElement;
+  // attribut lisible par le CSS
+  html.setAttribute("data-cardmode", enabled ? "colored" : "neutral");
+  // classe de compatibilité (si tu préfères la cibler)
+  html.classList.toggle("cards-colored", !!enabled);
+
+  // broadcast pour les autres composants (Visualiseur écoute déjà)
+  window.dispatchEvent(
+    new CustomEvent("gridcard:colorpref", { detail: { enabled: !!enabled } })
+  );
+}, []);
+
+
+  useEffect(() => {
+    applyPalette(paletteOn);
+  }, [paletteOn, applyPalette]);
+
+  const togglePalette = useCallback(() => {
+    setPaletteOn(prev => {
+      const next = !prev;
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
+      // on applique tout de suite (optimiste)
+      applyPalette(next);
+      return next;
+    });
+  }, [applyPalette]);
 
   // 🔁 Gère le mode autoCompact selon la largeur
   useEffect(() => {
@@ -48,7 +90,7 @@ export default function Toolbar({
     >
       {/* === Mode compact (dock flottant mobile) === */}
       {activeCompact ? (
-        <div className="flex items-center justify-center gap-3 sm:gap-4  bg-red-800">
+        <div className="flex items-center justify-center gap-3 sm:gap-4">
           <IconButton icon={<FaArrowLeft />} title="Retour" onClick={onBack} />
           <IconButton
             icon={<FaArrowRight />}
@@ -75,6 +117,8 @@ export default function Toolbar({
             title="Partager"
             custom={<ShareButton {...shareData} />}
           />
+          {/* Toggle palette en compact */}
+          {/* <ToggleButton paletteOn={paletteOn} onToggle={togglePalette} /> */}
         </div>
       ) : (
         /* === Mode étendu (bureau/dashboard) === */
@@ -82,7 +126,6 @@ export default function Toolbar({
           {/* Navigation */}
           <div className="flex items-center flex-wrap gap-2 sm:gap-3 ml-4">
             <IconButton icon={<FaArrowLeft />} title="Retour" onClick={onBack} />
-           
             <IconButton
               icon={<FaRedo />}
               title="Rafraîchir"
@@ -109,8 +152,15 @@ export default function Toolbar({
               excerpt={shareData?.excerpt}
               url={shareData?.url}
               articleId={shareData?.articleId}
-               global={true} 
+              global={true}
             />
+            {/* Toggle palette en mode étendu */}
+            {/* <ActionButton
+              icon={<FaPalette className="text-sm" />}
+              label={paletteOn ? "Couleurs " : "Neutre "}
+              color={paletteOn ? "blue" : "emerald"}
+              onClick={togglePalette}
+            /> */}
           </div>
         </>
       )}
@@ -151,6 +201,20 @@ function ActionButton({ icon, label, color = "blue", onClick }) {
     >
       {icon}
       <span className="hidden sm:inline">{label}</span>
+    </button>
+  );
+}
+
+/* Petit bouton pour le dock compact */
+function ToggleButton({ paletteOn, onToggle }) {
+  return (
+    <button
+      onClick={onToggle}
+      title={paletteOn ? "Désactiver les couleurs" : "Activer les couleurs"}
+      className={`p-3 rounded-xl text-slate-600 active:scale-95 transition-all duration-300 shadow-sm
+        ${paletteOn ? "hover:text-blue-600 hover:bg-blue-50/80" : "hover:text-emerald-600 hover:bg-emerald-50/80"}`}
+    >
+      <FaPalette />
     </button>
   );
 }

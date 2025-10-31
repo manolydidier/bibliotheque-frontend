@@ -5,14 +5,12 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   FaRegStar, FaStar, FaEye, FaUser,
   FaHeart, FaRegHeart, FaTag, FaLockOpen, FaLock,
-  FaEllipsisV, FaExternalLinkAlt, FaCopy, FaLink
+  FaEllipsisV, FaExternalLinkAlt, FaCopy, FaLink,
 } from "react-icons/fa";
 import SmartImage from "./SmartImage";
 import ShareButton from "../Visualiseur/share/ShareButton";
 import { cls } from "../shared/utils/format";
 import { isFav as localIsFav, toggleFav as localToggleFav, isRead, markRead } from "../shared/store/markers";
-
-// Axios instance (adapte le path si besoin)
 import api from '../../../services/api';
 
 // ✅ Modal & pass memory
@@ -20,39 +18,41 @@ import PasswordModal from "../components/PasswordModal";
 import { getStoredPassword, setStoredPassword } from "../utils/passwordGate";
 
 /* =========================
-   Utils
+   NEW: Icônes catégorie (FontAwesome)
 ========================= */
-// ✅ utils chemin image — place ce bloc au-dessus de toAbsolute
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faStar as faFaStar, faBook, faLeaf, faHeart as faFaHeart, faCoffee, faCamera,
+  faGlobe, faMusic, faPen, faFilm, faFolder, faCode, faChartPie,
+  faBriefcase, faCar, faLaptop, faGamepad, faShoppingCart,
+  faBicycle, faPlane, faTree, faUserFriends, faHandshake,
+  faBell, faFlag, faTools, faLightbulb, faMicrochip, faCloud, faGift
+} from "@fortawesome/free-solid-svg-icons";
+
+/* =========================
+   Utils chemin image
+========================= */
 const fixFeaturedPath = (u) => {
   if (!u) return u;
   let s = String(u).trim();
-
-  // déjà absolu -> laisser tel quel
   if (/^https?:\/\//i.test(s)) return s;
-
-  // nettoyer les slashs de tête
   s = s.replace(/^\/+/, "");
-
-  // si déjà sous /storage, ok
   if (s.startsWith("storage/")) return s;
-
-  // 🔧 correctif : nos featured vivent sous storage/articles/featured/...
   if (s.startsWith("articles/featured/")) return `storage/${s}`;
-
   return s;
 };
 
-// ⬇️ remplace ton toAbsolute par celui-ci
 const toAbsolute = (u) => {
   if (!u) return null;
   const fixed = fixFeaturedPath(u);
   if (/^https?:\/\//i.test(fixed)) return fixed;
-
   const base = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/api\/?$/i, "");
-  // si base existe (ex: http://127.0.0.1:8000), on compose une URL absolue
   return base ? `${base}/${fixed.replace(/^\/+/, "")}` : `/${fixed.replace(/^\/+/, "")}`;
 };
 
+/* =========================
+   Helpers UI/Access
+========================= */
 function getCategoryFromTitle(title) {
   const s = String(title || "").toLowerCase();
   if (s.includes("intelligence artificielle") || s.includes("ia")) return "Intelligence Artificielle";
@@ -111,7 +111,7 @@ function useImpression(onSeen, once = true, threshold = 0.5) {
 ========================= */
 const isPrivate = (v) => String(v || "").toLowerCase() === "private";
 const isPwdProtected = (v) => {
-  if (v === true || v === 1 || v === 2) return true; // si l'API renvoie bool/entier
+  if (v === true || v === 1 || v === 2) return true; // l'API peut renvoyer bool/int
   const k = String(v ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
   return ["password_protected", "password", "protected", "protected_by_password"].includes(k);
 };
@@ -123,10 +123,8 @@ const humanizeVisibility = (v, t) => {
   return v || t('gridcard.visibility.unknown');
 };
 
-
-
 /* =========================
-   Constantes UI
+   Constantes UI (fallbacks)
 ========================= */
 const CATEGORY_COLORS = {
   "Développement Web": "from-amber-500/20 to-amber-600/30",
@@ -151,6 +149,64 @@ const CATEGORY_BORDER_COLORS = {
 };
 
 /* =========================
+   NEW: helpers couleur & icônes
+========================= */
+const ICON_MAP = {
+  "fa-star": faFaStar, "fa-book": faBook, "fa-leaf": faLeaf, "fa-heart": faFaHeart,
+  "fa-coffee": faCoffee, "fa-camera": faCamera, "fa-globe": faGlobe,
+  "fa-music": faMusic, "fa-pen": faPen, "fa-film": faFilm, "fa-folder": faFolder,
+  "fa-code": faCode, "fa-chart-pie": faChartPie, "fa-briefcase": faBriefcase,
+  "fa-car": faCar, "fa-laptop": faLaptop, "fa-gamepad": faGamepad,
+  "fa-shopping-cart": faShoppingCart, "fa-bicycle": faBicycle, "fa-plane": faPlane,
+  "fa-tree": faTree, "fa-user-friends": faUserFriends, "fa-handshake": faHandshake,
+  "fa-bell": faBell, "fa-flag": faFlag, "fa-tools": faTools,
+  "fa-lightbulb": faLightbulb, "fa-microchip": faMicrochip, "fa-cloud": faCloud,
+  "fa-gift": faGift,
+};
+
+function hexToRgb(hex) {
+  if (!hex) return { r: 100, g: 116, b: 139 }; // slate-500
+  const m = hex.trim().replace('#','');
+  const n = m.length === 3
+    ? m.split('').map(x => x + x).join('')
+    : m.padEnd(6, '0').slice(0,6);
+  const r = parseInt(n.slice(0,2), 16);
+  const g = parseInt(n.slice(2,4), 16);
+  const b = parseInt(n.slice(4,6), 16);
+  return { r, g, b };
+}
+function rgba(hex, a = 1) {
+  const { r, g, b } = hexToRgb(hex || '#64748b');
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
+function readableTextColor(hex) {
+  const { r, g, b } = hexToRgb(hex || '#64748b');
+  const yiq = (r*299 + g*587 + b*114) / 1000;
+  return yiq >= 140 ? '#0f172a' : '#ffffff';
+}
+
+/** Récupère la couleur & icône depuis:
+ *  1) item.color / item.icon
+ *  2) catégorie primaire (pivot.is_primary===1) ou première catégorie
+ *  3) fallback: mapping heuristique (titre)
+ */
+function deriveToneAndIcon(item) {
+  let tone = item?.color || null;
+  let iconKey = item?.icon || null;
+
+  if ((!tone || !iconKey) && Array.isArray(item?.categories) && item.categories.length) {
+    const primary = item.categories.find(c => c?.pivot?.is_primary === 1) || item.categories[0];
+    if (!tone && primary?.color) tone = primary.color;
+    if (!iconKey && primary?.icon) iconKey = primary.icon;
+  }
+
+  if (!tone) tone = "#64748b"; // slate
+  if (!iconKey) iconKey = "fa-folder";
+
+  return { tone, iconKey };
+}
+
+/* =========================
    Composant
 ========================= */
 export default function GridCard({ item, routeBase, onOpen }) {
@@ -162,7 +218,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
   const navigate = useNavigate();
   const to = useMemo(() => buildVisualiserPath(routeBase, item), [routeBase, item?.slug, item?.id]);
 
-  // local fallback (ancien store), mais on synchronise avec l'API ensuite
+  // local fallback (ancien store)
   const [fav, setFav] = useState(() => localIsFav(item.id));
   const [read, setRead] = useState(() => isRead(item.id));
   const [isHovered, setIsHovered] = useState(false);
@@ -174,19 +230,53 @@ export default function GridCard({ item, routeBase, onOpen }) {
 
   // menu trois points
   const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef(null);
+  const menuButtonRef = useRef(null);   // ref du bouton (pour outside click)
+  const menuPanelRef  = useRef(null);   // ref du panel (pour outside click)
+  const [menuIndex, setMenuIndex] = useState(0);
 
-  // ✅ modal pwd réutilisable
+  // ✅ modal pwd
   const [pwdOpen, setPwdOpen] = useState(false);
   const [pwdDefault, setPwdDefault] = useState("");
 
+  // ===== Couleur & icône dynamiques (discrets) =====
+  const { tone, iconKey } = useMemo(() => deriveToneAndIcon(item), [item]);
+  const FA_ICON = ICON_MAP[iconKey] || faFolder;
+
+  // 🎨 Préférence couleur (synchro via event global, bouton retiré de l'UI)
+  const COLOR_PREF_KEY = "gridcard-color-enabled";
+  const [colorEnabled, setColorEnabled] = useState(() => {
+    try {
+      const raw = localStorage.getItem(COLOR_PREF_KEY);
+      return raw == null ? true : JSON.parse(raw);
+    } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(COLOR_PREF_KEY, JSON.stringify(colorEnabled)); } catch {}
+  }, [colorEnabled]);
+  useEffect(() => {
+    const handler = (e) => {
+      const enabled = e?.detail?.enabled;
+      if (typeof enabled === "boolean") setColorEnabled(enabled);
+    };
+    window.addEventListener("gridcard:colorpref", handler);
+    return () => window.removeEventListener("gridcard:colorpref", handler);
+  }, []);
+
+  // Teinte effective (neutre si désactivée)
+  const effectiveTone = colorEnabled ? tone : "#64748b";
+
+  // teintes discrètes (fond dominant sobre)
+  const bgBase = rgba(effectiveTone, 0.08);
+  const bgHover = rgba(effectiveTone, 0.16);
+  const borderSoft = rgba(effectiveTone, 0.30);
+  const topBar = rgba(effectiveTone, 0.25);
+  const mediaTint = rgba(effectiveTone, 0.10);
+  const iconBadgeBg = rgba(effectiveTone, 0.12);
+  const textOnTone = readableTextColor(effectiveTone);
+
+  // Fallback classes
   const primaryCategory = getCategoryFromTitle(item.title);
-  const categoryColor = CATEGORY_COLORS[primaryCategory] || CATEGORY_COLORS.default;
-  const borderColor = CATEGORY_BORDER_COLORS[primaryCategory] || CATEGORY_BORDER_COLORS.default;
-  const topBarGradient = useMemo(
-    () => categoryColor.replace("/20", "/60").replace("/30", "/80"),
-    [categoryColor]
-  );
+  const borderColorClass = (CATEGORY_BORDER_COLORS[primaryCategory] || CATEGORY_BORDER_COLORS.default);
 
   const authorName = useMemo(() => {
     const full = (...xs) => xs.filter(Boolean).join(" ").trim();
@@ -210,25 +300,13 @@ export default function GridCard({ item, routeBase, onOpen }) {
   }, [item.reading_time, item.word_count, item.content]);
 
   const imgUrl = useMemo(() => {
-    // on passe toutes les variantes par fixFeaturedPath + toAbsolute
     if (item.featured_image_url) return toAbsolute(item.featured_image_url);
-
-    if (typeof item.featured_image === "string")
-      return toAbsolute(item.featured_image);
-
-    if (item.featured_image?.url)
-      return toAbsolute(item.featured_image.url);
-
-    // 🆕 si l'API renvoie `path` plutôt que `url`
-    if (item.featured_image?.path)
-      return toAbsolute(item.featured_image.path);
-
-    if (Array.isArray(item.media) && item.media[0]?.url)
-      return toAbsolute(item.media[0].url);
-
+    if (typeof item.featured_image === "string") return toAbsolute(item.featured_image);
+    if (item.featured_image?.url) return toAbsolute(item.featured_image.url);
+    if (item.featured_image?.path) return toAbsolute(item.featured_image.path);
+    if (Array.isArray(item.media) && item.media[0]?.url) return toAbsolute(item.media[0].url);
     return null;
   }, [item.featured_image_url, item.featured_image, item.media]);
-
 
   const formattedViewCount = useMemo(() => nf.format(Number(item.view_count || 0)), [nf, item.view_count]);
   const formattedRating    = useMemo(() => (item.rating_average ? Number(item.rating_average).toFixed(1) : "0,0"), [item.rating_average]);
@@ -237,21 +315,19 @@ export default function GridCard({ item, routeBase, onOpen }) {
   const visLabel = useMemo(() => humanizeVisibility(item.visibility, t), [item.visibility, t]);
 
   const motionless = prefersReducedMotion();
-  const hoverCls   = motionless ? "" : "hover:-translate-y-3 hover:scale-[1.02]";
+  const hoverCls   = motionless ? "" : "hover:-translate-y-2 hover:scale-[1.01]";
 
   const cardClass = cls(
-    "group relative bg-white/80 backdrop-blur-md rounded-3xl border-2",
-    "shadow-xl shadow-slate-200/30 overflow-hidden transition-all duration-700",
-    "hover:shadow-3xl hover:shadow-slate-300/40",
-    "hover:bg-white/95 hover:backdrop-blur-lg",
+    "group relative rounded-3xl border",
+    "shadow-sm overflow-hidden transition-all duration-500",
     "w-full max-w-none min-w-[400px]",
     hoverCls,
-    borderColor
+    borderColorClass
   );
 
   const overlayBtnClass = cls(
-    "p-5 bg-white/95 hover:bg-white text-slate-700 rounded-2xl shadow-2xl",
-    "transition-all duration-500 transform hover:scale-125 hover:-rotate-6"
+    "p-5 bg-white/95 hover:bg-white text-slate-700 rounded-2xl shadow-xl",
+    "transition-all duration-300 transform hover:scale-110"
   );
 
   const smallStatBox = "rounded-lg p-2 text-center";
@@ -260,7 +336,6 @@ export default function GridCard({ item, routeBase, onOpen }) {
   // API helper: toggle reaction
   // ---------------------------
   const apiToggleReaction = useCallback(async ({ type, action = 'toggle' }) => {
-    // reactable_type short name 'Article'
     try {
       const resp = await api.post('/reactions/toggle', {
         reactable_type: 'Article',
@@ -274,12 +349,11 @@ export default function GridCard({ item, routeBase, onOpen }) {
     }
   }, [item.id]);
 
-  // fetch initial counts + user reactions for this item (on mount)
+  // fetch initial counts + user reactions
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        // counts
         const cResp = await api.get('/reactions/counts', { params: { reactable_type: 'Article', 'ids[]': [item.id] }});
         if (!mounted) return;
         const map = cResp.data || {};
@@ -287,13 +361,10 @@ export default function GridCard({ item, routeBase, onOpen }) {
           setLikesCount(map[item.id].likes ?? 0);
           setFavoritesCount(map[item.id].favorites ?? 0);
         } else {
-          // fallback to item props if provided
           setLikesCount(prev => prev ?? (item.likes_count ?? 0));
           setFavoritesCount(prev => prev ?? (item.favorites_count ?? 0));
         }
-      } catch (_) {
-        // ignore network error; keep local values
-      }
+      } catch (_) {}
 
       try {
         const meResp = await api.get('/reactions/me', { params: { reactable_type: 'Article', 'ids[]': [item.id] }});
@@ -303,7 +374,6 @@ export default function GridCard({ item, routeBase, onOpen }) {
         setLiked(Boolean(s.liked));
         setFav(Boolean(s.favorited));
       } catch (_) {
-        // fallback: keep local store (isFav) values
         setLiked(false);
       }
     })();
@@ -311,12 +381,9 @@ export default function GridCard({ item, routeBase, onOpen }) {
     return () => { mounted = false; };
   }, [item.id, item.likes_count, item.favorites_count]);
 
-  // ---------------------------
-  // Toggle favorite (star)
-  // ---------------------------
+  // Toggle favorite
   const onToggleFav = useCallback(async (e) => {
     e.stopPropagation();
-    // optimistic
     const prev = fav;
     const prevCount = favoritesCount;
     setFav(v => !v);
@@ -324,23 +391,16 @@ export default function GridCard({ item, routeBase, onOpen }) {
 
     try {
       const data = await apiToggleReaction({ type: 'favorite', action: 'toggle' });
-      // sync from server
       setFav(Boolean(data.user?.favorited));
       if (data.counts?.favorites != null) setFavoritesCount(data.counts.favorites);
-      // update local store as fallback (optional)
       try { localToggleFav(item.id); } catch {}
     } catch (err) {
-      // rollback
       setFav(prev);
       setFavoritesCount(prevCount);
-      // optional: notify user if 401 -> redirect to login
-      // console.error(err);
     }
   }, [fav, favoritesCount, item.id, apiToggleReaction]);
 
-  // ---------------------------
-  // Toggle like (heart)
-  // ---------------------------
+  // Like (optionnel)
   const onToggleLike = useCallback(async (e) => {
     e.stopPropagation();
     const prev = liked;
@@ -353,7 +413,6 @@ export default function GridCard({ item, routeBase, onOpen }) {
       setLiked(Boolean(data.user?.liked));
       if (data.counts?.likes != null) setLikesCount(data.counts.likes);
     } catch (err) {
-      // rollback
       setLiked(prev);
       setLikesCount(prevCount);
     }
@@ -376,9 +435,8 @@ export default function GridCard({ item, routeBase, onOpen }) {
     } catch {}
   }, [imgUrl, to]);
 
-  // ✅ Lecture : gère Private vs Password
+  // ✅ Lecture : Private vs Password
   const handleRead = useCallback((e) => {
-    // 1) Protégé par mot de passe -> modale
     if (isPwdProtected(item.visibility)) {
       e?.preventDefault?.();
       const current = getStoredPassword(item.slug || item.id) || "";
@@ -386,20 +444,15 @@ export default function GridCard({ item, routeBase, onOpen }) {
       setPwdOpen(true);
       return;
     }
-
-    // 2) Privé -> on laisse TOUJOURS le Visualiseur décider (pas de redirection /auth ici)
     if (isPrivate(item.visibility)) {
       e?.preventDefault?.();
       onOpenCard();
       return;
     }
-
-    // 3) Public
     onOpenCard();
   }, [item.visibility, item.slug, item.id, onOpenCard]);
 
-  // ✅ Soumission du mot de passe → on le stocke pour le Visualiseur
-  const submitPwd = useCallback((pwd, remember) => {
+  const submitPwd = useCallback((pwd) => {
     setStoredPassword(item.slug || item.id, pwd);
     setPwdOpen(false);
     onOpenCard();
@@ -419,18 +472,8 @@ export default function GridCard({ item, routeBase, onOpen }) {
   }, [item.slug, item.id]);
 
   // ---------------------------
-  // Menu trois points handlers
+  // Handlers du menu (déclarés AVANT le modèle)
   // ---------------------------
-  useEffect(() => {
-    function onDocClick(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setMenuOpen(false);
-      }
-    }
-    document.addEventListener('click', onDocClick);
-    return () => document.removeEventListener('click', onDocClick);
-  }, []);
-
   const onOpenInNewTab = useCallback((e) => {
     e.stopPropagation();
     window.open(shareUrl, '_blank', 'noopener');
@@ -443,7 +486,6 @@ export default function GridCard({ item, routeBase, onOpen }) {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(shareUrl);
       } else {
-        // fallback
         const ta = document.createElement('textarea');
         ta.value = shareUrl;
         document.body.appendChild(ta);
@@ -451,10 +493,8 @@ export default function GridCard({ item, routeBase, onOpen }) {
         document.execCommand('copy');
         document.body.removeChild(ta);
       }
-      // subtle feedback: small visual change (you can replace by toast)
       setMenuOpen(false);
-    } catch (err) {
-      // ignore
+    } catch {
       setMenuOpen(false);
     }
   }, [shareUrl]);
@@ -462,10 +502,68 @@ export default function GridCard({ item, routeBase, onOpen }) {
   const onShareOpen = useCallback((e) => {
     e.stopPropagation();
     setMenuOpen(false);
-    // open the ShareButton programmatically? we just open new window to shareUrl
-    // user has also the explicit ShareButton on top right; fallback:
     window.open(`mailto:?subject=${encodeURIComponent(item.title || '')}&body=${encodeURIComponent(shareUrl)}`, '_self');
   }, [shareUrl, item.title]);
+
+  // ---------------------------
+  // Modèle de menu (mémoïsé)
+  // ---------------------------
+  const menuModel = useMemo(() => ([
+    {
+      id: "open",
+      icon: FaExternalLinkAlt,
+      label: t('gridcard.menu.openNewTab') || 'Ouvrir dans un nouvel onglet',
+      action: onOpenInNewTab,
+    },
+    { type: "sep", id: "sep-1" },
+    {
+      id: "copy",
+      icon: FaCopy,
+      label: t('gridcard.menu.copyLink') || 'Copier le lien',
+      action: onCopyLink,
+    },
+    { type: "sep", id: "sep-2" },
+    {
+      id: "share",
+      icon: FaLink,
+      label: t('gridcard.menu.share') || 'Partager',
+      action: onShareOpen,
+    },
+  ]), [t, onOpenInNewTab, onCopyLink, onShareOpen]);
+
+  // Navigation clavier
+  const onMenuKeyDown = useCallback((e) => {
+    const actions = menuModel.filter(m => !m.type);
+    if (e.key === "Escape") { setMenuOpen(false); return; }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setMenuIndex(i => (i + 1) % actions.length);
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setMenuIndex(i => (i - 1 + actions.length) % actions.length);
+    }
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      actions[menuIndex]?.action?.(e);
+      setMenuOpen(false);
+    }
+  }, [menuModel, menuIndex]);
+
+  // menu outside-click
+  useEffect(() => {
+    function onDocClick(e) {
+      const btn = menuButtonRef.current;
+      const panel = menuPanelRef.current;
+      if (!btn && !panel) return;
+      const target = e.target;
+      const clickInsideButton = btn && btn.contains(target);
+      const clickInsidePanel  = panel && panel.contains(target);
+      if (!clickInsideButton && !clickInsidePanel) setMenuOpen(false);
+    }
+    document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
+  }, []);
 
   return (
     <>
@@ -478,14 +576,19 @@ export default function GridCard({ item, routeBase, onOpen }) {
         onMouseLeave={() => setIsHovered(false)}
         title={item.title}
         data-testid={`gridcard-${item.id}`}
-        style={{ minHeight: "550px" }}
+        style={{
+          borderColor: borderSoft,
+          background: `linear-gradient(180deg, ${isHovered ? bgHover : bgBase} 0%, rgba(255,255,255,0.92) 65%)`,
+        }}
       >
-        {/* Fond gradient doux */}
-        <div className={cls("absolute inset-0 opacity-0 group-hover:opacity-20 transition-all duration-700 bg-gradient-to-br", categoryColor)} />
-        <div className={cls("absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r transition-all duration-500", topBarGradient)} />
+        {/* Barre supérieure */}
+        <div className="absolute top-0 left-0 right-0 h-1" style={{ backgroundColor: topBar }} />
 
         {/* --- Media --- */}
-        <div className="relative h-64 bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center overflow-hidden">
+        <div
+          className="relative h-64 flex items-center justify-center overflow-hidden"
+          style={{ background: `linear-gradient(135deg, ${mediaTint} 0%, rgba(255,255,255,0.6) 100%)` }}
+        >
           {imgUrl ? (
             <>
               <SmartImage
@@ -493,13 +596,13 @@ export default function GridCard({ item, routeBase, onOpen }) {
                 alt={item.title}
                 ratio="100%"
                 modern="off"
-                className="transition-all duration-700 group-hover:scale-110 group-hover:brightness-110 group-hover:saturate-110"
+                className="transition-all duration-500 group-hover:scale-[1.03] group-hover:brightness-[1.03] group-hover:saturate-[1.03]"
               />
 
               {/* Overlay clair */}
               <div
                 className={cls(
-                  "absolute inset-0 bg-white/55 backdrop-blur-sm flex items-center justify-center gap-6 transition-all duration-500",
+                  "absolute inset-0 bg-white/55 backdrop-blur-sm flex items-center justify-center gap-6 transition-all duration-300",
                   canHover() ? (isHovered ? "opacity-100" : "opacity-0 pointer-events-none") : "opacity-100"
                 )}
                 aria-hidden={canHover() ? !isHovered : false}
@@ -509,38 +612,41 @@ export default function GridCard({ item, routeBase, onOpen }) {
                   to={to}
                   onMouseEnter={prefetchDetail}
                   onClick={handleRead}
-                  className={cls(overlayBtnClass, "hover:text-blue-600 hover:shadow-blue-200/50")}
+                  className={cls(overlayBtnClass, "hover:text-blue-600")}
                   title={t('gridcard.actions.read')}
                 >
-                  <FaEye size={24} />
+                  <FaEye size={22} />
                 </Link>
 
-                {/* 🔒 Bouton pour rouvrir la modale mot de passe */}
+                {/* 🔒 Bouton mot de passe */}
                 {isPwdProtected(item.visibility) && (
                   <button
-                    className={cls(overlayBtnClass, "hover:text-rose-600 hover:shadow-rose-200/50")}
+                    className={cls(overlayBtnClass, "hover:text-rose-600")}
                     onClick={openPwdManually}
                     title={t('gridcard.actions.enterPassword')}
                   >
-                    <FaLock size={22} />
+                    <FaLock size={20} />
                   </button>
                 )}
               </div>
             </>
           ) : (
-            <>
-              <div className={cls("absolute inset-0 bg-gradient-to-br opacity-15 transition-all duration-700", categoryColor, "group-hover:opacity-30")} />
-              <div className="text-slate-400 group-hover:text-slate-600 transition-all duration-700 transform group-hover:scale-125 group-hover:-rotate-6 relative text-6xl">
-                📝
-                <div className={cls("absolute inset-0 blur-xl opacity-0 group-hover:opacity-30 transition-all duration-700", categoryColor)} />
-              </div>
-            </>
+            <div className="text-slate-400 transition-all duration-300 transform group-hover:scale-110 relative text-6xl">📝</div>
           )}
 
-          {/* Badge Visibilité si != public */}
+          {/* Pastille icône */}
+          <div
+            className="absolute bottom-3 right-3 z-20 w-10 h-10 rounded-xl flex items-center justify-center shadow"
+            style={{ backgroundColor: iconBadgeBg, border: `1px solid ${rgba(effectiveTone, .18)}` }}
+            title={iconKey}
+          >
+            <FontAwesomeIcon icon={FA_ICON} className="text-xl" style={{ color: effectiveTone }} />
+          </div>
+
+          {/* Badge Visibilité */}
           {item.visibility && item.visibility !== "public" && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-white/95 border border-slate-200/70 text-slate-800 shadow-lg">
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-white/95 border border-slate-200/70 text-slate-800 shadow">
                 {isPrivate(item.visibility) ? <FaLock /> : <FaLockOpen />}
                 {humanizeVisibility(item.visibility, t)}
               </span>
@@ -551,23 +657,27 @@ export default function GridCard({ item, routeBase, onOpen }) {
           <div className="absolute top-4 right-4 z-20 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
             <ShareButton
               variant="icon"
-              className="p-2 rounded-2xl bg-white/95 text-slate-700 shadow-xl hover:scale-110 transition-transform"
+              className="p-2 rounded-xl bg-white/95 text-slate-700 shadow hover:scale-105 transition-transform"
               title={item.title}
               excerpt={item.excerpt}
               url={shareUrl}
               articleId={item.id}
-              channels={["email", "facebook", "whatsapp", "whatsappNumber"]}
+              channels={["email", "emailAuto","facebook", "whatsapp", "whatsappNumber"]}
               emailEndpoint="/share/email"
               defaultWhatsNumber="33612345678"
               global={false}
             />
 
-            <div className="relative" ref={menuRef}>
+            <div className="relative" ref={menuButtonRef}>
               <button
                 aria-haspopup="true"
                 aria-expanded={menuOpen}
-                onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v); }}
-                className="p-2 rounded-2xl bg-white/95 text-slate-700 shadow-xl hover:scale-110 transition-transform"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuIndex(0);
+                  setMenuOpen(v => !v);
+                }}
+                className="p-2 rounded-xl bg-white/95 text-slate-700 shadow hover:scale-105 transition-transform"
                 title={t('gridcard.actions.more')}
               >
                 <FaEllipsisV size={16} />
@@ -576,19 +686,75 @@ export default function GridCard({ item, routeBase, onOpen }) {
               {menuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 mt-2 w-44 bg-white rounded-lg shadow-lg border border-slate-100 z-30 py-1"
+                  aria-label="Card actions"
+                  ref={menuPanelRef}
+                  tabIndex={0}
+                  onKeyDown={onMenuKeyDown}
+                  onBlur={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget)) setMenuOpen(false);
+                  }}
+                  className={[
+                    "absolute right-0 mt-2 z-30",
+                    "origin-top-right select-none",
+                    "min-w-52 rounded-2xl border border-slate-200/60",
+                    "bg-white/90 backdrop-blur-xl",
+                    "shadow-[0_12px_40px_-12px_rgba(2,6,23,0.18)]",
+                    "ring-1 ring-white/50",
+                    "data-[state=open]:animate-[fadeIn_.18s_ease-out]",
+                    "data-[state=open]:scale-100 scale-95",
+                    "overflow-hidden"
+                  ].join(" ")}
+                  data-state="open"
+                  style={{ willChange: "transform, opacity" }}
                 >
-                  <button onClick={onOpenInNewTab} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2">
-                    <FaExternalLinkAlt /> <span className="text-sm">{t('gridcard.menu.openNewTab') || 'Ouvrir dans un nouvel onglet'}</span>
-                  </button>
+                  {/* caret */}
+                  <div
+                    className="absolute -top-2 right-6 w-3 h-3 rotate-45 bg-white/90 border border-slate-200/60 border-b-0 border-r-0"
+                    aria-hidden
+                  />
+                  {/* titre subtil */}
+                  <div className="px-3.5 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-slate-500/80">
+                    {t('gridcard.menu.title') || 'Actions'}
+                  </div>
 
-                  <button onClick={onCopyLink} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2">
-                    <FaCopy /> <span className="text-sm">{t('gridcard.menu.copyLink') || 'Copier le lien'}</span>
-                  </button>
-
-                  <button onClick={onShareOpen} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2">
-                    <FaLink /> <span className="text-sm">{t('gridcard.menu.share') || 'Partager'}</span>
-                  </button>
+                  {/* items */}
+                  <div className="py-1.5">
+                    {menuModel.map((m) => {
+                      if (m.type === "sep") return <div key={m.id} className="my-1 h-px bg-slate-100/80" />;
+                      const Icon = m.icon;
+                      // calcul d'index pour focus-style
+                      const idxAmongActions = menuModel.filter(x => !x.type).findIndex(x => x.id === m.id);
+                      const focused = (menuIndex === idxAmongActions);
+                      return (
+                        <button
+                          key={m.id}
+                          role="menuitem"
+                          onClick={(e) => { m.action?.(e); setMenuOpen(false); }}
+                          className={[
+                            "w-full text-left",
+                            "px-3.5 py-2.5",
+                            "flex items-center gap-2.5",
+                            "text-[13px] font-medium",
+                            "text-slate-700",
+                            "transition-colors",
+                            "hover:bg-slate-50/80 focus:bg-slate-50/90",
+                            "outline-none",
+                            focused ? "ring-2 ring-blue-200/70" : ""
+                          ].join(" ")}
+                        >
+                          <span className="inline-flex items-center justify-center w-6">
+                            <Icon className="opacity-80" size={13} />
+                          </span>
+                          <span className="flex-1">{m.label}</span>
+                          {m.id === "copy" && (
+                            <kbd className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                              Ctrl+C
+                            </kbd>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
@@ -602,10 +768,10 @@ export default function GridCard({ item, routeBase, onOpen }) {
               onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onToggleFav(e)}
               onClick={onToggleFav}
               className={cls(
-                "p-3 rounded-2xl transition-all duration-500 shadow-xl backdrop-blur-md transform hover:scale-110 hover:-rotate-6 flex items-center gap-2",
+                "p-3 rounded-xl transition-all duration-300 shadow backdrop-blur-md transform hover:scale-105 flex items-center gap-2",
                 fav
-                  ? "text-amber-500 bg-amber-50/90 hover:bg-amber-100/90 shadow-amber-200/50 scale-110"
-                  : "text-slate-500 bg-white/90 hover:bg-white hover:text-amber-500 shadow-slate-200/50"
+                  ? "text-amber-500 bg-amber-50/90 hover:bg-amber-100/90"
+                  : "text-slate-500 bg-white/90 hover:bg-white hover:text-amber-500"
               )}
               title={fav ? t('gridcard.actions.removeFavorite') : t('gridcard.actions.addFavorite')}
               data-testid="btn-fav"
@@ -613,29 +779,14 @@ export default function GridCard({ item, routeBase, onOpen }) {
               {fav ? <FaStar size={18} /> : <FaRegStar size={18} />}
               <span className="text-xs font-semibold select-none">{favoritesCount ?? 0}</span>
             </button>
-
-            {/* <button
-              aria-label={liked ? t('gridcard.actions.removeLike') : t('gridcard.actions.addLike')}
-              aria-pressed={liked}
-              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onToggleLike(e)}
-              onClick={onToggleLike}
-              className={cls(
-                "p-3 rounded-2xl transition-all duration-500 shadow-xl backdrop-blur-md transform hover:scale-110 hover:rotate-6 flex items-center gap-2",
-                liked
-                  ? "text-pink-500 bg-pink-50/90 hover:bg-pink-100/90 shadow-pink-200/50 scale-110"
-                  : "text-slate-500 bg-white/90 hover:bg-white hover:text-pink-500 shadow-slate-200/50"
-              )}
-              title={liked ? t('gridcard.actions.removeLike') : t('gridcard.actions.addLike')}
-              data-testid="btn-like"
-            >
-              {liked ? <FaHeart size={18} /> : <FaRegHeart size={18} />}
-              <span className="text-xs font-semibold select-none">{likesCount ?? 0}</span>
-            </button> */}
+            {/* Like (optionnel, laissé en commentaire)
+            <button ...>...</button>
+            */}
           </div>
         </div>
 
         {/* --- Contenu --- */}
-        <div className="relative p-6 bg-gradient-to-b from-white/95 to-slate-50/95 backdrop-blur-md">
+        <div className="relative p-6">
           <div className="flex gap-8">
             {/* Texte principal */}
             <div className="flex-1">
@@ -648,17 +799,14 @@ export default function GridCard({ item, routeBase, onOpen }) {
 
                 <div className="flex items-center gap-3 mt-2">
                   {fav && (
-                    <div className="flex items-center gap-2 bg-amber-100/80 rounded-full px-3 py-1">
-                      <FaStar className="text-amber-500" size={12} />
-                      <span className="text-amber-700 text-xs font-semibold">{t('gridcard.badges.favorite')}</span>
+                    <div
+                      className="flex items-center gap-2 rounded-full px-3 py-1"
+                      style={{ backgroundColor: rgba(effectiveTone, 0.15), color: textOnTone, border: `1px solid ${rgba(effectiveTone, 0.25)}` }}
+                    >
+                      <FaStar size={12} />
+                      <span className="text-xs font-semibold">{t('gridcard.badges.favorite')}</span>
                     </div>
                   )}
-                  {/* {liked && (
-                    <div className="flex items-center gap-2 bg-pink-100/80 rounded-full px-3 py-1">
-                      <FaHeart className="text-pink-500" size={12} />
-                      <span className="text-pink-700 text-xs font-semibold">{t('gridcard.badges.liked')}</span>
-                    </div>
-                  )} */}
                 </div>
               </div>
 
@@ -668,16 +816,16 @@ export default function GridCard({ item, routeBase, onOpen }) {
                   to={to}
                   onClick={handleRead}
                   onMouseEnter={prefetchDetail}
-                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl font-semibold text-sm transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl font-semibold text-sm transition-all duration-300 transform hover:scale-[1.02] shadow"
                 >
                   <FaEye size={14} />
                   <span>{t('gridcard.actions.read')}</span>
                 </Link>
 
                 {read && (
-                  <div className="flex items-center gap-2 bg-emerald-100/80 rounded-full px-4 py-2">
-                    <div className="w-4 h-4 bg-emerald-500 rounded-full animate-pulse" />
-                    <span className="text-emerald-700 text-xs font-semibold">{t('gridcard.badges.read')}</span>
+                  <div className="flex items-center gap-2 rounded-full px-4 py-2" style={{ backgroundColor: rgba("#10b981", .15), border: "1px solid rgba(16,185,129,.25)", color: "#065f46" }}>
+                    <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse" />
+                    <span className="text-xs font-semibold">{t('gridcard.badges.read')}</span>
                   </div>
                 )}
               </div>
@@ -687,8 +835,10 @@ export default function GridCard({ item, routeBase, onOpen }) {
             <div className="w-44 space-y-3">
               <div className="space-y-2">
                 {/* Auteur */}
-                <div className="flex items-center gap-2 bg-slate-100/80 rounded-lg px-3 py-2">
-                  <div className="p-1.5 bg-slate-200/80 rounded"><FaUser className="text-slate-600" size={12} /></div>
+                <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ backgroundColor: "rgba(15,23,42,.04)" }}>
+                  <div className="p-1.5 rounded" style={{ backgroundColor: "rgba(15,23,42,.06)" }}>
+                    <FaUser className="text-slate-600" size={12} />
+                  </div>
                   <div className="flex-1 min-w-0">
                     <span className="font-semibold text-slate-800 text-xs block truncate overflow-auto">{authorName}</span>
                     <p className="text-slate-600 text-xs overflow-auto">{item.author?.email || t('gridcard.author')}</p>
@@ -696,8 +846,10 @@ export default function GridCard({ item, routeBase, onOpen }) {
                 </div>
 
                 {/* Date */}
-                <div className="flex items-center gap-2 bg-slate-100/80 rounded-lg px-3 py-2">
-                  <div className="p-1.5 bg-slate-200/80 rounded"><FaTag className="text-slate-600" size={12} /></div>
+                <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ backgroundColor: "rgba(15,23,42,.04)" }}>
+                  <div className="p-1.5 rounded" style={{ backgroundColor: "rgba(15,23,42,.06)" }}>
+                    <FaTag className="text-slate-600" size={12} />
+                  </div>
                   <div className="flex-1 min-w-0">
                     <span className="font-semibold text-slate-800 text-xs block truncate">{formattedDate}</span>
                     <p className="text-slate-600 text-xs">
@@ -708,8 +860,14 @@ export default function GridCard({ item, routeBase, onOpen }) {
 
                 {/* Visibilité */}
                 {item.visibility && item.visibility !== "public" && (
-                  <div className={`flex items-center gap-2 ${isPrivate(item.visibility) ? "bg-rose-50 border border-rose-100" : "bg-blue-50 border border-blue-100"} rounded-lg px-3 py-2`}>
-                    <div className={`p-1.5 rounded ${isPrivate(item.visibility) ? "bg-rose-100" : "bg-blue-100"}`}>
+                  <div
+                    className="flex items-center gap-2 rounded-lg px-3 py-2"
+                    style={{
+                      backgroundColor: isPrivate(item.visibility) ? "rgba(244,63,94,.08)" : "rgba(37,99,235,.08)",
+                      border: `1px solid ${isPrivate(item.visibility) ? "rgba(244,63,94,.15)" : "rgba(37,99,235,.15)"}`
+                    }}
+                  >
+                    <div className="p-1.5 rounded" style={{ backgroundColor: isPrivate(item.visibility) ? "rgba(244,63,94,.18)" : "rgba(37,99,235,.18)" }}>
                       {isPrivate(item.visibility) ? <FaLock className="text-rose-700" size={12} /> : <FaLockOpen className="text-blue-700" size={12} />}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -727,26 +885,26 @@ export default function GridCard({ item, routeBase, onOpen }) {
 
         {/* Stats */}
         <div className="grid grid-cols-4 gap-2 px-6 pt-3 mb-4">
-          <div className={cls("bg-gradient-to-br from-blue-50/80 to-indigo-50/80", smallStatBox)}>
+          <div className={cls("bg-gradient-to-br from-blue-50/70 to-indigo-50/70", smallStatBox)}>
             <div className="text-blue-700 font-bold text-sm">{formattedViewCount}</div>
             <div className="text-blue-600 text-xs">{t('gridcard.stats.views')}</div>
           </div>
 
           {item.comment_count !== undefined && (
-            <div className={cls("bg-gradient-to-br from-green-50/80 to-emerald-50/80", smallStatBox)}>
+            <div className={cls("bg-gradient-to-br from-green-50/70 to-emerald-50/70", smallStatBox)}>
               <div className="text-green-700 font-bold text-sm">{item.comment_count}</div>
               <div className="text-green-600 text-xs">{t('gridcard.stats.comments')}</div>
             </div>
           )}
 
           {item.share_count !== undefined && (
-            <div className={cls("bg-gradient-to-br from-purple-50/80 to-pink-50/80", smallStatBox)}>
+            <div className={cls("bg-gradient-to-br from-purple-50/70 to-pink-50/70", smallStatBox)}>
               <div className="text-purple-700 font-bold text-sm">{item.share_count}</div>
               <div className="text-purple-600 text-xs">{t('gridcard.stats.shares')}</div>
             </div>
           )}
 
-          <div className={cls("bg-gradient-to-br from-amber-50/80 to-orange-50/80", smallStatBox)}>
+          <div className={cls("bg-gradient-to-br from-amber-50/70 to-orange-50/70", smallStatBox)}>
             <div className="text-amber-700 font-bold text-sm">{formattedRating}/5</div>
             <div className="text-amber-600 text-xs">{item.rating_count || 0} {t('gridcard.stats.reviews')}</div>
           </div>

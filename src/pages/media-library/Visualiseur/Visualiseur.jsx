@@ -27,7 +27,7 @@ import {
   FaThList,
   FaOutdent,
   FaStream,
-  FaIndent
+  FaIndent,FaPalette 
 } from "react-icons/fa";
 import {
   ResponsiveContainer,
@@ -60,6 +60,20 @@ import WordPreviewPro from "./FilePreview/WordPreview";
 import PowerPointPreview from "./FilePreview/PowerPointPreview";
 // import MapPreview from "./FilePreview/MapPreview";
 
+
+// === Accent tokens (couleur/ombre) =========================
+const ACCENT = {
+  hairline: "bg-gradient-to-r from-transparent via-sky-300 to-transparent",
+  glow: "shadow-[0_10px_30px_-12px_rgba(37,99,235,0.35)]",
+  glowSoft: "shadow-[0_6px_24px_-10px_rgba(37,99,235,0.25)]",
+  focus: "focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white",
+  pill: "bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-800 ring-1 ring-inset ring-blue-200",
+};
+
+// Palette globale (même clé que FiltersPanel)
+const STORAGE_KEYS = {
+  CARD_COLOR_ENABLED: "gridcard-color-enabled",
+};
 /* ---------------- Helpers ---------------- */
 const sanitizeParam = (x) => {
   const raw = (x ?? "").toString().trim();
@@ -421,6 +435,47 @@ export default function Visualiseur() {
   const [myReview, setMyReview] = useState("");
   const [ratingLoaded, setRatingLoaded] = useState(false);
   const previewRef = useRef(null);
+
+
+  
+ // ======= [PALETTE TOGGLE] État + logique =======
+const [cardColorEnabled, setCardColorEnabled] = useState(() => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.CARD_COLOR_ENABLED);
+    return raw == null ? true : JSON.parse(raw);
+  } catch { return true; }
+});
+
+// ✅ applique/retire la classe globale sur <html>
+const applyGlobalPalette = useCallback((enabled) => {
+  document.documentElement.classList.toggle("cards-colored", !!enabled);
+}, []);
+
+// ✅ synchronise l’état local avec la Toolbar via l’event
+useEffect(() => {
+  const onPref = (e) => {
+    const enabled = !!(e?.detail?.enabled);
+    setCardColorEnabled(enabled);        // reflète l’état (label/bouton local)
+    applyGlobalPalette(enabled);         // applique la classe globale
+  };
+  window.addEventListener("gridcard:colorpref", onPref);
+  return () => window.removeEventListener("gridcard:colorpref", onPref);
+}, [applyGlobalPalette]);
+
+// ✅ applique la classe au montage (si Visualiseur est la 1ère vue)
+useEffect(() => {
+  applyGlobalPalette(cardColorEnabled);
+}, [cardColorEnabled, applyGlobalPalette]);
+
+// (optionnel) si tu gardes le bouton local dans Visualiseur
+const toggleCardColor = useCallback(() => {
+  const next = !cardColorEnabled;
+  setCardColorEnabled(next);
+  try { localStorage.setItem(STORAGE_KEYS.CARD_COLOR_ENABLED, JSON.stringify(next)); } catch {}
+  applyGlobalPalette(next); // applique tout de suite
+  // notifie les autres vues (Grid, Toolbar, etc.)
+  window.dispatchEvent(new CustomEvent("gridcard:colorpref", { detail: { enabled: next } }));
+}, [cardColorEnabled, applyGlobalPalette]);
 
   // Aperçu rapide (modal indépendant des Tabs)
   const [qpOpen, setQpOpen] = useState(false);
@@ -1040,8 +1095,10 @@ useEffect(() => {
             onClick={toggleSidebar}
             title={sidebarOpen ? t('visualiseur.sidebar.hide') : t('visualiseur.sidebar.show')}
             aria-pressed={!sidebarOpen}
-            className="flex items-center gap-3 px-4 py-3 rounded-full border-2  bg-white hover:bg-blue-50 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+            className={`flex items-center gap-3 px-4 py-3 rounded-full border-2 bg-white hover:bg-blue-50 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 ${ACCENT.focus}`}
           >
+
+
             {sidebarOpen ? (
               <FaOutdent className="text-blue-600 text-lg" />
             ) : (
@@ -1081,7 +1138,8 @@ useEffect(() => {
           {/* Main */}
           <div className="flex-1  flex flex-col w-full">
             <div className="bg-white/60 backdrop-blur-xl rounded-2xl shadow-xl border border-white/40 overflow-hidden">
-              <div className="sticky top-5 z-10 bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40">
+             <div className={`sticky top-5 z-10 bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40 `}>
+              <div className={`absolute inset-x-0 -top-px h-px ${ACCENT.hairline}`} />
                 <Toolbar
                   onBack={() => navigate(-1)}
                   onRefresh={() => setActiveTab(t('visualiseur.tabs.preview'))}
@@ -1090,7 +1148,9 @@ useEffect(() => {
                   shareData={shareData}
                   global={true} 
                 />
+                
               </div>
+
 
               <div className="flex gap-4 lg:gap-6 xl:gap-8">
                 {/* Main panel */}
@@ -1150,7 +1210,8 @@ useEffect(() => {
           <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center">
             <div className="relative w-full h-full flex items-center justify-center">
               <div className="max-w-7xl w-full p-6 sm:p-10 lg:p-12">
-                <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl">
+                <div className={`bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl ${ACCENT.glow}`}>
+
                   <Tabs list={tabs} active={activeTab} onChange={setActiveTab} />
                   {activeTab === t('visualiseur.tabs.preview') && (
                     <Apercu
@@ -1302,7 +1363,7 @@ function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDown
             <p className="text-slate-600 mt-2 max-w-md mx-auto">{t('visualiseur.preview.addMedia')}</p>
           </div>
         ) : (
-           <div className="bg-white/60 border border-slate-200/40 rounded-2xl overflow-hidden backdrop-blur-sm shadow-lg">
+         <div className={`bg-white/60 border border-slate-200/40 rounded-2xl overflow-hidden backdrop-blur-sm shadow-lg ${ACCENT.glowSoft}`}>
     <FilePreview
       file={{
         ...article,
@@ -1402,8 +1463,8 @@ function Medias({ mediaList, onPreview }) {
   const Card = ({ m }) => (
     <div
       key={m.id ?? m.fileUrl}
-      className="rounded-2xl border border-slate-200/60 bg-white/70 backdrop-blur-sm p-4 hover:shadow-xl transition-all duration-300 w-64"
-    >
+       className={`rounded-2xl border border-slate-200/60 bg-white/70 backdrop-blur-sm p-4 hover:shadow-xl transition-all duration-300 w-64 ${ACCENT.glowSoft}`}
+>
       <div className="flex items-center gap-3">
         <div className={`w-12 h-12 ${iconBgForType(m.type)} rounded-xl flex items-center justify-center`}>
           {iconForType(m.type, "text-lg")}
@@ -1434,7 +1495,7 @@ function Medias({ mediaList, onPreview }) {
       <div className="mt-3 flex items-center gap-2">
         <button
           onClick={() => onPreview?.(m)}
-          className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
+         className={`px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm ${ACCENT.focus}`}
           title={t('visualiseur.media.preview')}
         >
           <FaEye className="inline -mt-0.5 mr-2" />
@@ -1444,7 +1505,7 @@ function Medias({ mediaList, onPreview }) {
           href={m.fileUrl}
           target="_blank"
           rel="noreferrer"
-          className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
+          className={`px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm ${ACCENT.focus}`}
           title={t('visualiseur.media.open')}
         >
           <FaExternalLinkAlt className="inline -mt-0.5 mr-2" />
@@ -1545,14 +1606,15 @@ function Medias({ mediaList, onPreview }) {
       {activePills.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {activePills.map(p => (
-            <span key={p.id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-200">
+            <span key={p.id} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold ${ACCENT.pill}`}>
               {p.label}
               <button onClick={p.clear} className="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded hover:bg-blue-100">
                 <FiX className="w-3 h-3" />
               </button>
             </span>
           ))}
-          <button onClick={resetAll} className="ml-1 text-[11px] font-semibold underline text-blue-700">
+          <button onClick={resetAll} className={`ml-1 text-[11px] font-semibold underline text-blue-700 ${ACCENT.focus}`}>
+
             {t('visualiseur.media.reset')}
           </button>
         </div>
@@ -2037,10 +2099,12 @@ function DetailsPanel({
           </div>
 
           {article?.allow_rating !== false && (
+            <div className={ACCENT.focus}>
             <RateButton
               onClick={ratingLoaded && typeof myRating === "number" ? onOpenRatingEdit : onOpenRating}
               label={ratingLoaded && typeof myRating === "number" ? t('visualiseur.details.editRating') : t('visualiseur.details.rate')}
             />
+          </div>
           )}
         </div>
       </div>

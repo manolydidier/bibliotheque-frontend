@@ -17,6 +17,16 @@ import {
 
 import FiltersBar from './FiltersBar';
 
+/* ===== NEW: FontAwesome pour icônes de catégories ===== */
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faStar as faFaStar, faBook, faLeaf, faHeart as faFaHeart, faCoffee, faCamera,
+  faGlobe, faMusic, faPen, faFilm, faFolder, faCode, faChartPie,
+  faBriefcase, faCar, faLaptop, faGamepad, faShoppingCart,
+  faBicycle, faPlane, faTree, faUserFriends, faHandshake,
+  faBell, faFlag, faTools, faLightbulb, faMicrochip, faCloud, faGift
+} from "@fortawesome/free-solid-svg-icons";
+
 /* =========================
    Axios de base
 ========================= */
@@ -238,6 +248,52 @@ const Portal = ({ children }) => {
   }, [el]);
   return ReactDOM.createPortal(children, el);
 };
+
+/* =======================================================
+   NEW: Couleurs & Icônes de catégories (discret, dominant)
+======================================================= */
+const ICON_MAP = {
+  "fa-star": faFaStar, "fa-book": faBook, "fa-leaf": faLeaf, "fa-heart": faFaHeart,
+  "fa-coffee": faCoffee, "fa-camera": faCamera, "fa-globe": faGlobe,
+  "fa-music": faMusic, "fa-pen": faPen, "fa-film": faFilm, "fa-folder": faFolder,
+  "fa-code": faCode, "fa-chart-pie": faChartPie, "fa-briefcase": faBriefcase,
+  "fa-car": faCar, "fa-laptop": faLaptop, "fa-gamepad": faGamepad,
+  "fa-shopping-cart": faShoppingCart, "fa-bicycle": faBicycle, "fa-plane": faPlane,
+  "fa-tree": faTree, "fa-user-friends": faUserFriends, "fa-handshake": faHandshake,
+  "fa-bell": faBell, "fa-flag": faFlag, "fa-tools": faTools,
+  "fa-lightbulb": faLightbulb, "fa-microchip": faMicrochip, "fa-cloud": faCloud,
+  "fa-gift": faGift,
+};
+
+function hexToRgb(hex) {
+  if (!hex) return { r: 100, g: 116, b: 139 }; // slate-500 fallback
+  const m = hex.trim().replace('#','');
+  const n = m.length === 3 ? m.split('').map(x => x + x).join('') : m.padEnd(6, '0').slice(0,6);
+  const r = parseInt(n.slice(0,2), 16);
+  const g = parseInt(n.slice(2,4), 16);
+  const b = parseInt(n.slice(4,6), 16);
+  return { r, g, b };
+}
+function rgba(hex, a = 1) {
+  const { r, g, b } = hexToRgb(hex || '#64748b');
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
+function getPrimaryCategory(categories = []) {
+  if (!Array.isArray(categories) || categories.length === 0) return null;
+  return categories.find(c => c?.pivot?.is_primary === 1) || categories[0];
+}
+function deriveCategoryMeta(article) {
+  const c = getPrimaryCategory(article?.categories);
+  const name = c?.name || getCategoryFromTitle(article?.title);
+  const color = c?.color || '#64748b';
+  const iconKey = c?.icon || 'fa-folder';
+  return { name, color, iconKey };
+}
+
+/* =========
+   GLOBAL: toggle “couleur des cards” partagé avec FiltersBar / Grid / List
+========== */
+const COLOR_PREF_KEY = 'gridcard-color-enabled';
 
 /* =========================
    Composant principal
@@ -614,6 +670,24 @@ const ArticlesIndex = () => {
 
   const visibleColCount = useMemo(() => Object.values(visibleCols).filter(Boolean).length, [visibleCols]);
 
+  /* =========================
+     Toggle global "couleur des cards" (synchro FiltersBar)
+  ========================= */
+  const [colorEnabled, setColorEnabled] = useState(() => {
+    try {
+      const raw = localStorage.getItem(COLOR_PREF_KEY);
+      return raw == null ? true : JSON.parse(raw);
+    } catch { return true; }
+  });
+  useEffect(() => {
+    const handler = (e) => {
+      const enabled = e?.detail?.enabled;
+      if (typeof enabled === 'boolean') setColorEnabled(enabled);
+    };
+    window.addEventListener('gridcard:colorpref', handler);
+    return () => window.removeEventListener('gridcard:colorpref', handler);
+  }, []);
+
   /* ===================
      Rendu
   =================== */
@@ -779,10 +853,9 @@ const ArticlesIndex = () => {
         </Collapse>
       </div>
 
-      {/* ===== Zone scrollable (tu retrouves bien le scroll) ===== */}
+      {/* ===== Zone scrollable ===== */}
       <div
         className="flex-1 overflow-y-auto pb-36"
-        // Ajuste la hauteur max pour garder header/filters visibles et montrer la pagination sticky
         style={{ maxHeight: 'calc(100vh - 220px)' }}
       >
         {loading && (
@@ -866,6 +939,12 @@ const ArticlesIndex = () => {
               <tbody className="divide-y divide-slate-100 bg-white">
                 {(data.items || []).map((article) => {
                   const publicTo = buildPublicPath(article);
+                  const { name: catName, color: catColorFromMeta, iconKey: catIconKey } = deriveCategoryMeta(article);
+                  const CatIcon = ICON_MAP[catIconKey] || faFolder;
+
+                  // ✅ respect du toggle global
+                  const tone = colorEnabled ? catColorFromMeta : '#64748b';
+
                   const formattedViewCount = Number(article.view_count || 0) > 1000 ? `${(Number(article.view_count) / 1000).toFixed(1)}k` : `${article.view_count ?? 0}`;
                   const formattedRating = article.rating_average ? parseFloat(article.rating_average).toFixed(1) : '0.0';
                   const publishedAt = toDate(article.published_at);
@@ -882,12 +961,19 @@ const ArticlesIndex = () => {
                     : (article.deleted_at ? 'archived' : String(article.status || 'draft').toLowerCase());
                   const isArchived = uiStatus === 'archived';
 
+                  // Teinte dominante très légère pour la ligne (onHover un peu plus marqué)
+                  const rowBgBase  = rgba(tone, 0.04);
+                  const rowBgHover = rgba(tone, 0.08);
+
                   return (
                     <tr
                       key={article.id}
-                      className={`transition-all duration-200 group hover:bg-slate-50/50 ${restoredIds.has(article.id) ? 'row-restored-hold' : ''}`}
+                      className={`transition-colors duration-200 group ${restoredIds.has(article.id) ? 'row-restored-hold' : ''}`}
                       draggable
                       onDragStart={(e)=> onDragStartRow(e, article)}
+                      style={{ background: `linear-gradient(180deg, ${rowBgBase} 0%, rgba(255,255,255,0.96) 65%)` }}
+                      onMouseEnter={(e)=>{ e.currentTarget.style.background = `linear-gradient(180deg, ${rowBgHover} 0%, rgba(255,255,255,0.98) 65%)`; }}
+                      onMouseLeave={(e)=>{ e.currentTarget.style.background = `linear-gradient(180deg, ${rowBgBase} 0%, rgba(255,255,255,0.96) 65%)`; }}
                     >
                       {visibleCols.select && (
                         <td className="px-3 py-4">
@@ -941,8 +1027,22 @@ const ArticlesIndex = () => {
 
                       {visibleCols.category && (
                         <td className="px-3 py-4 text-sm">
-                          <span className="inline-flex items-center px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-xs font-medium transition-colors duration-200">
-                            <FaTag className="mr-1" size={10} />{getCategoryFromTitle(article.title)}
+                          <span
+                            className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium transition-colors duration-200"
+                            title={catName}
+                            style={{
+                              backgroundColor: rgba(tone, 0.16),
+                              border: `1px solid ${rgba(tone, 0.28)}`,
+                              color: '#0f172a'
+                            }}
+                          >
+                            <span
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-md mr-1.5"
+                              style={{ backgroundColor: rgba(tone, 0.18), border: `1px solid ${rgba(tone, 0.30)}` }}
+                            >
+                              <FontAwesomeIcon icon={CatIcon} className="text-[11px]" style={{ color: tone }} />
+                            </span>
+                            {catName}
                           </span>
                         </td>
                       )}
@@ -1042,6 +1142,12 @@ const ArticlesIndex = () => {
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {(data.items || []).map((article) => {
                 const publicTo = buildPublicPath(article);
+                const { name: catName, color: catColorFromMeta, iconKey: catIconKey } = deriveCategoryMeta(article);
+                const CatIcon = ICON_MAP[catIconKey] || faFolder;
+
+                // ✅ respect du toggle global
+                const tone = colorEnabled ? catColorFromMeta : '#64748b';
+
                 const formattedViewCount = Number(article.view_count || 0) > 1000 ? `${(Number(article.view_count) / 1000).toFixed(1)}k` : `${article.view_count ?? 0}`;
                 const formattedRating = article.rating_average ? parseFloat(article.rating_average).toFixed(1) : '0.0';
                 const publishedAt = toDate(article.published_at);
@@ -1059,8 +1165,27 @@ const ArticlesIndex = () => {
                     className={`relative rounded-xl border bg-white p-3 shadow-sm transition-all duration-200 border-slate-200 hover:shadow-md ${restoredIds.has(article.id) ? 'card-restored-hold' : ''}`}
                     draggable
                     title="Glisser vers le dock (corbeille / supprimer)"
+                    style={{
+                      background: `linear-gradient(180deg, ${rgba(tone, 0.06)} 0%, rgba(255,255,255,0.98) 80%)`,
+                      borderColor: rgba(tone, 0.30)
+                    }}
                   >
-                    <label className="absolute top-2 left-2 inline-flex items-center gap-2 cursor-pointer select-none z-10">
+                    {/* Badge Catégorie en haut à gauche */}
+                    <div className="absolute top-2 left-2 z-10">
+                      <span
+                        className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold"
+                        style={{ backgroundColor: rgba(tone, 0.18), border: `1px solid ${rgba(tone, 0.32)}`, color: '#0f172a' }}
+                        title={catName}
+                      >
+                        <span className="inline-flex items-center justify-center w-5 h-5 rounded-md mr-1"
+                              style={{ backgroundColor: rgba(tone, 0.20), border: `1px solid ${rgba(tone, 0.32)}` }}>
+                          <FontAwesomeIcon icon={CatIcon} className="text-[11px]" style={{ color: tone }} />
+                        </span>
+                        {catName}
+                      </span>
+                    </div>
+
+                    <label className="absolute top-2 right-2 inline-flex items-center gap-2 cursor-pointer select-none z-10">
                       <input
                         type="checkbox"
                         className="accent-blue-600 w-4 h-4"
@@ -1126,7 +1251,7 @@ const ArticlesIndex = () => {
         )}
       </div>
 
-      {/* Pagination sticky (toujours visible) */}
+      {/* Pagination sticky */}
       <div className="absolute w-full bottom-0 z-20 flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-50/95 backdrop-blur border-t rounded-b-xl shadow-[0_-4px_12px_rgba(0,0,0,0.03)]">
         <div className="text-sm text-slate-600">
           Total : <b>{data.meta.total || 0}</b> • Page <b>{data.meta.current_page || 1}</b> / <b>{data.meta.last_page || 1}</b>

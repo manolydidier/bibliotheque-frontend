@@ -903,6 +903,49 @@ i18n
   }
 ,
 
+  "gridcard": {
+    "actions": {
+      "more": "More actions",
+      "read": "Read",
+      "enterPassword": "Enter password",
+      "addFavorite": "Add to favorites",
+      "removeFavorite": "Remove from favorites",
+      "disableColor": "Disable color",
+      "enableColor": "Enable color"
+    },
+    "menu": {
+      "title": "Actions",
+      "openNewTab": "Open in new tab",
+      "copyLink": "Copy link",
+      "share": "Share"
+    },
+    "visibility": {
+      "public": "Public",
+      "private": "Private",
+      "passwordProtected": "Password protected",
+      "unknown": "Unknown",
+      "label": "Visibility"
+    },
+    "badges": {
+      "favorite": "Favorite",
+      "read": "Read"
+    },
+    "date": {
+      "published": "Published",
+      "updated": "Updated",
+      "unknown": "Unknown date"
+    },
+    "stats": {
+      "views": "Views",
+      "comments": "Comments",
+      "shares": "Shares",
+      "reviews": "Reviews"
+    },
+    "unknownAuthor": "Unknown author",
+    "author": "Author"
+  }
+,
+
               "role_permissions_management": "Role Permissions Management",
             "manage_role_permissions_description": "Manage associations between roles and permissions",
             "search_roles_permissions": "Search roles and permissions...",
@@ -1939,6 +1982,49 @@ i18n
   }
 ,
 
+  "gridcard": {
+    "actions": {
+      "more": "Plus d’actions",
+      "read": "Lire",
+      "enterPassword": "Entrer le mot de passe",
+      "addFavorite": "Ajouter aux favoris",
+      "removeFavorite": "Retirer des favoris",
+      "disableColor": "Désactiver la couleur",
+      "enableColor": "Activer la couleur"
+    },
+    "menu": {
+      "title": "Actions",
+      "openNewTab": "Ouvrir dans un nouvel onglet",
+      "copyLink": "Copier le lien",
+      "share": "Partager"
+    },
+    "visibility": {
+      "public": "Public",
+      "private": "Privé",
+      "passwordProtected": "Protégé par mot de passe",
+      "unknown": "Inconnu",
+      "label": "Visibilité"
+    },
+    "badges": {
+      "favorite": "Favori",
+      "read": "Lu"
+    },
+    "date": {
+      "published": "Publié",
+      "updated": "Mis à jour",
+      "unknown": "Date inconnue"
+    },
+    "stats": {
+      "views": "Vues",
+      "comments": "Commentaires",
+      "shares": "Partages",
+      "reviews": "Avis"
+    },
+    "unknownAuthor": "Auteur inconnu",
+    "author": "Auteur"
+  }
+
+,
         "role_permissions_management": "Gestion des Permissions de Rôles",
         "manage_role_permissions_description": "Gérer les associations entre rôles et permissions",
         "search_roles_permissions": "Rechercher rôles et permissions...",
