@@ -1,37 +1,126 @@
+// src/pages/categories/categoryService.js
+import axios from "axios";
 import api from "../../../../../../services/api";
 
+/**
+ * Service centralisé pour les requêtes API liées aux catégories.
+ * Compatible avec ton backend Laravel (routes /categories/... et /cat/...).
+ */
+const categoryService = {
+  /* ==========================================================
+     🔹 CRUD CLASSIQUE
+  ========================================================== */
 
-export const categoryService = {
   // Récupérer toutes les catégories
-  getAllCategories: () => api.get('/categories'),
+  getAllCategories: async () => {
+    const response = await api.get("/categories");
+    console.log(response);
+    
+    return response;
+  },
 
   // Récupérer une catégorie spécifique
-  getCategory: (id) => api.get(`/categories/${id}`),
+  getCategory: async (id) => {
+    const response = await api.get(`/categories/${id}`);
+    return response;
+  },
 
-  // Créer une nouvelle catégorie
-  createCategory: (categoryData) => api.post('/categories', categoryData),
+  // Créer une catégorie
+  createCategory: async (data) => {
+    try {
+      const response = await api.post("/categories", data);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
 
   // Mettre à jour une catégorie
-  updateCategory: (id, categoryData) => api.put(`/categories/${id}`, categoryData),
+  updateCategory: async (id, data) => {
+    try {
+      const response = await api.put(`/categories/${id}`, data);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
 
-  // Supprimer une catégorie
-  deleteCategory: (id) => api.delete(`/categories/${id}`),
+  // Supprimer (soft delete → corbeille)
+  deleteCategory: async (id) => {
+    try {
+      const response = await api.delete(`/categories/${id}`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /* ==========================================================
+     🔹 GESTION DE LA CORBEILLE - CORRIGÉ
+  ========================================================== */
+
+  getTrashedCategories: async (perPage = 24, search = "", page = 1) => {
+    try {
+      const response = await api.get(`/cat/trashed`, {
+        params: { 
+          per_page: perPage, 
+          page: page,
+          q: search 
+        },
+      });
+      return response; // ← Retourne la réponse complète, pas seulement data
+    } catch (error) {
+      console.error("Erreur fetch corbeille :", error);
+      throw error;
+    }
+  },
+
+  restoreCategory: async (id) => {
+    try {
+      const response = await api.post(`/cat/${id}/restore`);
+      return response.data;
+    } catch (error) {
+      console.error("Erreur restauration :", error);
+      throw error;
+    }
+  },
+
+  forceDeleteCategory: async (id) => {
+    try {
+      const response = await api.delete(`/cat/${id}/force`);
+      return response.data;
+    } catch (error) {
+      console.error("Erreur suppression définitive :", error);
+      throw error;
+    }
+  },
 };
 
-export const fetchIndex2 = async ({ q = "", perPage = 5, page = 1 }) => {
+/* ==========================================================
+   🔹 Recherche + pagination avancée - CORRIGÉ
+========================================================== */
+
+export const fetchIndex2 = async (params = {}, signal = null) => {
   try {
-    const response = await api.get("/categories/categoriesadvance", {
+    const config = {
       params: {
-        q,           
-        per_page: perPage, 
-        page       
+        per_page: params.per_page || 12,
+        page: params.page || 1,
+        q: params.q || ""
       },
-    });
-    return response.data;
+      signal,
+    };
+    const response = await axios.get("/categories/categorieAdvance", config);
+    return response.data; // on reçoit { data: [...], meta: {...} }
+    console.log(response);
+    
   } catch (error) {
-    console.error("Erreur lors de la récupération des categories:", error);
+    console.error("Erreur fetchIndex2 :", error);
     throw error;
   }
 };
+
+
+
 
 export default categoryService;

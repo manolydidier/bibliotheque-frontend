@@ -4,12 +4,16 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from "react-router-dom";
 import {
   FaRegStar, FaStar, FaEye, FaUser,
-  FaHeart, FaRegHeart, FaTag, FaLockOpen, FaLock
+  FaHeart, FaRegHeart, FaTag, FaLockOpen, FaLock,
+  FaEllipsisV, FaExternalLinkAlt, FaCopy, FaLink
 } from "react-icons/fa";
 import SmartImage from "./SmartImage";
 import ShareButton from "../Visualiseur/share/ShareButton";
 import { cls } from "../shared/utils/format";
-import { isFav, toggleFav, isRead, markRead } from "../shared/store/markers";
+import { isFav as localIsFav, toggleFav as localToggleFav, isRead, markRead } from "../shared/store/markers";
+
+// Axios instance (adapte le path si besoin)
+import api from '../../../services/api';
 
 // ✅ Modal & pass memory
 import PasswordModal from "../components/PasswordModal";
@@ -119,20 +123,7 @@ const humanizeVisibility = (v, t) => {
   return v || t('gridcard.visibility.unknown');
 };
 
-/* =========================
-   Token helper (unifié)
-========================= */
-const getTokenGuard = () => {
-  try {
-    return (
-      sessionStorage.getItem("tokenGuard") ||
-      localStorage.getItem("tokenGuard") ||
-      null
-    );
-  } catch {
-    return null;
-  }
-};
+
 
 /* =========================
    Constantes UI
@@ -171,10 +162,19 @@ export default function GridCard({ item, routeBase, onOpen }) {
   const navigate = useNavigate();
   const to = useMemo(() => buildVisualiserPath(routeBase, item), [routeBase, item?.slug, item?.id]);
 
-  const [fav, setFav] = useState(() => isFav(item.id));
+  // local fallback (ancien store), mais on synchronise avec l'API ensuite
+  const [fav, setFav] = useState(() => localIsFav(item.id));
   const [read, setRead] = useState(() => isRead(item.id));
   const [isHovered, setIsHovered] = useState(false);
   const [liked, setLiked] = useState(false);
+
+  // counts
+  const [likesCount, setLikesCount] = useState(item.likes_count ?? 0);
+  const [favoritesCount, setFavoritesCount] = useState(item.favorites_count ?? 0);
+
+  // menu trois points
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
 
   // ✅ modal pwd réutilisable
   const [pwdOpen, setPwdOpen] = useState(false);
@@ -210,24 +210,24 @@ export default function GridCard({ item, routeBase, onOpen }) {
   }, [item.reading_time, item.word_count, item.content]);
 
   const imgUrl = useMemo(() => {
-  // on passe toutes les variantes par fixFeaturedPath + toAbsolute
-  if (item.featured_image_url) return toAbsolute(item.featured_image_url);
+    // on passe toutes les variantes par fixFeaturedPath + toAbsolute
+    if (item.featured_image_url) return toAbsolute(item.featured_image_url);
 
-  if (typeof item.featured_image === "string")
-    return toAbsolute(item.featured_image);
+    if (typeof item.featured_image === "string")
+      return toAbsolute(item.featured_image);
 
-  if (item.featured_image?.url)
-    return toAbsolute(item.featured_image.url);
+    if (item.featured_image?.url)
+      return toAbsolute(item.featured_image.url);
 
-  // 🆕 si l'API renvoie `path` plutôt que `url`
-  if (item.featured_image?.path)
-    return toAbsolute(item.featured_image.path);
+    // 🆕 si l'API renvoie `path` plutôt que `url`
+    if (item.featured_image?.path)
+      return toAbsolute(item.featured_image.path);
 
-  if (Array.isArray(item.media) && item.media[0]?.url)
-    return toAbsolute(item.media[0].url);
+    if (Array.isArray(item.media) && item.media[0]?.url)
+      return toAbsolute(item.media[0].url);
 
-  return null;
-}, [item.featured_image_url, item.featured_image, item.media]);
+    return null;
+  }, [item.featured_image_url, item.featured_image, item.media]);
 
 
   const formattedViewCount = useMemo(() => nf.format(Number(item.view_count || 0)), [nf, item.view_count]);
@@ -256,16 +256,108 @@ export default function GridCard({ item, routeBase, onOpen }) {
 
   const smallStatBox = "rounded-lg p-2 text-center";
 
-  const onToggleFav = useCallback((e) => {
-    e.stopPropagation();
-    try { toggleFav(item.id); } catch {}
-    setFav((f) => !f);
+  // ---------------------------
+  // API helper: toggle reaction
+  // ---------------------------
+  const apiToggleReaction = useCallback(async ({ type, action = 'toggle' }) => {
+    // reactable_type short name 'Article'
+    try {
+      const resp = await api.post('/reactions/toggle', {
+        reactable_type: 'Article',
+        reactable_id: item.id,
+        type,
+        action
+      });
+      return resp.data;
+    } catch (err) {
+      throw err;
+    }
   }, [item.id]);
 
-  const onToggleLike = useCallback((e) => {
+  // fetch initial counts + user reactions for this item (on mount)
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        // counts
+        const cResp = await api.get('/reactions/counts', { params: { reactable_type: 'Article', 'ids[]': [item.id] }});
+        if (!mounted) return;
+        const map = cResp.data || {};
+        if (map[item.id]) {
+          setLikesCount(map[item.id].likes ?? 0);
+          setFavoritesCount(map[item.id].favorites ?? 0);
+        } else {
+          // fallback to item props if provided
+          setLikesCount(prev => prev ?? (item.likes_count ?? 0));
+          setFavoritesCount(prev => prev ?? (item.favorites_count ?? 0));
+        }
+      } catch (_) {
+        // ignore network error; keep local values
+      }
+
+      try {
+        const meResp = await api.get('/reactions/me', { params: { reactable_type: 'Article', 'ids[]': [item.id] }});
+        if (!mounted) return;
+        const userMap = meResp.data || {};
+        const s = userMap[item.id] || {};
+        setLiked(Boolean(s.liked));
+        setFav(Boolean(s.favorited));
+      } catch (_) {
+        // fallback: keep local store (isFav) values
+        setLiked(false);
+      }
+    })();
+
+    return () => { mounted = false; };
+  }, [item.id, item.likes_count, item.favorites_count]);
+
+  // ---------------------------
+  // Toggle favorite (star)
+  // ---------------------------
+  const onToggleFav = useCallback(async (e) => {
     e.stopPropagation();
-    setLiked((l) => !l);
-  }, []);
+    // optimistic
+    const prev = fav;
+    const prevCount = favoritesCount;
+    setFav(v => !v);
+    setFavoritesCount(c => (fav ? Math.max(0, c - 1) : c + 1));
+
+    try {
+      const data = await apiToggleReaction({ type: 'favorite', action: 'toggle' });
+      // sync from server
+      setFav(Boolean(data.user?.favorited));
+      if (data.counts?.favorites != null) setFavoritesCount(data.counts.favorites);
+      // update local store as fallback (optional)
+      try { localToggleFav(item.id); } catch {}
+    } catch (err) {
+      // rollback
+      setFav(prev);
+      setFavoritesCount(prevCount);
+      // optional: notify user if 401 -> redirect to login
+      // console.error(err);
+    }
+  }, [fav, favoritesCount, item.id, apiToggleReaction]);
+
+  // ---------------------------
+  // Toggle like (heart)
+  // ---------------------------
+  const onToggleLike = useCallback(async (e) => {
+    e.stopPropagation();
+    const prev = liked;
+    const prevCount = likesCount;
+    setLiked(l => !l);
+    setLikesCount(c => (liked ? Math.max(0, c - 1) : c + 1));
+
+    try {
+      const data = await apiToggleReaction({ type: 'like', action: 'toggle' });
+      setLiked(Boolean(data.user?.liked));
+      if (data.counts?.likes != null) setLikesCount(data.counts.likes);
+    } catch (err) {
+      // rollback
+      setLiked(prev);
+      setLikesCount(prevCount);
+    }
+  }, [liked, likesCount, apiToggleReaction]);
 
   const onOpenCard = useCallback(() => {
     try { markRead(item.id); } catch {}
@@ -326,6 +418,55 @@ export default function GridCard({ item, routeBase, onOpen }) {
     setPwdOpen(true);
   }, [item.slug, item.id]);
 
+  // ---------------------------
+  // Menu trois points handlers
+  // ---------------------------
+  useEffect(() => {
+    function onDocClick(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
+  }, []);
+
+  const onOpenInNewTab = useCallback((e) => {
+    e.stopPropagation();
+    window.open(shareUrl, '_blank', 'noopener');
+    setMenuOpen(false);
+  }, [shareUrl]);
+
+  const onCopyLink = useCallback(async (e) => {
+    e.stopPropagation();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        // fallback
+        const ta = document.createElement('textarea');
+        ta.value = shareUrl;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      // subtle feedback: small visual change (you can replace by toast)
+      setMenuOpen(false);
+    } catch (err) {
+      // ignore
+      setMenuOpen(false);
+    }
+  }, [shareUrl]);
+
+  const onShareOpen = useCallback((e) => {
+    e.stopPropagation();
+    setMenuOpen(false);
+    // open the ShareButton programmatically? we just open new window to shareUrl
+    // user has also the explicit ShareButton on top right; fallback:
+    window.open(`mailto:?subject=${encodeURIComponent(item.title || '')}&body=${encodeURIComponent(shareUrl)}`, '_self');
+  }, [shareUrl, item.title]);
+
   return (
     <>
       <article
@@ -351,7 +492,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
                 src={imgUrl}
                 alt={item.title}
                 ratio="100%"
-                modern="off" 
+                modern="off"
                 className="transition-all duration-700 group-hover:scale-110 group-hover:brightness-110 group-hover:saturate-110"
               />
 
@@ -406,8 +547,8 @@ export default function GridCard({ item, routeBase, onOpen }) {
             </div>
           )}
 
-          {/* Bouton de partage ABSOLU */}
-          <div className="absolute top-4 right-4 z-20" onClick={(e) => e.stopPropagation()}>
+          {/* Buttons top right: share + menu */}
+          <div className="absolute top-4 right-4 z-20 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
             <ShareButton
               variant="icon"
               className="p-2 rounded-2xl bg-white/95 text-slate-700 shadow-xl hover:scale-110 transition-transform"
@@ -415,11 +556,42 @@ export default function GridCard({ item, routeBase, onOpen }) {
               excerpt={item.excerpt}
               url={shareUrl}
               articleId={item.id}
-              channels={["email", "emailAuto", "facebook", "whatsapp", "whatsappNumber"]}
+              channels={["email", "facebook", "whatsapp", "whatsappNumber"]}
               emailEndpoint="/share/email"
               defaultWhatsNumber="33612345678"
-              global={false} 
+              global={false}
             />
+
+            <div className="relative" ref={menuRef}>
+              <button
+                aria-haspopup="true"
+                aria-expanded={menuOpen}
+                onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v); }}
+                className="p-2 rounded-2xl bg-white/95 text-slate-700 shadow-xl hover:scale-110 transition-transform"
+                title={t('gridcard.actions.more')}
+              >
+                <FaEllipsisV size={16} />
+              </button>
+
+              {menuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 mt-2 w-44 bg-white rounded-lg shadow-lg border border-slate-100 z-30 py-1"
+                >
+                  <button onClick={onOpenInNewTab} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2">
+                    <FaExternalLinkAlt /> <span className="text-sm">{t('gridcard.menu.openNewTab') || 'Ouvrir dans un nouvel onglet'}</span>
+                  </button>
+
+                  <button onClick={onCopyLink} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2">
+                    <FaCopy /> <span className="text-sm">{t('gridcard.menu.copyLink') || 'Copier le lien'}</span>
+                  </button>
+
+                  <button onClick={onShareOpen} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2">
+                    <FaLink /> <span className="text-sm">{t('gridcard.menu.share') || 'Partager'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Coins : favoris / like */}
@@ -430,7 +602,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
               onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onToggleFav(e)}
               onClick={onToggleFav}
               className={cls(
-                "p-3 rounded-2xl transition-all duration-500 shadow-xl backdrop-blur-md transform hover:scale-125 hover:-rotate-12",
+                "p-3 rounded-2xl transition-all duration-500 shadow-xl backdrop-blur-md transform hover:scale-110 hover:-rotate-6 flex items-center gap-2",
                 fav
                   ? "text-amber-500 bg-amber-50/90 hover:bg-amber-100/90 shadow-amber-200/50 scale-110"
                   : "text-slate-500 bg-white/90 hover:bg-white hover:text-amber-500 shadow-slate-200/50"
@@ -438,16 +610,17 @@ export default function GridCard({ item, routeBase, onOpen }) {
               title={fav ? t('gridcard.actions.removeFavorite') : t('gridcard.actions.addFavorite')}
               data-testid="btn-fav"
             >
-              {fav ? <FaStar size={20} /> : <FaRegStar size={20} />}
+              {fav ? <FaStar size={18} /> : <FaRegStar size={18} />}
+              <span className="text-xs font-semibold select-none">{favoritesCount ?? 0}</span>
             </button>
 
-            <button
+            {/* <button
               aria-label={liked ? t('gridcard.actions.removeLike') : t('gridcard.actions.addLike')}
               aria-pressed={liked}
               onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onToggleLike(e)}
               onClick={onToggleLike}
               className={cls(
-                "p-3 rounded-2xl transition-all duration-500 shadow-xl backdrop-blur-md transform hover:scale-125 hover:rotate-12",
+                "p-3 rounded-2xl transition-all duration-500 shadow-xl backdrop-blur-md transform hover:scale-110 hover:rotate-6 flex items-center gap-2",
                 liked
                   ? "text-pink-500 bg-pink-50/90 hover:bg-pink-100/90 shadow-pink-200/50 scale-110"
                   : "text-slate-500 bg-white/90 hover:bg-white hover:text-pink-500 shadow-slate-200/50"
@@ -455,8 +628,9 @@ export default function GridCard({ item, routeBase, onOpen }) {
               title={liked ? t('gridcard.actions.removeLike') : t('gridcard.actions.addLike')}
               data-testid="btn-like"
             >
-              {liked ? <FaHeart size={20} /> : <FaRegHeart size={20} />}
-            </button>
+              {liked ? <FaHeart size={18} /> : <FaRegHeart size={18} />}
+              <span className="text-xs font-semibold select-none">{likesCount ?? 0}</span>
+            </button> */}
           </div>
         </div>
 
@@ -479,12 +653,12 @@ export default function GridCard({ item, routeBase, onOpen }) {
                       <span className="text-amber-700 text-xs font-semibold">{t('gridcard.badges.favorite')}</span>
                     </div>
                   )}
-                  {liked && (
+                  {/* {liked && (
                     <div className="flex items-center gap-2 bg-pink-100/80 rounded-full px-3 py-1">
                       <FaHeart className="text-pink-500" size={12} />
                       <span className="text-pink-700 text-xs font-semibold">{t('gridcard.badges.liked')}</span>
                     </div>
-                  )}
+                  )} */}
                 </div>
               </div>
 

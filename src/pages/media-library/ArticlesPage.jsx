@@ -87,6 +87,8 @@ function ArticlesPage() {
       try {
         setLoading(true);
         const res = await axiosInstance.get("/articles");
+        console.log(res);
+        
         const payload = res?.data || {};
         const list = payload.data || payload || [];
         if (!Array.isArray(list)) throw new Error("Format de réponse invalide");

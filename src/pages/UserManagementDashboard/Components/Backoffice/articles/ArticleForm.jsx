@@ -1144,7 +1144,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
       <main className="mx-auto max-w-screen-2xl px-6 lg:px-8 py-8 relative z-10">
         {/* CONTENT */}
         {activeTab === 'content' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-auto mb-96">
             <section className={`${card} p-8 space-y-6`}>
               <div className="space-y-3">
                 <label className={sectionTitle}>
@@ -1397,7 +1397,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
 
         {/* SETTINGS */}
         {activeTab === 'settings' && (
-          <div className="grid grid-cols-1 gap-6">
+          <div className="grid grid-cols-1 gap-6 h-screen mb-96 overflow-auto ">
             <section className={`${card} p-8`}>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-3">
@@ -1537,7 +1537,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
 
         {/* AUTHOR — liste avatars + nom/bio */}
         {activeTab === 'author' && (
-          <div className="grid grid-cols-1 gap-6">
+          <div className="grid grid-cols-1 gap-6  mb-96 overflow-auto ">
             <section className={`${card} p-8`}>
               <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-3">
                 <span className="p-2 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-500 text-white shadow-lg">
@@ -1708,7 +1708,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
 
         {/* TAXONOMY */}
         {activeTab === 'taxonomy' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6  mb-96 overflow-auto ">
             <section className={`${card} p-8 space-y-4`}>
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-3">
                 <span className="p-2 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-500 text-white shadow-lg">
@@ -1789,7 +1789,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
 
         {/* ANALYTICS */}
         {activeTab === 'analytics' && (
-          <div className="grid grid-cols-1 gap-6">
+          <div className="grid grid-cols-1 gap-6  mb-96 overflow-auto ">
             <section className={`${card} p-8`}>
               <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-3">
                 <span className="p-2 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500 text-white shadow-lg">
@@ -1843,7 +1843,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
 
         {/* MANAGEMENT */}
         {activeTab === 'management' && (
-          <div className="grid grid-cols-1 gap-6">
+          <div className="grid grid-cols-1 gap-6  mb-96 overflow-auto ">
             <section className={`${card} p-8`}>
               <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-3">
                 <span className="p-2 rounded-2xl bg-gradient-to-br from-red-500 to-pink-500 text-white shadow-lg">

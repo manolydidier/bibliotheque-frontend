@@ -1,10 +1,10 @@
-// ------------------------------
-// File: src/media-library/ArticleLibrary.jsx
+// src/media-library/ArticleLibrary.jsx
 // Container de la lib articles (grid/list + filtres + pagination/infinite)
 // - Sécurise "filters" (jamais undefined)
 // - Facettes optionnelles (authors/categories/tags) pour alimenter FiltersPanel
-// ------------------------------
-import { useEffect, useMemo, useRef, useState } from "react";
+// - Fix: évite boucle "Maximum update depth" (stable applyFilters)
+
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import FiltersPanel from "./parts/FiltersPanel";
 import GridCard from "./parts/GridCard";
 import ListTable from "./parts/ListTable";
@@ -45,9 +45,9 @@ const DEFAULT_FILTERS = {
 const toSafeFilters = (maybe) => {
   const f = maybe && typeof maybe === "object" ? maybe : {};
   return {
-    categories: Array.isArray(f.categories) ? f.categories : [],
-    tags: Array.isArray(f.tags) ? f.tags : [],
-    authors: Array.isArray(f.authors) ? f.authors : [],
+    categories: Array.isArray(f.categories) ? f.categories.map(String) : [],
+    tags: Array.isArray(f.tags) ? f.tags.map(String) : [],
+    authors: Array.isArray(f.authors) ? f.authors.map(String) : [],
     featuredOnly: !!f.featuredOnly,
     stickyOnly: !!f.stickyOnly,
     unreadOnly: !!f.unreadOnly,
@@ -57,6 +57,57 @@ const toSafeFilters = (maybe) => {
     ratingMax: Number.isFinite(f.ratingMax) ? f.ratingMax : 5,
   };
 };
+
+// Shallow equality for filters (strings/arrays/booleans/numbers)
+function filtersShallowEqual(a = {}, b = {}) {
+  const arrEqual = (x = [], y = []) => {
+    if (x.length !== y.length) return false;
+    for (let i = 0; i < x.length; i++) if (String(x[i]) !== String(y[i])) return false;
+    return true;
+  };
+  return (
+    arrEqual(a.categories, b.categories) &&
+    arrEqual(a.tags, b.tags) &&
+    arrEqual(a.authors, b.authors) &&
+    Boolean(a.featuredOnly) === Boolean(b.featuredOnly) &&
+    Boolean(a.stickyOnly) === Boolean(b.stickyOnly) &&
+    Boolean(a.unreadOnly) === Boolean(b.unreadOnly) &&
+    String(a.dateFrom || "") === String(b.dateFrom || "") &&
+    String(a.dateTo || "") === String(b.dateTo || "") &&
+    Number(a.ratingMin || 0) === Number(b.ratingMin || 0) &&
+    Number(a.ratingMax || 5) === Number(b.ratingMax || 5)
+  );
+}
+
+// Helper: get author id/name string(s)
+function articleAuthorCandidates(a = {}) {
+  const id = a?.author?.id ?? a?.author_id ?? a?.authorId ?? null;
+  const name =
+    a?.author?.name ||
+    [a?.author?.first_name, a?.author?.last_name].filter(Boolean).join(" ").trim() ||
+    a?.author_name ||
+    null;
+  const res = [];
+  if (id != null) res.push(String(id));
+  if (name) res.push(String(name));
+  return res;
+}
+
+// Helper: category candidates (id and name fallback)
+function articleCategoryCandidates(a = {}) {
+  const candidates = new Set();
+  if (Array.isArray(a?.categories)) {
+    a.categories.forEach((c) => {
+      if (!c) return;
+      if (c.id != null) candidates.add(String(c.id));
+      if (c.name) candidates.add(String(c.name));
+      if (c.slug) candidates.add(String(c.slug));
+    });
+  }
+  // fallback from title
+  candidates.add(String(getCategoryFromTitle(a?.title || "") || ""));
+  return Array.from(candidates);
+}
 
 export default function ArticleLibrary({
   articles = [],
@@ -76,7 +127,8 @@ export default function ArticleLibrary({
   const debouncedSearch = useDebouncedValue(search);
 
   // IMPORTANT : filters ne peut jamais être undefined
-  const [filters, setFilters] = useState(toSafeFilters(persisted.filters || DEFAULT_FILTERS));
+  // rename internal setter to avoid shadowing with prop name
+  const [filters, setFiltersState] = useState(toSafeFilters(persisted.filters || DEFAULT_FILTERS));
 
   const [sort, setSort]       = useState([{ key: "published_at", dir: "desc" }]);
   const [loadMode, setLoadMode] = useState(persisted.loadMode || defaultLoadMode);
@@ -94,44 +146,65 @@ export default function ArticleLibrary({
   const authorsOptions = useMemo(() => {
     if (Array.isArray(facetAuthors)) {
       // [{id,name,count}]
-      return facetAuthors.map(a => ({ id: a.id, name: a.name, count: a.count }));
+      return facetAuthors.map(a => ({ id: String(a.id), name: a.name, count: a.count }));
     }
-    // fallback client: noms strings uniques
-    const set = new Set();
+    // fallback client: noms strings uniques (keep id as string)
+    const set = new Map();
     (articles || []).forEach((a) => {
+      const id = a?.author?.id ?? a?.author_id ?? null;
       const fullName =
         a?.author?.name ||
         [a?.author?.first_name, a?.author?.last_name].filter(Boolean).join(" ") ||
         a?.author_name ||
-        (a?.author_id ? `Auteur #${a.author_id}` : null);
-      if (fullName) set.add(fullName);
+        (id ? `Auteur #${id}` : null);
+      const key = id != null ? String(id) : fullName;
+      if (key && !set.has(String(key))) set.set(String(key), { id: String(key), name: fullName || String(key) });
     });
-    return Array.from(set).sort();
+    return Array.from(set.values()).sort((x,y) => (x.name || "").localeCompare(y.name || ""));
   }, [articles, facetAuthors]);
 
   const categoriesOptions = useMemo(() => {
     if (Array.isArray(facetCategories)) {
-      return facetCategories.map(c => ({ id: c.id, name: c.name, count: c.count }));
+      return facetCategories.map(c => ({ id: String(c.id), name: c.name, count: c.count }));
     }
-    const set = new Set();
+    const set = new Map();
     (articles || []).forEach((a) => {
       if (Array.isArray(a?.categories) && a.categories.length) {
-        a.categories.forEach((c) => c?.name && set.add(c.name));
+        a.categories.forEach((c) => {
+          if (c?.id != null) set.set(String(c.id), { id: String(c.id), name: c.name });
+          else if (c?.name) set.set(String(c.name), { id: String(c.name), name: c.name });
+        });
       } else {
-        set.add(getCategoryFromTitle(a?.title));
+        const fallback = getCategoryFromTitle(a?.title);
+        set.set(String(fallback), { id: String(fallback), name: fallback });
       }
     });
-    return Array.from(set).sort();
+    return Array.from(set.values()).sort((x,y) => (x.name || "").localeCompare(y.name || ""));
   }, [articles, facetCategories]);
 
   const tagsOptions = useMemo(() => {
     if (Array.isArray(facetTags)) {
-      return facetTags.map(t => ({ id: t.id, name: t.name, count: t.count }));
+      return facetTags.map(t => ({ id: String(t.id), name: t.name, count: t.count }));
     }
-    const set = new Set();
-    (articles || []).forEach((a) => (a?.tags || []).forEach((t) => t?.name && set.add(t.name)));
-    return Array.from(set).sort();
+    const set = new Map();
+    (articles || []).forEach((a) => {
+      (a?.tags || []).forEach((t) => {
+        if (t?.id != null) set.set(String(t.id), { id: String(t.id), name: t.name });
+        else if (t?.name) set.set(String(t.name), { id: String(t.name), name: t.name });
+      });
+    });
+    return Array.from(set.values()).sort((x,y) => (x.name || "").localeCompare(y.name || ""));
   }, [articles, facetTags]);
+
+  // === stable wrapper to apply filters coming from FiltersPanel ===
+  // This avoids passing a newly created function on every render and avoids recursion
+  const applyFilters = useCallback((incoming) => {
+    const safe = toSafeFilters(incoming);
+    setFiltersState((prev) => {
+      if (filtersShallowEqual(prev, safe)) return prev;
+      return safe;
+    });
+  }, []);
 
   // Export CSV
   useEffect(() => {
@@ -162,7 +235,7 @@ export default function ArticleLibrary({
     return () => window.removeEventListener("articlelib:export", handler);
   }, [rows]);
 
-  // Chargement (serveur si fetchArticles)
+  // --- Loading (serveur si fetchArticles) ---
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -170,12 +243,12 @@ export default function ArticleLibrary({
       try {
         const safe = toSafeFilters(filters); // ← garanti propre
         if (fetchArticles) {
-          const { data, total, facets } = await fetchArticles({
+          const { data, total: tot, facets } = await fetchArticles({
             page, perPage, search: debouncedSearch, filters: safe, sort,
           });
           if (cancelled) return;
           setRows(data ?? []);
-          setTotal(total ?? 0);
+          setTotal(tot ?? 0);
           if (facets) {
             setFacetAuthors(facets.authors || null);
             setFacetCategories(facets.categories || null);
@@ -203,66 +276,59 @@ export default function ArticleLibrary({
             const val = String(t?.v ?? "").toLowerCase();
             if (key === "author") {
               filtered = filtered.filter((r) => {
-                const name =
-                  r?.author?.name ||
-                  [r?.author?.first_name, r?.author?.last_name].filter(Boolean).join(" ") ||
-                  r?.author_name ||
-                  (r?.author_id ? `Auteur #${r.author_id}` : "");
-                return String(name).toLowerCase().includes(val);
+                const candidates = articleAuthorCandidates(r);
+                return candidates.some(c => String(c).toLowerCase().includes(val));
               });
-            }
-            if (key === "author_id") {
-              filtered = filtered.filter((r) => String(r?.author_id ?? "").toLowerCase() === val);
-            }
-            if (key === "category") {
+            } else if (key === "author_id") {
               filtered = filtered.filter((r) => {
-                const names = (r?.categories || []).map((c) => (c?.name || "").toLowerCase());
+                const candidates = articleAuthorCandidates(r);
+                return candidates.some(c => String(c).toLowerCase() === val);
+              });
+            } else if (key === "category") {
+              filtered = filtered.filter((r) => {
+                const names = articleCategoryCandidates(r).map(x => String(x).toLowerCase());
                 return names.includes(val) || getCategoryFromTitle(r?.title).toLowerCase() === val;
               });
-            }
-            if (key === "tag") {
+            } else if (key === "tag") {
               filtered = filtered.filter((r) =>
-                (r?.tags || []).some((tg) => String(tg?.name || "").toLowerCase() === val)
+                (r?.tags || []).some((tg) => String(tg?.name || tg?.id || "").toLowerCase() === val)
               );
-            }
-            if (key === "before") {
+            } else if (key === "before") {
               filtered = filtered.filter((r) => new Date(r?.published_at) <= new Date(t.v));
-            }
-            if (key === "after") {
+            } else if (key === "after") {
               filtered = filtered.filter((r) => new Date(r?.published_at) >= new Date(t.v));
-            }
-            if (key === "rating") {
+            } else if (key === "rating") {
               const op = t?.op === ">" ? ">" : "<";
               filtered = filtered.filter((r) => {
                 const rating = parseFloat(r?.rating_average) || 0;
                 return op === ">" ? rating > parseFloat(t.v) : rating < parseFloat(t.v);
               });
-            }
-            if (key === "featured") filtered = filtered.filter((r) => !!r?.is_featured);
-            if (key === "sticky")   filtered = filtered.filter((r) => !!r?.is_sticky);
+            } else if (key === "featured") filtered = filtered.filter((r) => !!r?.is_featured);
+            else if (key === "sticky")   filtered = filtered.filter((r) => !!r?.is_sticky);
           });
 
           // Filtres UI (safe)
+          const safe = toSafeFilters(filters);
+
           if (safe.categories?.length) {
             filtered = filtered.filter((r) => {
-              const names = (r?.categories || []).map((c) => c?.name);
-              const fallback = getCategoryFromTitle(r?.title);
-              return names.some((n) => safe.categories.includes(n)) || safe.categories.includes(fallback);
+              const namesOrIds = articleCategoryCandidates(r).map(x => String(x));
+              // match if any safe category equals any candidate (id or name)
+              return safe.categories.some(sc => namesOrIds.includes(String(sc)));
             });
           }
           if (safe.tags?.length) {
             filtered = filtered.filter((r) =>
-              (r?.tags || []).some((tg) => safe.tags.includes(tg?.name))
+              (r?.tags || []).some((tg) => {
+                const candidates = [tg?.id, tg?.name].filter(Boolean).map(String);
+                return safe.tags.some(st => candidates.includes(String(st)));
+              })
             );
           }
           if (safe.authors?.length) {
             filtered = filtered.filter((r) => {
-              const name =
-                r?.author?.name ||
-                [r?.author?.first_name, r?.author?.last_name].filter(Boolean).join(" ") ||
-                r?.author_name ||
-                (r?.author_id ? `Auteur #${r.author_id}` : "");
-              return safe.authors.includes(name);
+              const candidates = articleAuthorCandidates(r);
+              return safe.authors.some(sa => candidates.includes(String(sa)));
             });
           }
           if (safe.featuredOnly) filtered = filtered.filter((r) => !!r?.is_featured);
@@ -278,7 +344,8 @@ export default function ArticleLibrary({
               for (const { key, dir } of sort) {
                 let va = a?.[key], vb = b?.[key];
                 if (key === "author") {
-                  va = a?.author_id; vb = b?.author_id;
+                  va = a?.author_id ?? a?.author?.id;
+                  vb = b?.author_id ?? b?.author?.id;
                 }
                 if (key === "category") {
                   va = getCategoryFromTitle(a?.title);
@@ -302,11 +369,11 @@ export default function ArticleLibrary({
             });
           }
 
-          const total = filtered.length;
+          const tot = filtered.length;
           const start = (page - 1) * perPage;
           const data  = filtered.slice(start, start + perPage);
           setRows(data);
-          setTotal(total);
+          setTotal(tot);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -314,14 +381,19 @@ export default function ArticleLibrary({
     }
     load();
     return () => { cancelled = true; };
+    // dependencies intentionally include filters (object) - but we control updates via applyFilters + shallow equality
   }, [page, perPage, debouncedSearch, filters, sort, articles, fetchArticles]);
 
-  // Persist prefs
+  // Persist prefs (view, perPage, filters, loadMode)
   useEffect(() => {
-    localStorage.setItem(PREF_KEY, JSON.stringify({ view, perPage, filters: toSafeFilters(filters), loadMode }));
+    try {
+      localStorage.setItem(PREF_KEY, JSON.stringify({ view, perPage, filters: toSafeFilters(filters), loadMode }));
+    } catch (e) {
+      // ignore localStorage errors
+    }
   }, [view, perPage, filters, loadMode]);
 
-  // Reset page on criteria change
+  // Reset page on criteria change (debouncedSearch, filters, perPage)
   useEffect(() => setPage(1), [debouncedSearch, filters, perPage]);
 
   // Infinite scroll
@@ -343,7 +415,7 @@ export default function ArticleLibrary({
       entries.forEach((e) => {
         if (e.isIntersecting && !loading) {
           const maxPages = Math.ceil(total / perPage);
-          if (page < maxPages) setPage(page + 1);
+          if (page < maxPages) setPage((p) => p + 1);
         }
       });
     }, { threshold: 1 });
@@ -359,7 +431,7 @@ export default function ArticleLibrary({
         search={search}
         setSearch={setSearch}
         filters={filters}
-        setFilters={(f) => setFilters(toSafeFilters(f))}
+        setFilters={applyFilters}             // <-- stable, non-recursive
         view={view}
         setView={setView}
         perPage={perPage}
@@ -397,7 +469,9 @@ export default function ArticleLibrary({
           <button
             onClick={() => {
               setSearch("");
-              setFilters(DEFAULT_FILTERS);
+              // reset to default structure (not the same object instance to trigger controlled updates)
+              const empty = toSafeFilters(DEFAULT_FILTERS);
+              setFiltersState(empty);
             }}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
