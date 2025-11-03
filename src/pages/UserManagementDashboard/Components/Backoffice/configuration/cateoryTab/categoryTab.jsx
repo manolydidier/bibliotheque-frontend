@@ -1027,13 +1027,15 @@ export default function CategoryIndex() {
 
       {/* Dock DnD */}
       {!showTrash && (
-        <div className="fixed right-10 bottom-10 flex flex-col gap-3 z-40">
+        <div className="fixed right-10 bottom-5  z-40 px-4 py-2 rounded-xl inline-flex items-center gap-2 transition">
           <div 
             onDragOver={(e) => e.preventDefault()} 
             onDragEnter={() => setOverSoft(true)} 
             onDragLeave={() => setOverSoft(false)}
             onDrop={onDropSoft}
             className={`dock-btn ${overSoft ? "active-soft" : ""}`}
+             onClick={() => setShowTrash(!showTrash)}
+         
           >
             🗑 Corbeille
           </div>

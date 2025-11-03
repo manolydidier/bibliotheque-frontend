@@ -3,6 +3,7 @@
 // + Toggle global: désactiver/activer la couleur de toutes les cards
 // + Fetch direct depuis API Laravel pour catégories & tags (categorieAdvance/tagsadvance -> fallback index)
 // + Mobile bottom-sheet affiné (header/footer collants, swipe-to-close, accordéons, chips 2 colonnes, palette icon-only)
+// + FIX Firefox/iOS: min-h-0, h-[85vh], unmount complet quand fermé (pas de flou résiduel), pas de wrapper autour du modal
 
 import { useEffect, useState, useCallback, useMemo, useRef, useLayoutEffect } from "react";
 import { useTranslation } from 'react-i18next';
@@ -254,7 +255,7 @@ function useAutoHeight(isOpen, dependencies = []) {
 }
 
 // -------------------------------------------
-/* Fetch direct API - catégories & tags */
+// Fetch direct API - catégories & tags
 // -------------------------------------------
 const extractArray = (src) => {
   if (Array.isArray(src)) return src;
@@ -283,7 +284,6 @@ const normalizeOptionsList = (input, kind) => {
     .filter(Boolean);
 };
 
-// mini-cache mémoire (clé = url + params)
 const __cache = new Map();
 const mkKey = (url, params) => `${url}?${new URLSearchParams(params || {}).toString()}`;
 
@@ -319,7 +319,7 @@ async function fetchTagsOptions(params = {}) {
 }
 
 // -------------------------------------------
-// UI atoms + Badge
+// UI atoms
 // -------------------------------------------
 const Chip = ({ active, onClick, children, index = 0, disabled = false }) => (
   <button
@@ -430,7 +430,7 @@ export default function FiltersPanel({
     t('filters.searchHints.tip'),
   ], [t]);
 
-  // ----------------- FETCH options direct si props vides -----------------
+  // FETCH options direct si props vides
   const [catLoading, setCatLoading] = useState(false);
   const [tagLoading, setTagLoading] = useState(false);
   const [catError, setCatError] = useState(null);
@@ -438,7 +438,6 @@ export default function FiltersPanel({
   const [dynamicCategories, setDynamicCategories] = useState([]);
   const [dynamicTags, setDynamicTags] = useState([]);
 
-  // (optionnel) recherche côté serveur dans les listes d'options (desktop)
   const [catQuery, setCatQuery] = useState("");
   const [tagQuery, setTagQuery] = useState("");
 
@@ -446,7 +445,7 @@ export default function FiltersPanel({
     let aborted = false;
 
     async function loadCats(q) {
-      if (categoriesOptions && categoriesOptions.length) return; // props déjà fournies
+      if (categoriesOptions && categoriesOptions.length) return;
       setCatLoading(true); setCatError(null);
       try {
         const items = await fetchCategoriesOptions(q ? { q } : undefined);
@@ -471,11 +470,9 @@ export default function FiltersPanel({
       }
     }
 
-    // premier chargement
     loadCats();
     loadTags();
 
-    // recherche (debounce) desktop
     const catDeb = setTimeout(() => { if (!categoriesOptions?.length) loadCats(catQuery); }, 300);
     const tagDeb = setTimeout(() => { if (!tagsOptions?.length) loadTags(tagQuery); }, 300);
 
@@ -483,7 +480,7 @@ export default function FiltersPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catQuery, tagQuery, categoriesOptions?.length, tagsOptions?.length]);
 
-  // safe lists (priorité aux props si présentes)
+  // safe lists
   const safeAuthors    = useMemo(() => normalizeOptionsList(authorsOptions, "authors"), [authorsOptions]);
   const safeCategories = useMemo(() => {
     const src = (categoriesOptions && categoriesOptions.length) ? categoriesOptions : dynamicCategories;
@@ -494,12 +491,9 @@ export default function FiltersPanel({
     return normalizeOptionsList(src, "tags");
   }, [tagsOptions, dynamicTags]);
 
-  // ----------------- Filters & UI state -----------------
+  // Filters & UI state
   const normalizeFilters = useMemo(() => {
-    const normalizeArrayToStringIds = (v) => {
-      if (!Array.isArray(v)) return [];
-      return v.map(x => x == null ? "" : String(x)).filter(Boolean);
-    };
+    const normalizeArrayToStringIds = (v) => Array.isArray(v) ? v.map(x => x == null ? "" : String(x)).filter(Boolean) : [];
     const normalizeBool  = (v) => !!v;
     const normalizeStr   = (v) => (typeof v === "string" ? v : "");
     const normalizeNum   = (v, min, max) => {
@@ -520,7 +514,6 @@ export default function FiltersPanel({
     });
   }, []);
 
-  // Local state
   const [localFilters, setLocalFilters] = useState(() => normalizeFilters(rawFilters));
   const [searchQuery, setSearchQuery]   = useState(String(search || ""));
   const [isExpanded, setIsExpanded]     = useState(false);
@@ -532,10 +525,21 @@ export default function FiltersPanel({
   const [showSearchHistory, setShowSearchHistory] = useState(false);
   const [isHistoryPinned, setIsHistoryPinned] = useState(false);
 
-  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 640px)").matches);
+  // ✅ Tablet utilise le modal mobile aussi
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 1024px)").matches);
   const [showMobileModal, setShowMobileModal] = useState(false);
+  const [prefersReduced, setPrefersReduced] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setPrefersReduced(!!mq.matches);
+    update();
+    mq.addEventListener ? mq.addEventListener("change", update) : mq.addListener(update);
+    return () => mq.removeEventListener ? mq.removeEventListener("change", update) : mq.removeListener(update);
+}, []);
 
-  // 🎨 Global card color toggle (stocké et broadcast aux GridCard)
+
+  // 🎨 Global card color toggle
   const [cardColorEnabled, setCardColorEnabled] = useState(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.CARD_COLOR_ENABLED);
@@ -560,26 +564,34 @@ export default function FiltersPanel({
 
   // Responsive listener
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 640px)");
+    const mq = window.matchMedia("(max-width: 1024px)");
     const handler = (e) => setIsMobile(e.matches);
     mq.addEventListener ? mq.addEventListener("change", handler) : mq.addListener(handler);
     return () => mq.removeEventListener ? mq.removeEventListener("change", handler) : mq.removeListener(handler);
   }, []);
 
   // Empêche le scroll du body quand le modal mobile est ouvert
-  useEffect(() => {
-    if (!showMobileModal) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
-  }, [showMobileModal]);
+useEffect(() => {
+  if (!showMobileModal) return;
+  const prevBodyOverflow = document.body.style.overflow;
+  const prevDocOverflow  = document.documentElement.style.overflow;
+
+  document.body.style.overflow = "hidden";
+  document.documentElement.style.overflow = "";
+
+  return () => {
+    document.body.style.overflow = prevBodyOverflow;
+    document.documentElement.style.overflow = prevDocOverflow;
+    // petit nudge viewport iOS après fermeture d’un input dans un modal
+    try { window.scrollTo(window.scrollX, window.scrollY); } catch {}
+  };
+}, [showMobileModal]);
+
 
   // Sync rawFilters -> localFilters
   useEffect(() => {
     const cleaned = normalizeFilters(rawFilters);
-    if (!shallowFiltersEqual(cleaned, localFilters)) {
-      setLocalFilters(cleaned);
-    }
+    if (!shallowFiltersEqual(cleaned, localFilters)) setLocalFilters(cleaned);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawFilters, normalizeFilters]);
 
@@ -669,7 +681,6 @@ export default function FiltersPanel({
     return ok;
   }, [localFilters, saveFilter, normalizeFilters, showToast, t]);
 
-  // compute active filters count (badge)
   const activeFiltersCount = useMemo(() => {
     const base = normalizeFilters(DEFAULT_FILTERS);
     let count = 0;
@@ -685,7 +696,6 @@ export default function FiltersPanel({
     return count;
   }, [localFilters, normalizeFilters]);
 
-  // Render option chips (desktop)
   const renderOptionChips = (options = [], type) => {
     if (!options || options.length === 0) {
       return <div className="text-sm text-slate-500">{t('filters.noOptions', { type: t(`filters.types.${type}`) })}</div>;
@@ -742,7 +752,7 @@ export default function FiltersPanel({
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               onFocus={() => { setIsSearchFocused(true); setShowSearchHistory(true); }}
               onBlur={() => { setIsSearchFocused(false); if (!isHistoryPinned) setShowSearchHistory(false); }}
-              placeholder=""
+              placeholder={isMobile ? t('filters.search.placeholder') : ""}   // 👈 CHANGEMENT ICI
               className={cls(
                 "w-full pl-10 pr-20 h-10 rounded-xl border bg-white text-slate-900",
                 "placeholder:text-slate-400 border-slate-200",
@@ -753,19 +763,23 @@ export default function FiltersPanel({
               aria-label={t('filters.search.ariaLabel')}
               autoComplete="off"
             />
-            {!searchQuery.length && (
-              <div className="pointer-events-none absolute left-10 right-20 top-1/2 -translate-y-1/2 text-slate-400 text-sm select-none">
-                <span className="inline-flex items-center gap-2">
-                  <span className="whitespace-nowrap">
-                    {animatedHintText}
+
+           {!isMobile && !searchQuery.length && (
+            <div className="pointer-events-none absolute left-10 right-20 top-1/2 -translate-y-1/2 text-slate-500 text-[13px] select-none">
+              <span className="inline-flex items-center gap-2">
+                <span className="whitespace-nowrap">
+                  {animatedHintText}
+                  {!prefersReduced && (
                     <span className="ml-0.5 inline-block w-[1px] h-[1.2em] align-middle bg-slate-400 animate-caret-blink" />
-                  </span>
-                  <span className="hidden sm:inline text-[11px] px-2 py-0.5 rounded bg-slate-100 border border-slate-200">
-                    {t('filters.search.tip')}
-                  </span>
+                  )}
                 </span>
-              </div>
-            )}
+                <span className="hidden md:inline text-[11px] px-2 py-0.5 rounded bg-slate-100 border border-slate-200">
+                  {t('filters.search.tip')}
+                </span>
+              </span>
+            </div>
+          )}
+
             <FaSearch
               className={cls(
                 "absolute left-3 top-1/2 -translate-y-1/2 transition-all duration-200",
@@ -956,15 +970,14 @@ export default function FiltersPanel({
                   style={{ scrollbarWidth: "none" }}
                 >
                   <Pill label={t('filters.categories')} icon={<FaTag />} open={activeMenu === "categories"} onToggle={() => setActiveMenu(activeMenu === "categories" ? null : "categories")} badge={(localFilters.categories || []).length} />
-                  <Pill label={t('filters.tags')}        icon={<FaTag />} open={activeMenu === "tags"}        onToggle={() => setActiveMenu(activeMenu === "tags" ? null : "tags")} badge={(localFilters.tags || []).length} />
+                  <Pill label={t('filters.tags')}        icon={<FaTag />} open={activeMenu === "tags"}        onToggle={() => setActiveMenu(activeMenu === "tags" ? null : "tags")}       badge={(localFilters.tags || []).length} />
                   <Pill label={t('filters.authors')}     icon={<FaUser />} open={activeMenu === "authors"}     onToggle={() => setActiveMenu(activeMenu === "authors" ? null : "authors")} badge={(localFilters.authors || []).length} />
                   <Pill label={t('filters.options')}     icon={<FaFilter />} open={activeMenu === "options"}   onToggle={() => setActiveMenu(activeMenu === "options" ? null : "options")} />
-                  <Pill label={t('filters.dates')}       icon={<FaCalendar />} open={activeMenu === "dates"}   onToggle={() => setActiveMenu(activeMenu === "dates" ? null : "dates")} badge={localFilters.dateFrom || localFilters.dateTo ? 1 : 0} />
-                  <Pill label={t('filters.rating')}      icon={<FaThumbsUp />} open={activeMenu === "rating"}  onToggle={() => setActiveMenu(activeMenu === "rating" ? null : "rating")} badge={(localFilters.ratingMin > 0 || localFilters.ratingMax < 5) ? 1 : 0} />
+                  <Pill label={t('filters.dates')}       icon={<FaCalendar />} open={activeMenu === "dates"}   onToggle={() => setActiveMenu(activeMenu === "dates" ? null : "dates")}     badge={localFilters.dateFrom || localFilters.dateTo ? 1 : 0} />
+                  <Pill label={t('filters.rating')}      icon={<FaThumbsUp />} open={activeMenu === "rating"}  onToggle={() => setActiveMenu(activeMenu === "rating" ? null : "rating")}   badge={(localFilters.ratingMin > 0 || localFilters.ratingMax < 5) ? 1 : 0} />
                   <Pill label={t('filters.saved')}       icon={<FaBookmark />} open={activeMenu === "saved"}   onToggle={() => setActiveMenu(activeMenu === "saved" ? null : "saved")} />
 
                   <div className="ml-auto flex gap-2 pl-4">
-                    {/* 🎨 Toggle global couleur cards (icone seule) */}
                     <button
                       type="button"
                       onClick={toggleCardColor}
@@ -1008,7 +1021,6 @@ export default function FiltersPanel({
                   title={t('filters.categories')}
                   onClear={localFilters.categories.length ? () => setLocalFilters(p => ({ ...p, categories: [] })) : undefined}
                 >
-                  {/* champ de recherche côté serveur (optionnel - desktop) */}
                   <div className="mb-2 max-w-sm">
                     <InputWithIcon
                       icon={<FaSearch />}
@@ -1031,7 +1043,6 @@ export default function FiltersPanel({
                   title={t('filters.tags')}
                   onClear={localFilters.tags.length ? () => setLocalFilters(p => ({ ...p, tags: [] })) : undefined}
                 >
-                  {/* champ de recherche côté serveur (optionnel - desktop) */}
                   <div className="mb-2 max-w-sm">
                     <InputWithIcon
                       icon={<FaSearch />}
@@ -1064,7 +1075,6 @@ export default function FiltersPanel({
                     <ToggleButton active={localFilters.featuredOnly} onClick={() => setLocalFilters(prev => ({ ...prev, featuredOnly: !prev.featuredOnly }))} icon={<FaStar />} label={t('filters.featuredOnly')} />
                     <ToggleButton active={localFilters.stickyOnly}   onClick={() => setLocalFilters(prev => ({ ...prev, stickyOnly: !prev.stickyOnly }))}   icon={<FaThumbtack />} label={t('filters.pinnedOnly')} />
                     <ToggleButton active={localFilters.unreadOnly}   onClick={() => setLocalFilters(prev => ({ ...prev, unreadOnly: !prev.unreadOnly }))}   icon={<FaEye />} label={t('filters.unreadOnly')} />
-                    {/* Info-only palette toggle here not needed (already top-right) */}
                   </div>
                 </FilterSection>
 
@@ -1075,7 +1085,7 @@ export default function FiltersPanel({
                   </div>
                 </FilterSection>
 
-                <FilterSection visible={activeMenu === "rating"} title={t('filters.rating')} onClear={(localFilters.ratingMin > 0 || localFilters.ratingMax < 5) ? () => setLocalFilters(p => ({ ...p, ratingMin: 0, ratingMax: 5 })) : undefined}>
+                <FilterSection visible={activeMenu === "rating"} title={t('filters.rating')} onClear={(localFilters.ratingMin > 0 || localFilters.ratingMax < 5) ? () => setLocalFilters(p => ({ ...prev, ratingMin: 0, ratingMax: 5 })) : undefined}>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <InputWithIcon icon={<FaThumbsUp />} type="number" min="0" max="5" step="0.1" placeholder={t('filters.minRating')} label={t('filters.minRating')} value={localFilters.ratingMin}
                       onChange={(value) => setLocalFilters(prev => ({ ...prev, ratingMin: Math.min(5, Math.max(0, parseFloat(value) || 0)) }))} />
@@ -1145,7 +1155,7 @@ export default function FiltersPanel({
         </div>
       </div>
 
-      {/* Mobile bottom-sheet modal */}
+      {/* Mobile bottom-sheet modal (AUCUN WRAPPER AUTOUR) */}
       {isMobile && (
         <MobileFiltersModal
           open={showMobileModal}
@@ -1305,9 +1315,16 @@ function SaveModal({ initialValue = "", onSave, onClose }) {
 }
 
 /* =========================
-   Mobile bottom-sheet + sous-composants
+   Mobile bottom-sheet (wrapper sans hooks) + contenu avec hooks
 ========================= */
-function MobileFiltersModal({
+function MobileFiltersModal(props) {
+  // ⚠️ AUCUN HOOK ICI
+  const { open } = props;
+  if (!open) return null;
+  return <MobileFiltersModalContent {...props} />;
+}
+
+function MobileFiltersModalContent({
   open, onClose,
   safeCategories, safeTags, safeAuthors,
   localFilters, setLocalFilters,
@@ -1323,21 +1340,18 @@ function MobileFiltersModal({
   const [tagLocalQuery, setTagLocalQuery] = useState("");
   const [authLocalQuery, setAuthLocalQuery] = useState("");
 
-  const toggle = (key) => setOpenSection((prev) => (prev === key ? null : key));
-
+  
+  // Focus initial + swipe-to-close
   useEffect(() => {
-    if (!open) return;
-    // focus initial
     sheetRef.current?.querySelector("button, input, select")?.focus?.();
 
-    // fermeture au swipe léger vers le bas
     let startY = null;
     const onTouchStart = (e) => { startY = e.touches?.[0]?.clientY ?? null; };
     const onTouchMove  = (e) => {
       if (!startY) return;
       const y = e.touches?.[0]?.clientY ?? startY;
       const dy = y - startY;
-      if (dy > 32) { onClose?.(); startY = null; }
+      if (dy > 36) { onClose?.(); startY = null; }
     };
     const el = sheetRef.current;
     el?.addEventListener("touchstart", onTouchStart, { passive: true });
@@ -1346,30 +1360,19 @@ function MobileFiltersModal({
       el?.removeEventListener("touchstart", onTouchStart);
       el?.removeEventListener("touchmove", onTouchMove);
     };
-  }, [open, onClose]);
+  }, [onClose]);
 
-  // Reset des mini recherches quand on ferme
-  useEffect(() => {
-    if (!open) {
-      setCatLocalQuery("");
-      setTagLocalQuery("");
-      setAuthLocalQuery("");
-    }
-  }, [open]);
-
-  if (!open) return null;
-
-  // Filtres clients pour les options
+  const toggle = (key) => setOpenSection((prev) => (prev === key ? null : key));
   const filterBy = (items = [], q = "") =>
     (items || []).filter(o => String(o?.name || "").toLowerCase().includes(String(q).toLowerCase()));
 
-  const catFiltered = filterBy(safeCategories, catLocalQuery);
-  const tagFiltered = filterBy(safeTags, tagLocalQuery);
-  const authFiltered = filterBy(safeAuthors, authLocalQuery);
+  const catFiltered  = filterBy(safeCategories, catLocalQuery);
+  const tagFiltered  = filterBy(safeTags,      tagLocalQuery);
+  const authFiltered = filterBy(safeAuthors,   authLocalQuery);
 
   return (
     <div className="fixed inset-0 z-[80]">
-      {/* Backdrop */}
+      {/* Overlay */}
       <button
         type="button"
         onClick={onClose}
@@ -1383,7 +1386,15 @@ function MobileFiltersModal({
         role="dialog"
         aria-modal="true"
         aria-label={t('filters.filters')}
-        className="absolute inset-x-0 bottom-0 w-full max-h-[92vh] bg-white rounded-t-2xl shadow-2xl animate-sheet-in flex flex-col"
+        className="
+          fixed inset-x-0 bottom-0 w-full
+          bg-white rounded-t-2xl shadow-2xl
+          animate-sheet-in
+          flex flex-col
+          h-[85vh] max-h-[92vh] md:max-h-[92svh]
+          overflow-hidden
+          will-change:transform
+        "
       >
         {/* Handle + Header sticky */}
         <div className="sticky top-0 bg-white rounded-t-2xl pt-2 px-4 pb-3 border-b border-slate-200">
@@ -1391,13 +1402,11 @@ function MobileFiltersModal({
           <div className="flex items-center justify-between">
             <h3 className="text-base font-semibold">{t('filters.filters')}</h3>
             <div className="flex items-center gap-2">
-              {/* Palette icon-only dans l’entête */}
               <button
                 type="button"
                 onClick={toggleCardColor}
                 className="h-9 w-9 rounded-lg border border-slate-200 bg-white inline-flex items-center justify-center hover:bg-slate-50"
-                title={cardColorEnabled ? (t('filters.cardsColor.disable') || 'Désactiver')
-                                        : (t('filters.cardsColor.enable')  || 'Activer')}
+                title={cardColorEnabled ? (t('filters.cardsColor.disable') || 'Désactiver') : (t('filters.cardsColor.enable') || 'Activer')}
                 aria-pressed={cardColorEnabled}
               >
                 <FaPalette className={cls("text-base", cardColorEnabled ? "text-blue-600" : "text-black")} />
@@ -1413,9 +1422,9 @@ function MobileFiltersModal({
           </div>
         </div>
 
-        {/* Contenu scrollable */}
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-          {/* Section Quick options */}
+        {/* Contenu scrollable (min-h-0 indispensable pour Firefox) */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3">
+          {/* Quick options */}
           <AccordionItem
             open={openSection === "quick"}
             onToggle={() => toggle("quick")}
@@ -1550,13 +1559,13 @@ function MobileFiltersModal({
         <div className="sticky bottom-0 bg-white border-t border-slate-200 p-3 flex gap-2">
           <button
             onClick={handleResetFilters}
-            className="flex-1 h-11 rounded-xl border border-slate-200 bg-white text-slate-700"
+            className="flex-1 h-11 rounded-xl border border-slate-200 bg-white text-slate-700 active:scale-[0.98] transition"
           >
             {t('filters.resetAll')}
           </button>
           <button
             onClick={handleApplyFilters}
-            className="flex-1 h-11 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700"
+            className="flex-1 h-11 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 active:scale-[0.98] transition"
           >
             {t('filters.apply')}
           </button>
@@ -1565,6 +1574,7 @@ function MobileFiltersModal({
     </div>
   );
 }
+
 
 function AccordionItem({ open, onToggle, title, children, onClear }) {
   return (
@@ -1610,7 +1620,7 @@ function ChipsGrid({ options = [], type, localFilters, setLocalFilters }) {
     <div className="grid grid-cols-2 gap-2">
       {options.map((opt) => {
         const id = String(opt.id);
-        const label = opt.name ?? `#${id}`;
+        const label = opt.name ?? `#${id}`;  // <-- corrige ici: const label =
         const isActive = (localFilters[type] || []).some((v) => String(v) === id);
         return (
           <button

@@ -945,6 +945,70 @@ i18n
     "author": "Author"
   }
 ,
+"listtable": {
+  "headers": {
+    "image": "Image",
+    "title": "Title", 
+    "author": "Author",
+    "category": "Category",
+    "published": "Published",
+    "views": "Views",
+    "rating": "Rating",
+    "status": "Status",
+    "actions": "Actions"
+  },
+  "categories": {
+    "ai": "Artificial Intelligence",
+    "startup": "Startup",
+    "webdev": "Web Development", 
+    "business": "Business",
+    "mobile": "Mobile",
+    "article": "Article"
+  },
+  "status": {
+    "published": "Published",
+    "draft": "Draft",
+    "unread": "Unread"
+  },
+  "visibility": {
+    "public": "Public",
+    "private": "Private",
+    "passwordProtected": "Password Protected",
+    "unknown": "Unknown"
+  },
+  "badges": {
+    "featured": "Featured",
+    "sticky": "Pinned"
+  },
+  "stats": {
+    "views": "views",
+    "reviews": "reviews"
+  },
+  "date": {
+    "created": "Created on"
+  },
+  "actions": {
+    "read": "Read article",
+    "share": "Share",
+    "addFavorite": "Add to favorites", 
+    "removeFavorite": "Remove from favorites"
+  },
+  "empty": {
+    "title": "No articles found",
+    "subtitle": "Try adjusting your search criteria"
+  },
+  // NOUVELLES CLÉS MANQUANTES
+  "responsive": {
+    "width": "Width"
+  },
+  "columns": {
+    "button": "Columns",
+    "auto": "Auto",
+    "custom": "Custom",
+    "alwaysOn": "Always visible",
+    "reset": "Reset to auto"
+  }
+},
 
               "role_permissions_management": "Role Permissions Management",
             "manage_role_permissions_description": "Manage associations between roles and permissions",
@@ -1908,7 +1972,70 @@ i18n
     }
   }
 ,
-
+"listtable": {
+  "headers": {
+    "image": "Image",
+    "title": "Titre",
+    "author": "Auteur",
+    "category": "Catégorie",
+    "published": "Publié le",
+    "views": "Vues",
+    "rating": "Note",
+    "status": "Statut",
+    "actions": "Actions"
+  },
+  "categories": {
+    "ai": "Intelligence Artificielle",
+    "startup": "Startup",
+    "webdev": "Développement Web",
+    "business": "Business",
+    "mobile": "Mobile",
+    "article": "Article"
+  },
+  "status": {
+    "published": "Publié",
+    "draft": "Brouillon",
+    "unread": "Non lu"
+  },
+  "visibility": {
+    "public": "Public",
+    "private": "Privé",
+    "passwordProtected": "Protégé par mot de passe",
+    "unknown": "Inconnu"
+  },
+  "badges": {
+    "featured": "À la une",
+    "sticky": "Épinglé"
+  },
+  "stats": {
+    "views": "vues",
+    "reviews": "avis"
+  },
+  "date": {
+    "created": "Créé le"
+  },
+  "actions": {
+    "read": "Lire l'article",
+    "share": "Partager",
+    "addFavorite": "Ajouter aux favoris",
+    "removeFavorite": "Retirer des favoris"
+  },
+  "empty": {
+    "title": "Aucun article trouvé",
+    "subtitle": "Essayez de modifier vos critères de recherche"
+  },
+  // NOUVELLES CLÉS MANQUANTES
+  "responsive": {
+    "width": "Largeur"
+  },
+  "columns": {
+    "button": "Colonnes",
+    "auto": "Auto",
+    "custom": "Personnalisé",
+    "alwaysOn": "Toujours visible",
+    "reset": "Réinitialiser en auto"
+  }
+},
   "layout": {
     "brand": "Media Manager",
     "subtitle": "Back Office Admin",
@@ -2025,6 +2152,7 @@ i18n
   }
 
 ,
+
         "role_permissions_management": "Gestion des Permissions de Rôles",
         "manage_role_permissions_description": "Gérer les associations entre rôles et permissions",
         "search_roles_permissions": "Rechercher rôles et permissions...",

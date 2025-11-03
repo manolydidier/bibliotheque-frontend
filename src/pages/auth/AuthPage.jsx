@@ -479,7 +479,15 @@ const AuthPage = () => {
           <div className={`auth-page login ${isLoginActive ? 'active slide-left' : 'hidden'}`}>
             <div className="auth-layout auth-layout--media-left">
               <aside className="auth-media" aria-hidden="true">
-                <img src={LOGIN_ILLU} alt="" className="auth-media-img img-fade" onError={(e)=>{ e.currentTarget.style.display='none'; }} loading="eager"/>
+               <img
+                src={LOGIN_ILLU}
+                alt=""
+                className="auth-media-img img-fade"
+                loading="lazy"
+                sizes="(max-width: 1024px) 100vw, 50vw"
+                onError={(e)=>{ e.currentTarget.style.display='none'; }}
+              />
+
                 <div className="auth-media-overlay">
                   <h3>{t('auth.media.login.title', 'Login')}</h3>
                   <p>{t('auth.media.login.subtitle', 'Access your space securely')}</p>
@@ -744,7 +752,8 @@ const AuthPage = () => {
               </div>
 
               <aside className="auth-media" aria-hidden="true">
-                <img src={REGISTER_ILLU} alt="" className="auth-media-img img-fade" onError={(e)=>{ e.currentTarget.style.display='none'; }} loading="eager"/>
+                
+                <img src={REGISTER_ILLU} alt=""  className="auth-media-img img-fade" onError={(e)=>{ e.currentTarget.style.display='none'; }} loading="eager"/>
                 <div className="auth-media-overlay">
                   <h3>{t('auth.media.register.title', 'Registration')}</h3>
                   <p>{t('auth.media.register.subtitle', 'Join the community and get started')}</p>
