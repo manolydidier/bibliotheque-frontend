@@ -1,9 +1,11 @@
 // src/components/navbar/Navbar.jsx
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  faSignInAlt, faUserPlus, faUserCircle, faCog, faSignOutAlt,
+  faRightToBracket, // connexion
+  faSignInAlt,      // fallback
+  faUserPlus, faUserCircle, faCog, faSignOutAlt,
   faFileAlt, faVideo, faPodcast, faSitemap, faBullseye, faUsers, faEnvelope,
   faChevronDown, faBell, faCommentDots, faKey, faUserShield, faNewspaper,
 } from '@fortawesome/free-solid-svg-icons';
@@ -119,10 +121,7 @@ const timeAgo = (iso, t) => {
 
 /* ========================= Logo (Book) ========================= */
 const BookLogo = ({ title = 'Library' }) => (
-  <div
-    className="group relative w-10 h-10 grid place-items-center"
-    aria-hidden="true"
-  >
+  <div className="group relative w-10 h-10 grid place-items-center" aria-hidden="true">
     <style>
       {`
         @media (prefers-reduced-motion:no-preference) {
@@ -132,13 +131,9 @@ const BookLogo = ({ title = 'Library' }) => (
     </style>
     <div className="book-3d transition-transform duration-300 will-change-transform">
       <svg width="36" height="36" viewBox="0 0 64 64" className="drop-shadow-[0_4px_12px_rgba(255,255,255,.25)]">
-        {/* Cover */}
         <path d="M12 8h34a6 6 0 0 1 6 6v34a6 6 0 0 1-6 6H12z" fill="url(#g1)" />
-        {/* Page */}
         <path d="M18 14h26a4 4 0 0 1 4 4v26a4 4 0 0 1-4 4H18z" fill="#fff" />
-        {/* Bookmark */}
         <path d="M40 14v18l-4-3-4 3V14z" fill="#2563eb" />
-        {/* Lines */}
         <rect x="20" y="20" width="20" height="2" rx="1" fill="#cbd5e1" />
         <rect x="20" y="26" width="18" height="2" rx="1" fill="#cbd5e1" />
         <rect x="20" y="32" width="16" height="2" rx="1" fill="#cbd5e1" />
@@ -155,12 +150,25 @@ const BookLogo = ({ title = 'Library' }) => (
   </div>
 );
 
+/* ========================= Skeleton ========================= */
+const SkeletonRow = () => (
+  <div className="flex items-start gap-3 p-4 animate-pulse">
+    <div className="w-9 h-9 rounded-full bg-gray-200" />
+    <div className="flex-1">
+      <div className="h-3 bg-gray-200 rounded w-2/3 mb-2" />
+      <div className="h-3 bg-gray-200 rounded w-1/2" />
+    </div>
+  </div>
+);
+
 /* ========================= Component ========================= */
 const Navbar = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
   const { t, i18n } = useTranslation();
+
+  const onAuth = location.pathname.startsWith('/auth');
 
   const API_BASE_STORAGE = import.meta.env.VITE_API_BASE_STORAGE;
   const API_BASE_URL     = import.meta.env.VITE_API_BASE_URL || '';
@@ -207,6 +215,7 @@ const Navbar = () => {
   const [newCount, setNewCount] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
 
+  // Polling fallback
   const recomputeNewCount = useCallback(async () => {
     if (!isAuthenticated || !userId) { setNewCount(0); return; }
     const token = getTokenGuard();
@@ -239,6 +248,28 @@ const Navbar = () => {
       setPendingCount(Number(resp?.pending || 0));
     } catch {}
   }, [API_BASE_URL, isAuthenticated]);
+
+  // SSE live updates (auto-fallback vers polling si échoue)
+  useEffect(() => {
+    if (!isAuthenticated || !userId) return;
+    let closed = false;
+    const token = getTokenGuard();
+    try {
+      const es = new EventSource(`${API_BASE_URL}/users/${userId}/activities/stream?token=${encodeURIComponent(token || '')}`);
+      es.onmessage = (ev) => {
+        try {
+          const data = JSON.parse(ev.data);
+          if (data.type === 'activity_count') setNewCount(Math.min(99, Number(data.count || 0)));
+          if (data.type === 'pending_count')  setPendingCount(Math.min(99, Number(data.count || 0)));
+        } catch {}
+      };
+      es.onerror = () => { es.close(); };
+      return () => { closed = true; es.close(); };
+    } catch {
+      // silence; we will use polling below
+      return () => { closed = true; };
+    }
+  }, [API_BASE_URL, isAuthenticated, userId]);
 
   useEffect(() => {
     const tick = () => { recomputeNewCount(); recomputePendingCount(); };
@@ -356,7 +387,6 @@ const Navbar = () => {
         setIsProfileOpen(false);
         setNotifOpen(false);
       }
-      // Focus trap for drawer
       if (!isDesktop && isMenuOpen && e.key === 'Tab') {
         const first = drawerFirstFocusRef.current;
         const last = drawerLastFocusRef.current;
@@ -437,7 +467,73 @@ const Navbar = () => {
     } catch (e) { console.error('Logout failed:', e); }
   };
 
+  // >>> IMPORTANT <<< : Fermer drawer/overlays à chaque navigation + remonter en haut
+  useEffect(() => {
+    setIsMenuOpen(false);
+    setActiveSubmenu(null);
+    setIsProfileOpen(false);
+    setNotifOpen(false);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [location.pathname]);
+
+  /* ========================= Scroll-aware navbar ========================= */
+  const [isHidden, setIsHidden] = useState(false);    // slide up when scrolling down
+  const [isCompact, setIsCompact] = useState(false);  // shrink when scrolled past threshold
+  const [readP, setReadP] = useState(0);              // article reading progress
+
+  useEffect(() => {
+    let lastY = window.scrollY || 0;
+    let ticking = false;
+
+    const TH_HIDE = 120;     // start hiding after this Y
+    const TH_COMPACT = 140;  // start compact header after this Y
+    const DELTA = 6;         // minimal delta to react (avoid jitter)
+
+    const onScroll = () => {
+      const curr = window.scrollY || 0;
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const diff = curr - lastY;
+
+          // compact mode
+          if (curr > TH_COMPACT && !isCompact) setIsCompact(true);
+          else if (curr <= TH_COMPACT && isCompact) setIsCompact(false);
+
+          // hide/show logic
+          if (curr > TH_HIDE && diff > DELTA) {
+            if (!isHidden) setIsHidden(true);
+          } else if (diff < -DELTA) {
+            if (isHidden) setIsHidden(false);
+          }
+          if (curr <= 0 && isHidden) setIsHidden(false);
+
+          lastY = curr;
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [isHidden, isCompact]);
+
+  // Reading progress (only on article page)
+  useEffect(() => {
+    if (!location.pathname.startsWith('/articles/')) { setReadP(0); return; }
+    const onScroll = () => {
+      const h = document.documentElement;
+      const p = (h.scrollTop / (h.scrollHeight - h.clientHeight)) * 100;
+      setReadP(Math.max(0, Math.min(100, p)));
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [location.pathname]);
+
   /* ========================= Rendu ========================= */
+  const canModerate = !!user?.roles?.includes('moderator') || !!user?.permissions?.includes('moderate');
+
   const navLinks = [
     { name: t('home'), path: '/', submenu: null },
     { name: t('platform'), path: '/articles', submenu: [
@@ -455,28 +551,74 @@ const Navbar = () => {
       { icon: faBullseye, name: t('goals'), path: '/about/goals' },
       { icon: faUsers, name: t('members'), path: '/about/members' },
       { icon: faEnvelope, name: t('contact'), path: '/about/contact' }
-    ]}
-  ];
+    ]},
+    canModerate ? { name: t('moderation','Modération'), path: '/moderation', submenu: null } : null
+  ].filter(Boolean);
+
+  const goToLogin = () => {
+    const next = encodeURIComponent(window.location.pathname + window.location.search + window.location.hash);
+    navigate(`/auth?view=login&next=${next}`);
+  };
+
+  // Classes dynamiques pour animation et compacting
+  const baseBg = onAuth
+    ? 'from-blue-50/80 via-blue-100/70 to-white/60 backdrop-blur-xl border-blue-200/60'
+    : 'from-blue-900 via-indigo-700 to-blue-700 border-white/10';
+
+  const heightClass = isCompact ? 'h-14' : 'h-20';
+  const textScaleClass = isCompact ? 'text-xl' : 'text-2xl';
+  const translateClass = isHidden ? '-translate-y-full' : 'translate-y-0';
+  const shadowClass = isCompact ? 'shadow-lg' : 'shadow-md';
+
+  // Keyboard navigation on menubar
+  const handleMenubarKeyDown = (e) => {
+    const items = [...document.querySelectorAll('.nav-links > li > a, .nav-links > li > button')];
+    const i = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowRight') { e.preventDefault(); items[(i+1+items.length)%items.length]?.focus(); }
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); items[(i-1+items.length)%items.length]?.focus(); }
+    if (e.key === 'ArrowDown' && activeSubmenu !== null) {
+      submenuRefs.current[activeSubmenu]?.querySelector('a')?.focus();
+    }
+  };
 
   return (
     <nav
-      className="fixed top-0 left-0 w-full bg-gradient-to-r from-blue-900 via-indigo-700 to-blue-700 shadow-md flex items-center h-20 z-50 border-b border-white/10"
+      className={
+        `fixed top-0 left-0 w-full bg-gradient-to-r ${shadowClass} flex items-center ${heightClass} z-50 border-b
+         transition-[height,transform,background,box-shadow] duration-300 ease-out will-change-transform ${translateClass}
+         ${baseBg}`
+      }
       role="navigation"
       aria-label="Main"
     >
+      <style>
+        {`
+          @media (prefers-reduced-motion: reduce) {
+            nav { transition: none !important; }
+          }
+        `}
+      </style>
+
+      {/* Reading progress bar (only when on article) */}
+      {readP > 0 && (
+        <div className="absolute bottom-0 left-0 h-[2px] w-full bg-transparent">
+          <div className="h-full bg-blue-500/90 transition-[width] duration-150" style={{width:`${readP}%`}}/>
+        </div>
+      )}
+
       <div className="w-full px-4 md:px-6 flex items-center gap-4">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-3 flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 rounded-lg">
+        <NavLink to="/" className="flex items-center gap-3 flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 rounded-lg">
           <BookLogo />
-          <span className="text-white text-2xl font-extrabold tracking-tight">
-            <span className="text-blue-200">UI</span> <span className="hidden sm:inline">Library</span>
+          <span className={`${onAuth ? 'text-gray-900' : 'text-white'} ${textScaleClass} font-extrabold tracking-tight transition-[font-size] duration-300`}>
+            <span className={`${onAuth ? 'text-blue-700' : 'text-blue-200'}`}>UI</span> <span className="hidden sm:inline">Library</span>
           </span>
-        </Link>
+        </NavLink>
 
         {/* Desktop nav */}
         {isDesktop && (
           <div className="flex-1 flex justify-center">
-            <ul className="nav-links flex gap-6 font-medium mx-auto" role="menubar" aria-label="Primary">
+            <ul className="nav-links flex gap-6 font-medium mx-auto" role="menubar" aria-label="Primary" onKeyDown={handleMenubarKeyDown}>
               {navLinks.map((link, i) => (
                 <li
                   key={i}
@@ -484,37 +626,47 @@ const Navbar = () => {
                   onMouseEnter={() => link.submenu && handleSubmenuHover(i, true)}
                   onMouseLeave={() => link.submenu && handleSubmenuHover(i, false)}
                 >
-                  <Link
+                  <NavLink
                     to={link.path}
-                    className="flex items-center py-3 px-2 text-white/90 hover:text-white transition-colors whitespace-nowrap rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                    className={({isActive}) =>
+                      `flex items-center ${isCompact ? 'py-2' : 'py-3'} px-2 whitespace-nowrap rounded-md focus:outline-none transition-[padding,background,color] duration-200
+                       ${onAuth
+                          ? `text-gray-800 hover:text-blue-700 focus-visible:ring-2 focus-visible:ring-blue-400 ${isActive ? 'bg-blue-50 text-blue-700' : ''}`
+                          : `text-white/90 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 ${isActive ? 'bg-white/10 text-white' : ''}`}`
+                    }
                     role="menuitem"
                     onFocus={() => link.submenu && setActiveSubmenu(i)}
                     onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setActiveSubmenu(null); }}
+                    end
                   >
                     {link.name}
-                    {link.submenu && <FontAwesomeIcon icon={faChevronDown} className="ml-2 text-xs opacity-80" />}
-                  </Link>
+                    {link.submenu && <FontAwesomeIcon icon={faChevronDown} className={`ml-2 text-xs ${onAuth ? 'text-blue-700' : 'text-white/80'}`} />}
+                  </NavLink>
 
                   {link.submenu && (
                     <div
                       ref={el => submenuRefs.current[i] = el}
-                      className={`submenu absolute top-full left-1/2 -translate-x-1/2 bg-white rounded-xl shadow-xl w-64 py-2 transition-all duration-200 border border-gray-100 ${
-                        activeSubmenu === i ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible translate-y-1 pointer-events-none'
-                      }`}
+                      className={`submenu absolute top-full left-1/2 -translate-x-1/2 bg-white rounded-xl shadow-xl w-64 py-2 transition-all duration-200 border
+                        ${activeSubmenu === i ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible translate-y-1 pointer-events-none'}
+                        ${onAuth ? 'border-blue-100' : 'border-gray-100'}`}
                       role="menu"
                       aria-label={`${link.name} submenu`}
                     >
                       {link.submenu.map((sub, j) => (
                         <div key={j}>
-                          <Link
+                          <NavLink
                             to={sub.path}
-                            className="flex items-center px-5 py-3 text-gray-800 hover:text-blue-600 hover:bg-blue-50 transition-all focus:outline-none focus-visible:bg-blue-50"
+                            className={({isActive}) =>
+                              `flex items-center px-5 py-3 text-gray-800 hover:text-blue-600 hover:bg-blue-50 transition-all focus:outline-none focus-visible:bg-blue-50 rounded-md
+                               ${isActive ? 'bg-blue-50 text-blue-700' : ''}`
+                            }
                             onClick={() => setActiveSubmenu(null)}
                             role="menuitem"
+                            end
                           >
                             <FontAwesomeIcon icon={sub.icon} className="mr-3 text-blue-600 w-4" />
                             <span className="flex-1">{sub.name}</span>
-                          </Link>
+                          </NavLink>
                         </div>
                       ))}
                     </div>
@@ -529,7 +681,15 @@ const Navbar = () => {
         <div className="flex items-center gap-3 flex-shrink-0 ml-auto">
           {/* Search */}
           <div className="relative hidden sm:block">
-            <ArticleSearchBox placeholder={t('search')} perPage={8} />
+            <ArticleSearchBox
+              placeholder={t('search')}
+              perPage={8}
+              compactOnMobile={true}
+              requireAuth={true}
+              isAuthenticated={!!isAuthenticated}
+              onRequireAuth={goToLogin}
+              navbarHeightPx={isCompact ? 56 : 80}
+            />
           </div>
 
           {/* Lang */}
@@ -538,7 +698,8 @@ const Navbar = () => {
           {/* Chip nom user */}
           {isAuthenticated && (
             <div className="hidden md:flex items-center">
-              <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-white/10 text-white border border-white/20">
+              <span className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${isCompact ? 'opacity-90' : 'opacity-100'}
+                ${onAuth ? 'bg-blue-100/60 text-blue-900 border-blue-200/70' : 'bg-white/10 text-white border-white/20'}`}>
                 {t('hello','Bonjour')}{' '}{user?.username || '—'}
               </span>
             </div>
@@ -549,10 +710,14 @@ const Navbar = () => {
             <div className="relative" ref={notifRef}>
               <button
                 onClick={toggleNotifications}
-                className="relative text-white hover:text-blue-100 transition-colors p-2 rounded-full hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                className={`relative transition-colors p-2 rounded-full focus:outline-none
+                  ${onAuth
+                    ? 'text-gray-800 hover:text-blue-700 hover:bg-blue-100/60 focus-visible:ring-2 focus-visible:ring-blue-400'
+                    : 'text-white hover:text-blue-100 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/60'}`}
                 aria-haspopup="dialog"
                 aria-expanded={notifOpen}
                 aria-label={t('notifications','Notifications')}
+                title={t('notifications','Notifications')}
               >
                 <FontAwesomeIcon icon={faBell} />
                 {(newCount > 0 || pendingCount > 0) && (
@@ -611,6 +776,11 @@ const Navbar = () => {
                   <div className="max-h-96 overflow-auto">
                     {notifTab==='news' ? (
                       <>
+                        {(news.loading && news.items.length===0) && (
+                          <>
+                            <SkeletonRow/><SkeletonRow/><SkeletonRow/>
+                          </>
+                        )}
                         {news.items.length === 0 && !news.loading && (
                           <div className="p-6 text-sm text-gray-500 flex items-center justify-center gap-2">
                             <span>🥳</span> <span>{t('no_activity','Aucune activité pour le moment')}</span>
@@ -649,6 +819,11 @@ const Navbar = () => {
                       </>
                     ) : (
                       <>
+                        {(pending.loading && pending.items.length===0) && (
+                          <>
+                            <SkeletonRow/><SkeletonRow/><SkeletonRow/>
+                          </>
+                        )}
                         {pending.items.length === 0 && !pending.loading && (
                           <div className="p-6 text-sm text-gray-500 flex items-center justify-center gap-2">
                             <span>🧹</span> <span>{t('nothing_to_moderate','Rien à modérer')}</span>
@@ -696,18 +871,34 @@ const Navbar = () => {
           {/* Auth (non connecté) */}
           {!isAuthenticated && (
             <div className="hidden sm:flex gap-2">
-              <Link
-                to="/auth"
-                className="border border-white/30 rounded-lg px-3 py-2 text-white hover:bg-white/10 hover:border-white/50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+              <NavLink
+                to="/auth?view=login"
+                title={t('login','Connexion')}
+                aria-label={t('login','Connexion')}
+                className={({isActive}) =>
+                  `${onAuth
+                    ? 'border border-blue-300 rounded-lg px-3 py-2 text-gray-900 hover:text-blue-700 hover:bg-blue-100/60 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400'
+                    : 'border border-white/40 rounded-lg px-3 py-2 text-white hover:bg-white/10 hover:border-white/60 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60'} ${isActive ? 'bg-blue-50 text-blue-700' : ''}`
+                }
               >
-                <FontAwesomeIcon icon={faSignInAlt} />
-              </Link>
-              <Link
-                to="/auth"
-                className="bg-blue-500 text-white rounded-lg px-3 py-2 hover:bg-blue-600 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                <FontAwesomeIcon icon={faRightToBracket || faSignInAlt} className="mr-2 text-base" />
+                <span className="hidden md:inline">{t('login','Connexion')}</span>
+                <span className="sr-only md:not-sr-only md:hidden">{t('login','Connexion')}</span>
+              </NavLink>
+              <NavLink
+                to="/auth?view=register"
+                title={t('register','Inscription')}
+                aria-label={t('register','Inscription')}
+                className={({isActive}) =>
+                  `${onAuth
+                    ? 'bg-blue-600 text-white rounded-lg px-3 py-2 hover:bg-blue-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400'
+                    : 'bg-blue-500 text-white rounded-lg px-3 py-2 hover:bg-blue-600 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60'} ${isActive ? 'ring-2 ring-white/60' : ''}`
+                }
               >
-                <FontAwesomeIcon icon={faUserPlus} />
-              </Link>
+                <FontAwesomeIcon icon={faUserPlus} className="mr-2 text-base" />
+                <span className="hidden md:inline">{t('register','Inscription')}</span>
+                <span className="sr-only md:not-sr-only md:hidden">{t('register','Inscription')}</span>
+              </NavLink>
             </div>
           )}
 
@@ -716,27 +907,34 @@ const Navbar = () => {
             <div className="relative" ref={userProfileRef}>
               <button
                 onClick={toggleProfile}
-                className="focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 rounded-full"
+                className="focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 rounded-full"
                 aria-haspopup="menu"
                 aria-expanded={isProfileOpen}
+                title={t('profile','Profil')}
               >
+                {/* <<< AVATAR : fond blanc >>> */}
                 <img
                   src={avatarSrc}
                   alt={t('profile','Profil')}
-                  className="w-10 h-10 rounded-full border-2 border-white/40 hover:border-white object-cover transition-colors"
+                  width="40" height="40"
+                  className={`w-10 h-10 rounded-full border-2 object-cover bg-white transition-colors
+                    ${onAuth ? 'border-blue-300 hover:border-blue-400' : 'border-white/40 hover:border-white'}`}
                   onError={handleImgError}
+                  loading="lazy"
+                  decoding="async"
                 />
               </button>
               <div
-                className={`absolute top-full right-0 bg-white rounded-2xl shadow-2xl w-72 overflow-hidden border border-gray-100 transition-all duration-200 ${
-                  isProfileOpen ? 'opacity-100 visible translate-y-2' : 'opacity-0 invisible translate-y-1 pointer-events-none'
-                }`}
+                className={`absolute top-full right-0 bg-white rounded-2xl shadow-2xl w-72 overflow-hidden border transition-all duration-200
+                  ${isProfileOpen ? 'opacity-100 visible translate-y-2' : 'opacity-0 invisible translate-y-1 pointer-events-none'}
+                  ${onAuth ? 'border-blue-100' : 'border-gray-100'}`}
                 role="menu"
                 aria-label="Profile menu"
               >
                 <div className="px-4 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white">
                   <div className="flex items-center gap-3">
-                    <img src={avatarSrc} alt="avatar" className="w-9 h-9 rounded-full ring-2 ring-white/30 object-cover" />
+                    {/* Avatar header aussi sur fond blanc */}
+                    <img src={avatarSrc} alt="avatar" className="w-9 h-9 rounded-full ring-2 ring-white/30 object-cover bg-white" />
                     <div className="min-w-0">
                       <div className="text-sm font-semibold truncate">{user?.name || t('profile','Profil')}</div>
                       <div className="text-xs text-white/80 truncate">{user?.email || '—'}</div>
@@ -744,24 +942,30 @@ const Navbar = () => {
                   </div>
                 </div>
 
-                <Link
+                <NavLink
                   to="/settings"
-                  className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-600 hover:bg-blue-50 transition-all focus:outline-none focus-visible:bg-blue-50"
+                  className={({isActive}) =>
+                    `flex items-center px-6 py-3 text-gray-800 hover:text-blue-600 hover:bg-blue-50 transition-all focus:outline-none focus-visible:bg-blue-50 ${isActive ? 'bg-blue-50 text-blue-700' : ''}`
+                  }
                   onClick={() => setIsProfileOpen(false)}
                   role="menuitem"
+                  end
                 >
                   <FontAwesomeIcon icon={faUserCircle} className="mr-3 text-blue-600 w-4" />
                   <span className="flex-1">{t('profile')}</span>
-                </Link>
-                <Link
+                </NavLink>
+                <NavLink
                   to="/articlescontroler"
-                  className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-600 hover:bg-blue-50 transition-all focus:outline-none focus-visible:bg-blue-50"
+                  className={({isActive}) =>
+                    `flex items-center px-6 py-3 text-gray-800 hover:text-blue-600 hover:bg-blue-50 transition-all focus:outline-none focus-visible:bg-blue-50 ${isActive ? 'bg-blue-50 text-blue-700' : ''}`
+                  }
                   onClick={() => setIsProfileOpen(false)}
                   role="menuitem"
+                  end
                 >
                   <FontAwesomeIcon icon={faCog} className="mr-3 text-blue-600 w-4" />
                   <span className="flex-1">{t('settings')}</span>
-                </Link>
+                </NavLink>
                 <button
                   onClick={handleLogout}
                   className="w-full flex items-center px-6 py-3 text-gray-800 hover:text-blue-600 hover:bg-blue-50 transition-all text-left focus:outline-none focus-visible:bg-blue-50"
@@ -778,15 +982,16 @@ const Navbar = () => {
           {!isDesktop && (
             <button
               ref={burgerRef}
-              className="flex flex-col justify-between w-8 h-6 relative z-50 ml-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 rounded-md"
+              className="flex flex-col justify-between w-8 h-6 relative z-50 ml-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 rounded-md"
               onClick={toggleMenu}
               aria-label={isMenuOpen ? t('close','Fermer') : t('open','Ouvrir')}
               aria-expanded={isMenuOpen}
               aria-controls="mobile-drawer"
+              title={isMenuOpen ? t('close','Fermer') : t('open','Ouvrir')}
             >
-              <span className={`h-0.5 rounded transition-all ${isMenuOpen ? 'rotate-45 translate-y-2 bg-white' : 'bg-white'}`} />
-              <span className={`h-0.5 rounded transition-all ${isMenuOpen ? 'opacity-0 scale-x-0' : 'opacity-100 scale-x-100 bg-white'}`} />
-              <span className={`h-0.5 rounded transition-all ${isMenuOpen ? '-rotate-45 -translate-y-2 bg-white' : 'bg-white'}`} />
+              <span className={`h-0.5 rounded transition-all ${isMenuOpen ? 'rotate-45 translate-y-2 bg-blue-900' : (onAuth ? 'bg-blue-900' : 'bg-white')}`} />
+              <span className={`h-0.5 rounded transition-all ${isMenuOpen ? 'opacity-0 scale-x-0' : (onAuth ? 'opacity-100 scale-x-100 bg-blue-900' : 'opacity-100 scale-x-100 bg-white')}`} />
+              <span className={`h-0.5 rounded transition-all ${isMenuOpen ? '-rotate-45 -translate-y-2 bg-blue-900' : (onAuth ? 'bg-blue-900' : 'bg-white')}`} />
             </button>
           )}
         </div>
@@ -798,7 +1003,7 @@ const Navbar = () => {
           <div
             id="mobile-drawer"
             ref={navRef}
-            className={`fixed top-0 left-0 w-[82vw] max-w-[360px] h-screen bg-white flex flex-col items-start p-6 pt-20 gap-0 shadow-2xl transform transition-transform duration-300 z-40 ${
+            className={`fixed top-0 left-0 w-[82vw] max-w-[380px] h-screen bg-white flex flex-col items-start p-6 pt-20 gap-0 shadow-2xl transform transition-transform duration-300 z-40 ${
               isMenuOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
             role="dialog"
@@ -806,81 +1011,161 @@ const Navbar = () => {
           >
             {/* Focus trap sentinels */}
             <button ref={drawerFirstFocusRef} className="sr-only" aria-hidden />
-            <div className="w-full">
-              {/* Inline search for mobile */}
-              <div className="mb-4">
-                <ArticleSearchBox placeholder={t('search')} perPage={6} />
+
+            {/* Header mini + langue */}
+            <div className="w-full flex items-center justify-between mb-3">
+              <span className="text-sm font-semibold text-blue-900">Menu</span>
+              <div className="scale-95">
+                <LanguageSwitcher />
               </div>
-              <ul className="w-full">
-                {navLinks.map((link, i) => (
-                  <li key={i} className="w-full border-b border-gray-100 last:border-b-0">
-                    {link.submenu ? (
-                      <>
-                        <button
-                          className={`w-full flex items-center justify-between py-4 text-gray-800 ${activeSubmenu === i ? 'bg-blue-50' : ''}`}
-                          onClick={() => toggleSubmenu(i)}
-                          aria-expanded={activeSubmenu === i}
-                          aria-controls={`submenu-${i}`}
-                        >
-                          <span className="font-medium">{link.name}</span>
-                          <FontAwesomeIcon
-                            icon={faChevronDown}
-                            className={`ml-2 transition-transform duration-200 ${activeSubmenu === i ? 'rotate-180' : ''}`}
-                          />
-                        </button>
-                        <div
-                          id={`submenu-${i}`}
-                          className={`overflow-hidden transition-all duration-300 bg-blue-50 bg-opacity-30 rounded-lg mx-2 ${
-                            activeSubmenu === i ? 'max-h-96 py-2' : 'max-h-0'
-                          }`}
-                        >
-                          {link.submenu.map((sub,j) => (
-                            <div key={j}>
-                              <Link
-                                to={sub.path}
-                                className="flex items-center px-6 py-3 text-gray-800 hover:text-blue-600 hover:bg-blue-50 transition-all"
-                                onClick={handleNavLinkClick}
-                              >
-                                <FontAwesomeIcon icon={sub.icon} className="mr-3 text-blue-600 w-4" />
-                                <span className="flex-1">{sub.name}</span>
-                              </Link>
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    ) : (
-                      <Link
-                        to={link.path}
-                        className="flex items-center py-4 text-gray-800 font-medium hover:text-blue-600 transition-colors"
-                        onClick={handleNavLinkClick}
-                      >
-                        {link.name}
-                      </Link>
-                    )}
-                  </li>
-                ))}
-              </ul>
             </div>
 
-            {/* Auth quick actions */}
-            {!isAuthenticated && (
-              <div className="mt-auto flex gap-2 w-full">
-                <Link
-                  to="/auth"
+            {/* Inline search for mobile */}
+            <div className="w-full mb-4">
+              <ArticleSearchBox
+                placeholder={t('search')}
+                perPage={6}
+                compactOnMobile={true}
+                requireAuth={true}
+                isAuthenticated={!!isAuthenticated}
+                onRequireAuth={goToLogin}
+                navbarHeightPx={isCompact ? 56 : 80}
+              />
+            </div>
+
+            {/* NAV accordéon (mêmes liens que desktop) */}
+            <ul className="w-full rounded-lg border border-gray-100 overflow-hidden">
+              {navLinks.map((link, i) => (
+                <li key={i} className="w-full border-b border-gray-100 last:border-b-0">
+                  {link.submenu ? (
+                    <>
+                      <button
+                        className={`w-full flex items-center justify-between py-4 px-2 text-gray-800 ${activeSubmenu === i ? 'bg-blue-50' : ''}`}
+                        onClick={() => toggleSubmenu(i)}
+                        aria-expanded={activeSubmenu === i}
+                        aria-controls={`submenu-${i}`}
+                      >
+                        <span className="font-medium">{link.name}</span>
+                        <FontAwesomeIcon
+                          icon={faChevronDown}
+                          className={`ml-2 transition-transform duration-200 ${activeSubmenu === i ? 'rotate-180' : ''}`}
+                        />
+                      </button>
+                      <div
+                        id={`submenu-${i}`}
+                        className={`overflow-hidden transition-all duration-300 bg-blue-50/40 rounded-lg mx-2 ${
+                          activeSubmenu === i ? 'max-h-96 py-2' : 'max-h-0'
+                        }`}
+                      >
+                        {/* Lien racine */}
+                        <NavLink
+                          to={link.path}
+                          className={({isActive}) =>
+                            `flex items-center px-6 py-3 text-gray-800 hover:text-blue-600 hover:bg-blue-50 transition-all ${isActive ? 'bg-blue-50 text-blue-700' : ''}`
+                          }
+                          onClick={handleNavLinkClick}
+                          end
+                        >
+                          <span className="flex-1">{t('overview','Aperçu')}</span>
+                        </NavLink>
+                        {/* Enfants */}
+                        {link.submenu.map((sub,j) => (
+                          <div key={j}>
+                            <NavLink
+                              to={sub.path}
+                              className={({isActive}) =>
+                                `flex items-center px-6 py-3 text-gray-800 hover:text-blue-600 hover:bg-blue-50 transition-all ${isActive ? 'bg-blue-50 text-blue-700' : ''}`
+                              }
+                              onClick={handleNavLinkClick}
+                              end
+                            >
+                              <FontAwesomeIcon icon={sub.icon} className="mr-3 text-blue-600 w-4" />
+                              <span className="flex-1">{sub.name}</span>
+                            </NavLink>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <NavLink
+                      to={link.path}
+                      className={({isActive}) =>
+                        `flex items-center py-4 px-2 text-gray-800 font-medium hover:text-blue-600 transition-colors ${isActive ? 'text-blue-700' : ''}`
+                      }
+                      onClick={handleNavLinkClick}
+                      end
+                    >
+                      {link.name}
+                    </NavLink>
+                  )}
+                </li>
+              ))}
+            </ul>
+
+            {/* Accès rapides (à plat) */}
+            <div className="w-full mt-4">
+              <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">{t('quick_access','Accès rapides')}</div>
+              <div className="grid grid-cols-1 gap-1">
+                <NavLink to="/platform/summary" className="px-3 py-2 rounded-md hover:bg-blue-50 text-blue-700" onClick={handleNavLinkClick} end>Platform · {t('sumary')}</NavLink>
+                <NavLink to="/platform/video" className="px-3 py-2 rounded-md hover:bg-blue-50 text-blue-700" onClick={handleNavLinkClick} end>Platform · {t('video')}</NavLink>
+                <NavLink to="/platform/audio" className="px-3 py-2 rounded-md hover:bg-blue-50 text-blue-700" onClick={handleNavLinkClick} end>Platform · {t('audio')}</NavLink>
+                <NavLink to="/genre/playdoier" className="px-3 py-2 rounded-md hover:bg-blue-50 text-blue-700" onClick={handleNavLinkClick} end>Genre · {t('playdoier')}</NavLink>
+                <NavLink to="/genre/fundraising" className="px-3 py-2 rounded-md hover:bg-blue-50 text-blue-700" onClick={handleNavLinkClick} end>Genre · {t('fundraising')}</NavLink>
+                <NavLink to="/genre/technical" className="px-3 py-2 rounded-md hover:bg-blue-50 text-blue-700" onClick={handleNavLinkClick} end>Genre · {t('technical')}</NavLink>
+                <NavLink to="/about/structure" className="px-3 py-2 rounded-md hover:bg-blue-50 text-blue-700" onClick={handleNavLinkClick} end>About · {t('structure')}</NavLink>
+                <NavLink to="/about/goals" className="px-3 py-2 rounded-md hover:bg-blue-50 text-blue-700" onClick={handleNavLinkClick} end>About · {t('goals')}</NavLink>
+                <NavLink to="/about/members" className="px-3 py-2 rounded-md hover:bg-blue-50 text-blue-700" onClick={handleNavLinkClick} end>About · {t('members')}</NavLink>
+                <NavLink to="/about/contact" className="px-3 py-2 rounded-md hover:bg-blue-50 text-blue-700" onClick={handleNavLinkClick} end>About · {t('contact')}</NavLink>
+              </div>
+            </div>
+
+            {/* Section utilisateur (si connecté) */}
+            {isAuthenticated ? (
+              <div className="w-full mt-6 border-t pt-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <img src={avatarSrc} alt="avatar" className="w-9 h-9 rounded-full ring-2 ring-blue-100 object-cover bg-white" />
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-gray-900 truncate">{user?.name || t('profile','Profil')}</div>
+                    <div className="text-xs text-gray-500 truncate">{user?.email || '—'}</div>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <NavLink to="/settings" className="px-3 py-2 rounded-md hover:bg-blue-50 text-gray-800 flex items-center" onClick={handleNavLinkClick} end>
+                    <FontAwesomeIcon icon={faUserCircle} className="w-4 mr-2 text-blue-600" /> {t('profile')}
+                  </NavLink>
+                  <NavLink to="/articlescontroler" className="px-3 py-2 rounded-md hover:bg-blue-50 text-gray-800 flex items-center" onClick={handleNavLinkClick} end>
+                    <FontAwesomeIcon icon={faCog} className="w-4 mr-2 text-blue-600" /> {t('settings')}
+                  </NavLink>
+                  <button onClick={()=>{ handleLogout(); }} className="text-left px-3 py-2 rounded-md hover:bg-blue-50 text-gray-800 flex items-center">
+                    <FontAwesomeIcon icon={faSignOutAlt} className="w-4 mr-2 text-blue-600" /> {t('logout')}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // Auth quick actions
+              <div className="mt-6 flex gap-2 w-full">
+                <NavLink
+                  to="/auth?view=login"
                   onClick={handleNavLinkClick}
+                  title={t('login','Connexion')}
+                  aria-label={t('login','Connexion')}
                   className="flex-1 border border-blue-200 text-blue-700 rounded-lg px-3 py-2 text-center"
+                  end
                 >
-                  <FontAwesomeIcon icon={faSignInAlt} className="mr-2" />
+                  <FontAwesomeIcon icon={faRightToBracket || faSignInAlt} className="mr-2" />
                   {t('login','Connexion')}
-                </Link>
-                <Link
-                  to="/auth"
+                </NavLink>
+                <NavLink
+                  to="/auth?view=register"
                   onClick={handleNavLinkClick}
+                  title={t('register','Inscription')}
+                  aria-label={t('register','Inscription')}
                   className="flex-1 bg-blue-600 text-white rounded-lg px-3 py-2 text-center"
+                  end
                 >
                   <FontAwesomeIcon icon={faUserPlus} className="mr-2" />
                   {t('register','Inscription')}
-                </Link>
+                </NavLink>
               </div>
             )}
 
@@ -893,6 +1178,7 @@ const Navbar = () => {
             className={`fixed inset-0 bg-black/50 backdrop-blur-[1px] transition-opacity z-30 ${isMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
             onClick={toggleMenu}
             aria-label={t('close','Fermer')}
+            title={t('close','Fermer')}
           />
         </>
       )}

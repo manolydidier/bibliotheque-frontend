@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faUserPlus, faSignInAlt, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
 import { useDispatch, useSelector } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import './auth.css';
@@ -174,13 +174,31 @@ function getFixedContainingBlock(node) {
   return null; // sinon: viewport
 }
 
-const AuthPage = () => {
+/** 
+ * NEW: accepte une prop initialView = 'login' | 'register'.
+ * Si l'URL a ?view=..., elle prime.
+ */
+const AuthPage = ({ initialView = 'login' }) => {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { auth: { isAuthenticated }, langue } = useSelector(s => s.library);
 
-  const [isLoginActive, setIsLoginActive] = useState(true);
+  // NEW — lecture du paramètre d'URL
+  const [sp] = useSearchParams();
+  const urlView = sp.get('view'); // 'login' | 'register' | null
+  const chooseView = (v) => (v === 'register' ? 'register' : 'login');
+
+  // NEW — état initial basé sur URL puis fallback prop
+  const [isLoginActive, setIsLoginActive] = useState(() => chooseView(urlView || initialView) === 'login');
+
+  // NEW — si le paramètre ?view change (navigation interne), on respecte
+  useEffect(() => {
+    const v = chooseView(sp.get('view') || initialView);
+    setIsLoginActive(v === 'login');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sp]);
+
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     username:'', firstName:'', lastName:'',
@@ -210,8 +228,6 @@ const AuthPage = () => {
 
   // Forgot password modal
   const [forgotOpen, setForgotOpen] = useState(false);
-
-  // useEffect(()=>{ if(isAuthenticated) navigate('/'); },[isAuthenticated,navigate]);
 
   // ✅ Pré-remplir email si mémorisé (remember_email en localStorage)
   useEffect(() => {
@@ -410,11 +426,11 @@ const AuthPage = () => {
   /* ===== Drag corrigé: soustraction du rect de l'ancêtre transformé ===== */
   const startPwHintDrag = useCallback((e) => {
     const el = pwHintRef.current;
-    if (!el || (e.button !== undefined && e.button !== 0)) return; // click gauche uniquement
+    if (!el || (e.button !== undefined && e.button !== 0)) return;
     e.preventDefault();
 
     const rect = el.getBoundingClientRect();
-    const fcb  = getFixedContainingBlock(el); // ancêtre transformé, ou null
+    const fcb  = getFixedContainingBlock(el);
     const base = fcb ? fcb.getBoundingClientRect() : { left: 0, top: 0 };
 
     const startX = e.clientX;
@@ -437,6 +453,26 @@ const AuthPage = () => {
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
+  }, []);
+
+  /* ====== SCOPAGE DU FOND À AUTH-PAGE + SPOTLIGHT LIMITÉ ====== */
+  useEffect(() => {
+    // activer le décor seulement ici
+    document.body.classList.add('auth-scene');
+
+    // halo souris
+    const onPointerMove = (e) => {
+      const r = document.querySelector('.bg-spotlight');
+      if (!r) return;
+      r.style.setProperty('--mx', `${e.clientX}px`);
+      r.style.setProperty('--my', `${e.clientY}px`);
+    };
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      document.body.classList.remove('auth-scene');
+    };
   }, []);
 
   return (
@@ -479,30 +515,39 @@ const AuthPage = () => {
           <div className={`auth-page login ${isLoginActive ? 'active slide-left' : 'hidden'}`}>
             <div className="auth-layout auth-layout--media-left">
               <aside className="auth-media" aria-hidden="true">
-               <img
-                src={LOGIN_ILLU}
-                alt=""
-                className="auth-media-img img-fade"
-                loading="lazy"
-                sizes="(max-width: 1024px) 100vw, 50vw"
-                onError={(e)=>{ e.currentTarget.style.display='none'; }}
-              />
+                <img
+                  src={LOGIN_ILLU}
+                  alt=""
+                  className="auth-media-img img-fade"
+                  loading="eager"
+                  onError={(e)=>{ e.currentTarget.style.display='none'; }}
+                />
+                <span className="media-blob b1" />
+                <span className="media-blob b2" />
 
                 <div className="auth-media-overlay">
-                  <h3>{t('auth.media.login.title', 'Login')}</h3>
-                  <p>{t('auth.media.login.subtitle', 'Access your space securely')}</p>
-                </div>
-                <div className="auth-media-fallback">
-                  <span className="badge">UI</span>
-                  <h4>{t('auth.media.fallback.title', 'Printing consumables sales')}</h4>
-                  <ul>
-                    <li>{t('auth.media.fallback.dtf', 'DTF — Powders & Films')}</li>
-                    <li>{t('auth.media.fallback.eco', 'Eco-solvent — DX5/DX7')}</li>
-                    <li>{t('auth.media.fallback.sub', 'Sublimation — Textile & transfer')}</li>
+                  <div className="media-pills">
+                    <span className="media-pill">Sécurisé</span>
+                    <span className="media-pill">Rapide</span>
+                    <span className="media-pill">SSO Google</span>
+                  </div>
+
+                  <h3 className="media-title">{t('auth.media.login.title', 'Connexion sécurisée')}</h3>
+                  <p className="media-sub">
+                    {t('auth.media.login.subtitle', 'Accédez à votre espace en toute sérénité.')}
+                  </p>
+
+                  <ul className="media-list">
+                    <li>OTP anti-fraude</li>
+                    <li>Chiffrement des sessions</li>
+                    <li>Récupération de mot de passe</li>
                   </ul>
+
+                  <div className="media-hint">
+                    🔐 {t('auth.media.tip', 'Astuce : utilisez une phrase secrète de 3–4 mots pour un mot de passe fort.')}
+                  </div>
                 </div>
               </aside>
-
               <div className="auth-form ">
                 <div className="form-header">
                   <h1 id="auth-title" className="form-title">{t('welcome_back')}</h1>
@@ -515,7 +560,7 @@ const AuthPage = () => {
                 {errors.general && <div className="api-notice">{errors.general}</div>}
 
                 <form onSubmit={handleSubmit} className="space-y-6 w-2xl" noValidate aria-busy={submitting}>
-                  <div className="input-group has-icon">
+                  <div className="input-group authlogin has-icon">
                     <input type="email" name="email" value={formData.email} onChange={handleChange}
                       onFocus={handleFocus} onBlur={handleBlur} placeholder=" "
                       className={getInputClassName('email')} autoComplete="username"
@@ -587,7 +632,7 @@ const AuthPage = () => {
 
                 <form onSubmit={handleSubmit} className="form-grid" noValidate aria-busy={submitting}>
                   <div className="two-cols">
-                    <div className="input-group">
+                    <div className="input-group authregister">
                       <input type="text" name="firstName" value={formData.firstName} onChange={handleChange}
                         placeholder=" " className={getInputClassName('firstName')} aria-invalid={!!errors.firstName}
                         aria-describedby={errors.firstName ? 'err-first' : undefined}/>
@@ -752,26 +797,51 @@ const AuthPage = () => {
               </div>
 
               <aside className="auth-media" aria-hidden="true">
-                
-                <img src={REGISTER_ILLU} alt=""  className="auth-media-img img-fade" onError={(e)=>{ e.currentTarget.style.display='none'; }} loading="eager"/>
+                <img
+                  src={REGISTER_ILLU}
+                  alt=""
+                  className="auth-media-img img-fade"
+                  loading="eager"
+                  onError={(e)=>{ e.currentTarget.style.display='none'; }}
+                />
+
+                <span className="media-blob b1" />
+                <span className="media-blob b2" />
+
                 <div className="auth-media-overlay">
-                  <h3>{t('auth.media.register.title', 'Registration')}</h3>
-                  <p>{t('auth.media.register.subtitle', 'Join the community and get started')}</p>
-                </div>
-                <div className="auth-media-fallback">
-                  <span className="badge">UI</span>
-                  <h4>{t('auth.media.fallback.createAccount', 'Create an account')}</h4>
-                  <ul>
-                    <li>{t('auth.media.fallback.nameEmail', 'Name, first name, email')}</li>
-                    <li>{t('auth.media.fallback.uniqueUsername', 'Unique username')}</li>
-                    <li>{t('auth.media.fallback.strongPassword', 'Strong password')}</li>
+                  <div className="media-pills">
+                    <span className="media-pill">Gratuit</span>
+                    <span className="media-pill">2 min</span>
+                    <span className="media-pill">Email vérifié</span>
+                  </div>
+
+                  <h3 className="media-title">{t('auth.media.register.title', 'Créer un compte')}</h3>
+                  <p className="media-sub">
+                    {t('auth.media.register.subtitle', 'Rejoignez la communauté et démarrez.')}
+                  </p>
+
+                  <ul className="media-list">
+                    <li>Nom & prénom</li>
+                    <li>Identifiant unique</li>
+                    <li>Mot de passe robuste</li>
                   </ul>
+
+                  <div className="media-hint">
+                    💡 {t('auth.media.register.tip', 'Choisissez un identifiant court et mémorisable (max 20 caractères).')}
+                  </div>
                 </div>
               </aside>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Décors (une seule fois sur la page) */}
+      <div className="bg-grid" aria-hidden="true"></div>
+      <div className="bg-blob b1" aria-hidden="true"></div>
+      <div className="bg-blob b2" aria-hidden="true"></div>
+      <div className="bg-blob b3" aria-hidden="true"></div>
+      <div className="bg-spotlight" aria-hidden="true"></div>
     </>
   );
 };

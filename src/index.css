@@ -15,3 +15,31 @@
     }
   }
 }
+
+
+/* @media (prefers-reduced-motion: reduce) {
+  .no-motion * {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+} */
+
+/* Scrollbar un peu plus fine (WebKit) */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,.2);
+  border-radius: 9999px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Petite amélioration d’accessibilité du focus sur boutons/links non Tailwindés */
+:focus-visible {
+  outline: 2px solid rgb(59 130 246 / 0.6); /* bleu-500/60 */
+  outline-offset: 2px;
+}

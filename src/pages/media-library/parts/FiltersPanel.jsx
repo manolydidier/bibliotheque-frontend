@@ -4,6 +4,8 @@
 // + Fetch direct depuis API Laravel pour catégories & tags (categorieAdvance/tagsadvance -> fallback index)
 // + Mobile bottom-sheet affiné (header/footer collants, swipe-to-close, accordéons, chips 2 colonnes, palette icon-only)
 // + FIX Firefox/iOS: min-h-0, h-[85vh], unmount complet quand fermé (pas de flou résiduel), pas de wrapper autour du modal
+// + (NEW) 1) Scroll-shadows sur les pills, 2) badges animés, 3) empty state + skeletons,
+//         4) aperçu “cards” des filtres sauvegardés, 5) sélecteur de thème (neutre / pro / coloré)
 
 import { useEffect, useState, useCallback, useMemo, useRef, useLayoutEffect } from "react";
 import { useTranslation } from 'react-i18next';
@@ -33,6 +35,7 @@ const STORAGE_KEYS = {
   FILTERS: "article-filters",
   SEARCH_HISTORY: "article-search-history",
   CARD_COLOR_ENABLED: "gridcard-color-enabled",
+  THEME: "filters-theme",
 };
 
 const DEFAULT_FILTERS = {
@@ -46,6 +49,43 @@ const DEFAULT_FILTERS = {
   dateTo: "",
   ratingMin: 0,
   ratingMax: 5,
+};
+
+// Thèmes (classes explicitement listées pour Tailwind)
+const THEME_STYLES = {
+  neutral: {
+    accentIcon: "text-blue-600",
+    headerFrom: "from-blue-50",
+    primaryBg: "bg-blue-600 hover:bg-blue-700",
+    primaryRing: "focus-visible:ring-blue-200",
+    toggleActive: "bg-blue-50 text-blue-700 border-blue-200",
+    ringSoft: "ring-2 ring-blue-100",
+    borderSoft: "border-blue-200",
+    textAccent: "text-blue-900",
+    badgeBg: "bg-red-600",
+  },
+  pro: {
+    accentIcon: "text-indigo-600",
+    headerFrom: "from-indigo-50",
+    primaryBg: "bg-indigo-600 hover:bg-indigo-700",
+    primaryRing: "focus-visible:ring-indigo-200",
+    toggleActive: "bg-indigo-50 text-indigo-700 border-indigo-200",
+    ringSoft: "ring-2 ring-indigo-100",
+    borderSoft: "border-indigo-200",
+    textAccent: "text-indigo-900",
+    badgeBg: "bg-rose-600",
+  },
+  colored: {
+    accentIcon: "text-emerald-600",
+    headerFrom: "from-emerald-50",
+    primaryBg: "bg-emerald-600 hover:bg-emerald-700",
+    primaryRing: "focus-visible:ring-emerald-200",
+    toggleActive: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    ringSoft: "ring-2 ring-emerald-100",
+    borderSoft: "border-emerald-200",
+    textAccent: "text-emerald-900",
+    badgeBg: "bg-orange-600",
+  },
 };
 
 // -------------------------------------------
@@ -215,7 +255,11 @@ function useToast() {
       role="status"
       aria-live="polite"
     >
-      {t.message}
+      <div>{t.message}</div>
+      {/* Mini barre de progression */}
+      <div className="relative mt-2 h-[2px] w-full bg-slate-200 overflow-hidden rounded">
+        <div className={cls("absolute inset-y-0 left-0 w-full", t.type === "success" ? "bg-green-600" : "bg-rose-600", "animate-[toastbar_1.8s_linear]")} />
+      </div>
     </div>
   ));
   return { show, toastElements };
@@ -344,7 +388,7 @@ const Chip = ({ active, onClick, children, index = 0, disabled = false }) => (
   </button>
 );
 
-const Pill = ({ label, icon, open, onToggle, disabled = false, badge }) => (
+const Pill = ({ label, icon, open, onToggle, disabled = false, badge, theme = THEME_STYLES.neutral }) => (
   <button
     type="button"
     onClick={onToggle}
@@ -354,8 +398,9 @@ const Pill = ({ label, icon, open, onToggle, disabled = false, badge }) => (
       "h-10 px-3 rounded-xl border inline-flex items-center gap-2 whitespace-nowrap relative",
       "bg-white border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-all",
       "disabled:opacity-50 disabled:cursor-not-allowed",
-      "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200",
-      open ? "ring-2 ring-blue-100" : "",
+      "focus:outline-none",
+      theme.primaryRing,
+      open ? theme.ringSoft : "",
       "active:scale-[0.98]"
     )}
   >
@@ -363,14 +408,20 @@ const Pill = ({ label, icon, open, onToggle, disabled = false, badge }) => (
     <span className="text-sm font-medium">{label}</span>
     <FaChevronDown className={cls("text-xs opacity-70 transition-transform", open ? "rotate-180" : "")} aria-hidden="true" />
     {badge > 0 && (
-      <span className="absolute -top-1 -right-2 inline-flex items-center justify-center text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-600 text-white">
+      <span
+        className={cls(
+          "absolute -top-1 -right-2 inline-flex items-center justify-center text-[11px] font-semibold px-1.5 py-0.5 rounded-full text-white",
+          "animate-bounce",
+          theme.badgeBg
+        )}
+      >
         {badge}
       </span>
     )}
   </button>
 );
 
-const ToggleButton = ({ active, onClick, icon, label, disabled = false }) => (
+const ToggleButton = ({ active, onClick, icon, label, disabled = false, theme = THEME_STYLES.neutral }) => (
   <button
     type="button"
     onClick={onClick}
@@ -378,8 +429,9 @@ const ToggleButton = ({ active, onClick, icon, label, disabled = false }) => (
     className={cls(
       "h-10 px-3 rounded-lg border inline-flex items-center gap-2 transition-colors",
       "disabled:opacity-50 disabled:cursor-not-allowed",
-      "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200",
-      active ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+      "focus:outline-none",
+      theme.primaryRing,
+      active ? theme.toggleActive : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
     )}
     aria-pressed={active}
   >
@@ -422,6 +474,16 @@ export default function FiltersPanel({
   tagsOptions = [],
 }) {
   const { t } = useTranslation();
+
+  const [themeKey, setThemeKey] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.THEME)) || "neutral"; }
+    catch { return "neutral"; }
+  });
+  const theme = THEME_STYLES[themeKey] || THEME_STYLES.neutral;
+  const saveTheme = useCallback((key) => {
+    setThemeKey(key);
+    try { localStorage.setItem(STORAGE_KEYS.THEME, JSON.stringify(key)); } catch {}
+  }, []);
 
   const SEARCH_HINTS = useMemo(() => [
     t('filters.searchHints.example1'),
@@ -536,7 +598,7 @@ export default function FiltersPanel({
     update();
     mq.addEventListener ? mq.addEventListener("change", update) : mq.addListener(update);
     return () => mq.removeEventListener ? mq.removeEventListener("change", update) : mq.removeListener(update);
-}, []);
+  }, []);
 
 
   // 🎨 Global card color toggle
@@ -560,7 +622,7 @@ export default function FiltersPanel({
   const { savedFilters, saveFilter, deleteFilter } = useSavedFilters();
   const { history: searchHistory, addToHistory, clearHistory } = useSearchHistory();
   const { show: showToast, toastElements } = useToast();
-  const { wrapperRef, contentRef, height } = useAutoHeight(isExpanded && !isMobile, [activeMenu, localFilters, savedFilters, cardColorEnabled]);
+  const { wrapperRef, contentRef, height } = useAutoHeight(isExpanded && !isMobile, [activeMenu, localFilters, savedFilters, cardColorEnabled, themeKey]);
 
   // Responsive listener
   useEffect(() => {
@@ -571,21 +633,20 @@ export default function FiltersPanel({
   }, []);
 
   // Empêche le scroll du body quand le modal mobile est ouvert
-useEffect(() => {
-  if (!showMobileModal) return;
-  const prevBodyOverflow = document.body.style.overflow;
-  const prevDocOverflow  = document.documentElement.style.overflow;
+  useEffect(() => {
+    if (!showMobileModal) return;
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevDocOverflow  = document.documentElement.style.overflow;
 
-  document.body.style.overflow = "hidden";
-  document.documentElement.style.overflow = "";
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "";
 
-  return () => {
-    document.body.style.overflow = prevBodyOverflow;
-    document.documentElement.style.overflow = prevDocOverflow;
-    // petit nudge viewport iOS après fermeture d’un input dans un modal
-    try { window.scrollTo(window.scrollX, window.scrollY); } catch {}
-  };
-}, [showMobileModal]);
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevDocOverflow;
+      try { window.scrollTo(window.scrollX, window.scrollY); } catch {}
+    };
+  }, [showMobileModal]);
 
 
   // Sync rawFilters -> localFilters
@@ -697,8 +758,14 @@ useEffect(() => {
   }, [localFilters, normalizeFilters]);
 
   const renderOptionChips = (options = [], type) => {
+    // Empty state illustré quand aucune option
     if (!options || options.length === 0) {
-      return <div className="text-sm text-slate-500">{t('filters.noOptions', { type: t(`filters.types.${type}`) })}</div>;
+      return (
+        <div className="text-center p-8">
+          <div className="mx-auto mb-2 h-16 w-16 rounded-full bg-slate-100" aria-hidden="true" />
+          <p className="text-sm text-slate-500">{t('filters.noOptions', { type: t(`filters.types.${type}`) })}</p>
+        </div>
+      );
     }
     return (
       <div className="flex flex-wrap gap-2">
@@ -720,7 +787,11 @@ useEffect(() => {
                 }
               })}
             >
-              {label}
+              <span className="inline-flex items-center gap-2">
+                {!isActive && <span className="h-2 w-2 rounded-full bg-slate-300" aria-hidden="true" />}
+                {isActive && <span className="h-2 w-2 rounded-full bg-blue-200" aria-hidden="true" />}
+                {label}
+              </span>
             </Chip>
           );
         })}
@@ -752,38 +823,40 @@ useEffect(() => {
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               onFocus={() => { setIsSearchFocused(true); setShowSearchHistory(true); }}
               onBlur={() => { setIsSearchFocused(false); if (!isHistoryPinned) setShowSearchHistory(false); }}
-              placeholder={isMobile ? t('filters.search.placeholder') : ""}   // 👈 CHANGEMENT ICI
+              placeholder={isMobile ? t('filters.search.placeholder') : ""}
               className={cls(
                 "w-full pl-10 pr-20 h-10 rounded-xl border bg-white text-slate-900",
                 "placeholder:text-slate-400 border-slate-200",
                 "transition-[box-shadow,border-color,transform] duration-200",
-                "focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300",
+                "focus:outline-none",
+                theme.primaryRing,
+                "focus:border-blue-300",
                 isSearchFocused ? "shadow-[inset_0_0_0_1px_rgba(59,130,246,.2)]" : "shadow-none"
               )}
               aria-label={t('filters.search.ariaLabel')}
               autoComplete="off"
             />
 
-           {!isMobile && !searchQuery.length && (
-            <div className="pointer-events-none absolute left-10 right-20 top-1/2 -translate-y-1/2 text-slate-500 text-[13px] select-none">
-              <span className="inline-flex items-center gap-2">
-                <span className="whitespace-nowrap">
-                  {animatedHintText}
-                  {!prefersReduced && (
-                    <span className="ml-0.5 inline-block w-[1px] h-[1.2em] align-middle bg-slate-400 animate-caret-blink" />
-                  )}
+            {!isMobile && !searchQuery.length && (
+              <div className="pointer-events-none absolute left-10 right-20 top-1/2 -translate-y-1/2 text-slate-500 text-[13px] select-none">
+                <span className="inline-flex items-center gap-2">
+                  <span className="whitespace-nowrap">
+                    {animatedHintText}
+                    {!prefersReduced && (
+                      <span className="ml-0.5 inline-block w-[1px] h-[1.2em] align-middle bg-slate-400 animate-caret-blink" />
+                    )}
+                  </span>
+                  <span className="hidden md:inline text-[11px] px-2 py-0.5 rounded bg-slate-100 border border-slate-200">
+                    {t('filters.search.tip')}
+                  </span>
                 </span>
-                <span className="hidden md:inline text-[11px] px-2 py-0.5 rounded bg-slate-100 border border-slate-200">
-                  {t('filters.search.tip')}
-                </span>
-              </span>
-            </div>
-          )}
+              </div>
+            )}
 
             <FaSearch
               className={cls(
                 "absolute left-3 top-1/2 -translate-y-1/2 transition-all duration-200",
-                isSearchFocused ? "text-blue-500 translate-x-[1px] scale-110" : "text-slate-400 translate-x-0 scale-100"
+                isSearchFocused ? `${theme.accentIcon} translate-x-[1px] scale-110` : "text-slate-400 translate-x-0 scale-100"
               )}
               aria-hidden="true"
             />
@@ -795,8 +868,9 @@ useEffect(() => {
                 title={isHistoryPinned ? t('filters.search.hideHistory') : t('filters.search.showHistory')}
                 className={cls(
                   "h-8 w-8 rounded-lg border inline-flex items-center justify-center transition-all duration-200",
-                  "active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200",
-                  isHistoryPinned ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                  "active:scale-95 focus:outline-none",
+                  theme.primaryRing,
+                  isHistoryPinned ? `${theme.primaryBg} text-white border-transparent` : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                 )}
                 aria-pressed={isHistoryPinned}
               >
@@ -808,7 +882,11 @@ useEffect(() => {
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => setSearchQuery("")}
-                  className="h-8 w-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 inline-flex items-center justify-center transition-all duration-200 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
+                  className={cls(
+                    "h-8 w-8 rounded-lg border text-slate-600 bg-white hover:bg-slate-50 inline-flex items-center justify-center transition-all duration-200 active:scale-95 focus:outline-none",
+                    theme.primaryRing,
+                    "border-slate-200"
+                  )}
                   title={t('filters.search.clear')}
                 >
                   <FaTimes />
@@ -820,7 +898,12 @@ useEffect(() => {
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={handleSearch}
-                  className="h-8 px-3 rounded-lg bg-blue-600 text-white font-medium inline-flex items-center gap-2 transition-all duration-200 hover:bg-blue-700 hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
+                  className={cls(
+                    "h-8 px-3 rounded-lg text-white font-medium inline-flex items-center gap-2 transition-all duration-200 active:scale-[0.98] focus:outline-none",
+                    theme.primaryRing,
+                    theme.primaryBg,
+                    "hover:-translate-y-[1px]"
+                  )}
                   title={t('filters.search.execute')}
                 >
                   <FaRocket />
@@ -871,6 +954,25 @@ useEffect(() => {
 
           {/* Right controls */}
           <div className="flex items-center gap-2 ml-3">
+            {/* Thème */}
+            <label className="relative hidden md:hidden ">
+              <span className="sr-only">Theme</span>
+              <select
+                value={themeKey}
+                onChange={(e) => saveTheme(e.target.value)}
+                className={cls(
+                  "h-10 px-3 rounded-xl border bg-white text-sm cursor-pointer",
+                  "border-slate-200 focus:outline-none",
+                  theme.primaryRing
+                )}
+                title="Theme"
+              >
+                <option value="neutral">Neutral</option>
+                <option value="pro">Pro</option>
+                <option value="colored">Coloré</option>
+              </select>
+            </label>
+
             <div className="hidden sm:flex bg-white rounded-xl border border-slate-200 p-1" role="tablist">
               {[
                 { key: "grid", icon: FaThLarge, label: t('filters.view.grid') },
@@ -882,8 +984,9 @@ useEffect(() => {
                   onClick={() => setView(key)}
                   className={cls(
                     "h-8 px-3 rounded-lg text-sm inline-flex items-center gap-2 transition-colors",
-                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200",
-                    view === key ? "bg-blue-900 text-white" : "text-slate-700 hover:bg-slate-100"
+                    "focus:outline-none",
+                    theme.primaryRing,
+                    view === key ? `${theme.textAccent} bg-slate-100` : "text-slate-700 hover:bg-slate-100"
                   )}
                   title={label}
                   role="tab"
@@ -899,7 +1002,11 @@ useEffect(() => {
               <select
                 value={perPage}
                 onChange={(e) => setPerPage(Number(e.target.value))}
-                className="h-10 px-3 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition-all appearance-none cursor-pointer"
+                className={cls(
+                  "h-10 px-3 rounded-xl border bg-white text-sm focus:outline-none cursor-pointer",
+                  "border-slate-200",
+                  theme.primaryRing
+                )}
                 title={t('filters.itemsPerPage')}
               >
                 {[12, 24, 48, 96].map((count) => (
@@ -918,8 +1025,9 @@ useEffect(() => {
                 }}
                 className={cls(
                   "h-10 px-4 rounded-xl font-medium inline-flex items-center gap-2 border transition-colors",
-                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200",
-                  (isExpanded && !isMobile) ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-700 border-slate-200 hover:bg-blue-50 hover:border-blue-300"
+                  "focus:outline-none",
+                  theme.primaryRing,
+                  (isExpanded && !isMobile) ? `${theme.primaryBg} text-white border-transparent` : "bg-white text-slate-700 border-slate-200 hover:bg-blue-50 hover:border-blue-300"
                 )}
                 title={t('filters.toggleFilters')}
                 aria-expanded={isExpanded}
@@ -929,7 +1037,13 @@ useEffect(() => {
                 <FaFilter aria-hidden="true" />
                 <span className="hidden sm:inline">{t('filters.filters')}</span>
                 {activeFiltersCount > 0 && (
-                  <span className="inline-flex ml-1 items-center justify-center text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-600 text-white">
+                  <span
+                    className={cls(
+                      "inline-flex ml-1 items-center justify-center text-[11px] font-semibold px-2 py-0.5 rounded-full text-white",
+                      "animate-bounce",
+                      theme.badgeBg
+                    )}
+                  >
                     {activeFiltersCount}
                   </span>
                 )}
@@ -942,7 +1056,11 @@ useEffect(() => {
             <button
               type="button"
               onClick={() => window.dispatchEvent(new CustomEvent("articlelib:export"))}
-              className="h-10 w-10 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center transition-transform active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
+              className={cls(
+                "h-10 w-10 rounded-xl border bg-white text-slate-700 inline-flex items-center justify-center transition-transform active:scale-[0.97] focus:outline-none",
+                theme.primaryRing,
+                "border-slate-200 hover:bg-slate-100"
+              )}
               title={t('filters.export')}
             >
               <FaDownload aria-hidden="true" />
@@ -956,26 +1074,33 @@ useEffect(() => {
         id="filters-panel"
         ref={wrapperRef}
         style={{ height: !isMobile ? (isExpanded ? height : 0) : 0 }}
-        className="transition-[height] duration-300 ease-out overflow-hidden border-t border-blue-100"
+        className={cls(
+          "transition-[height] duration-300 ease-out overflow-hidden border-t",
+          theme.borderSoft
+        )}
         aria-hidden={!isExpanded || isMobile}
       >
         <div ref={contentRef}>
           {isExpanded && !isMobile && (
-            <div ref={dropdownRef} className="bg-gradient-to-b from-blue-50 to-white">
-              {/* Pills */}
+            <div ref={dropdownRef} className={cls("bg-gradient-to-b to-white", theme.headerFrom)}>
+              {/* Pills + Scroll-shadows */}
               <div className="relative">
+                {/* Gradients left/right (scroll-shadows) */}
+                <div className="pointer-events-none absolute left-0 top-0 h-full w-6 bg-gradient-to-r from-white to-transparent" />
+                <div className="pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-white to-transparent" />
+
                 <div
                   ref={pillsScrollerRef}
                   className="px-6 pt-4 pb-2 flex gap-2 overflow-x-auto no-scrollbar"
                   style={{ scrollbarWidth: "none" }}
                 >
-                  <Pill label={t('filters.categories')} icon={<FaTag />} open={activeMenu === "categories"} onToggle={() => setActiveMenu(activeMenu === "categories" ? null : "categories")} badge={(localFilters.categories || []).length} />
-                  <Pill label={t('filters.tags')}        icon={<FaTag />} open={activeMenu === "tags"}        onToggle={() => setActiveMenu(activeMenu === "tags" ? null : "tags")}       badge={(localFilters.tags || []).length} />
-                  <Pill label={t('filters.authors')}     icon={<FaUser />} open={activeMenu === "authors"}     onToggle={() => setActiveMenu(activeMenu === "authors" ? null : "authors")} badge={(localFilters.authors || []).length} />
-                  <Pill label={t('filters.options')}     icon={<FaFilter />} open={activeMenu === "options"}   onToggle={() => setActiveMenu(activeMenu === "options" ? null : "options")} />
-                  <Pill label={t('filters.dates')}       icon={<FaCalendar />} open={activeMenu === "dates"}   onToggle={() => setActiveMenu(activeMenu === "dates" ? null : "dates")}     badge={localFilters.dateFrom || localFilters.dateTo ? 1 : 0} />
-                  <Pill label={t('filters.rating')}      icon={<FaThumbsUp />} open={activeMenu === "rating"}  onToggle={() => setActiveMenu(activeMenu === "rating" ? null : "rating")}   badge={(localFilters.ratingMin > 0 || localFilters.ratingMax < 5) ? 1 : 0} />
-                  <Pill label={t('filters.saved')}       icon={<FaBookmark />} open={activeMenu === "saved"}   onToggle={() => setActiveMenu(activeMenu === "saved" ? null : "saved")} />
+                  <Pill theme={theme} label={t('filters.categories')} icon={<FaTag />} open={activeMenu === "categories"} onToggle={() => setActiveMenu(activeMenu === "categories" ? null : "categories")} badge={(localFilters.categories || []).length} />
+                  <Pill theme={theme} label={t('filters.tags')}        icon={<FaTag />} open={activeMenu === "tags"}        onToggle={() => setActiveMenu(activeMenu === "tags" ? null : "tags")}       badge={(localFilters.tags || []).length} />
+                  <Pill theme={theme} label={t('filters.authors')}     icon={<FaUser />} open={activeMenu === "authors"}     onToggle={() => setActiveMenu(activeMenu === "authors" ? null : "authors")} badge={(localFilters.authors || []).length} />
+                  <Pill theme={theme} label={t('filters.options')}     icon={<FaFilter />} open={activeMenu === "options"}   onToggle={() => setActiveMenu(activeMenu === "options" ? null : "options")} />
+                  <Pill theme={theme} label={t('filters.dates')}       icon={<FaCalendar />} open={activeMenu === "dates"}   onToggle={() => setActiveMenu(activeMenu === "dates" ? null : "dates")}     badge={localFilters.dateFrom || localFilters.dateTo ? 1 : 0} />
+                  <Pill theme={theme} label={t('filters.rating')}      icon={<FaThumbsUp />} open={activeMenu === "rating"}  onToggle={() => setActiveMenu(activeMenu === "rating" ? null : "rating")}   badge={(localFilters.ratingMin > 0 || localFilters.ratingMax < 5) ? 1 : 0} />
+                  <Pill theme={theme} label={t('filters.saved')}       icon={<FaBookmark />} open={activeMenu === "saved"}   onToggle={() => setActiveMenu(activeMenu === "saved" ? null : "saved")} />
 
                   <div className="ml-auto flex gap-2 pl-4">
                     <button
@@ -983,19 +1108,27 @@ useEffect(() => {
                       onClick={toggleCardColor}
                       className={cls(
                         "h-10 w-10 rounded-xl border inline-flex items-center justify-center transition-colors",
-                        "bg-white border-slate-200 hover:bg-slate-50"
+                        "bg-white border-slate-200 hover:bg-slate-50",
+                        theme.primaryRing
                       )}
-                      title={cardColorEnabled ? (t('filters.cardsColor.disable') || 'Désactiver les couleurs')
-                                              : (t('filters.cardsColor.enable')  || 'Activer les couleurs')}
+                      title={
+                        cardColorEnabled
+                          ? (t('filters.cardsColor.disable') || 'Désactiver les couleurs')
+                          : (t('filters.cardsColor.enable')  || 'Activer les couleurs')
+                      }
                       aria-pressed={cardColorEnabled}
                     >
-                      <FaPalette className={cls("text-base", cardColorEnabled ? "text-blue-600" : "text-black")} />
+                      <FaPalette className={cls("text-base", theme.accentIcon)} />
                     </button>
 
                     <button
                       type="button"
                       onClick={handleResetFilters}
-                      className="h-10 px-3 rounded-xl border inline-flex items-center gap-2 transition-colors bg-white text-slate-700 border-slate-200 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
+                      className={cls(
+                        "h-10 px-3 rounded-xl border inline-flex items-center gap-2 transition-colors bg-white text-slate-700 hover:bg-slate-100 focus:outline-none",
+                        theme.primaryRing,
+                        "border-slate-200"
+                      )}
                       title={t('filters.resetAll')}
                     >
                       <FaEraser aria-hidden="true" />
@@ -1004,7 +1137,11 @@ useEffect(() => {
                     <button
                       type="button"
                       onClick={handleApplyFilters}
-                      className="h-10 px-4 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 inline-flex items-center gap-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
+                      className={cls(
+                        "h-10 px-4 rounded-xl text-white font-medium inline-flex items-center gap-2 transition-colors focus:outline-none",
+                        theme.primaryRing,
+                        theme.primaryBg
+                      )}
                       title={t('filters.apply')}
                     >
                       <FaRocket aria-hidden="true" />
@@ -1017,8 +1154,9 @@ useEffect(() => {
               {/* Sections */}
               <div className="px-6 pb-6 space-y-3">
                 <FilterSection
+                  theme={theme}
                   visible={activeMenu === "categories"}
-                  title={t('filters.categories')}
+                  title={`${t('filters.categories')} ${localFilters.categories.length ? `(${localFilters.categories.length})` : ''}`}
                   onClear={localFilters.categories.length ? () => setLocalFilters(p => ({ ...p, categories: [] })) : undefined}
                 >
                   <div className="mb-2 max-w-sm">
@@ -1030,7 +1168,7 @@ useEffect(() => {
                     />
                   </div>
                   {catLoading ? (
-                    <div className="text-sm text-slate-500">{t('common.loading')}…</div>
+                    <SkeletonChips />
                   ) : catError ? (
                     <div className="text-sm text-rose-600">{t('filters.errors.loadCategories') || "Impossible de charger les catégories."}</div>
                   ) : (
@@ -1039,8 +1177,9 @@ useEffect(() => {
                 </FilterSection>
 
                 <FilterSection
+                  theme={theme}
                   visible={activeMenu === "tags"}
-                  title={t('filters.tags')}
+                  title={`${t('filters.tags')} ${localFilters.tags.length ? `(${localFilters.tags.length})` : ''}`}
                   onClear={localFilters.tags.length ? () => setLocalFilters(p => ({ ...p, tags: [] })) : undefined}
                 >
                   <div className="mb-2 max-w-sm">
@@ -1052,7 +1191,7 @@ useEffect(() => {
                     />
                   </div>
                   {tagLoading ? (
-                    <div className="text-sm text-slate-500">{t('common.loading')}…</div>
+                    <SkeletonChips />
                   ) : tagError ? (
                     <div className="text-sm text-rose-600">{t('filters.errors.loadTags') || "Impossible de charger les tags."}</div>
                   ) : (
@@ -1060,11 +1199,17 @@ useEffect(() => {
                   )}
                 </FilterSection>
 
-                <FilterSection visible={activeMenu === "authors"} title={t('filters.authors')} onClear={localFilters.authors.length ? () => setLocalFilters(p => ({ ...p, authors: [] })) : undefined}>
+                <FilterSection
+                  theme={theme}
+                  visible={activeMenu === "authors"}
+                  title={`${t('filters.authors')} ${localFilters.authors.length ? `(${localFilters.authors.length})` : ''}`}
+                  onClear={localFilters.authors.length ? () => setLocalFilters(p => ({ ...p, authors: [] })) : undefined}
+                >
                   {renderOptionChips(safeAuthors, 'authors')}
                 </FilterSection>
 
                 <FilterSection
+                  theme={theme}
                   visible={activeMenu === "options"}
                   title={t('filters.quickOptions')}
                   onClear={(localFilters.featuredOnly || localFilters.stickyOnly || localFilters.unreadOnly)
@@ -1072,20 +1217,30 @@ useEffect(() => {
                     : undefined}
                 >
                   <div className="flex flex-wrap gap-3">
-                    <ToggleButton active={localFilters.featuredOnly} onClick={() => setLocalFilters(prev => ({ ...prev, featuredOnly: !prev.featuredOnly }))} icon={<FaStar />} label={t('filters.featuredOnly')} />
-                    <ToggleButton active={localFilters.stickyOnly}   onClick={() => setLocalFilters(prev => ({ ...prev, stickyOnly: !prev.stickyOnly }))}   icon={<FaThumbtack />} label={t('filters.pinnedOnly')} />
-                    <ToggleButton active={localFilters.unreadOnly}   onClick={() => setLocalFilters(prev => ({ ...prev, unreadOnly: !prev.unreadOnly }))}   icon={<FaEye />} label={t('filters.unreadOnly')} />
+                    <ToggleButton theme={theme} active={localFilters.featuredOnly} onClick={() => setLocalFilters(prev => ({ ...prev, featuredOnly: !prev.featuredOnly }))} icon={<FaStar />} label={t('filters.featuredOnly')} />
+                    <ToggleButton theme={theme} active={localFilters.stickyOnly}   onClick={() => setLocalFilters(prev => ({ ...prev, stickyOnly: !prev.stickyOnly }))}   icon={<FaThumbtack />} label={t('filters.pinnedOnly')} />
+                    <ToggleButton theme={theme} active={localFilters.unreadOnly}   onClick={() => setLocalFilters(prev => ({ ...prev, unreadOnly: !prev.unreadOnly }))}   icon={<FaEye />} label={t('filters.unreadOnly')} />
                   </div>
                 </FilterSection>
 
-                <FilterSection visible={activeMenu === "dates"} title={t('filters.dates')} onClear={(localFilters.dateFrom || localFilters.dateTo) ? () => setLocalFilters(p => ({ ...p, dateFrom: "", dateTo: "" })) : undefined}>
+                <FilterSection
+                  theme={theme}
+                  visible={activeMenu === "dates"}
+                  title={t('filters.dates')}
+                  onClear={(localFilters.dateFrom || localFilters.dateTo) ? () => setLocalFilters(p => ({ ...p, dateFrom: "", dateTo: "" })) : undefined}
+                >
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <InputWithIcon icon={<FaCalendar />} type="date" label={t('filters.startDate')} value={localFilters.dateFrom} onChange={(value) => setLocalFilters(prev => ({ ...prev, dateFrom: value }))} />
                     <InputWithIcon icon={<FaCalendar />} type="date" label={t('filters.endDate')}   value={localFilters.dateTo}   onChange={(value) => setLocalFilters(prev => ({ ...prev, dateTo: value }))} />
                   </div>
                 </FilterSection>
 
-                <FilterSection visible={activeMenu === "rating"} title={t('filters.rating')} onClear={(localFilters.ratingMin > 0 || localFilters.ratingMax < 5) ? () => setLocalFilters(p => ({ ...prev, ratingMin: 0, ratingMax: 5 })) : undefined}>
+                <FilterSection
+                  theme={theme}
+                  visible={activeMenu === "rating"}
+                  title={t('filters.rating')}
+                  onClear={(localFilters.ratingMin > 0 || localFilters.ratingMax < 5) ? () => setLocalFilters(p => ({ ...p, ratingMin: 0, ratingMax: 5 })) : undefined}
+                >
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <InputWithIcon icon={<FaThumbsUp />} type="number" min="0" max="5" step="0.1" placeholder={t('filters.minRating')} label={t('filters.minRating')} value={localFilters.ratingMin}
                       onChange={(value) => setLocalFilters(prev => ({ ...prev, ratingMin: Math.min(5, Math.max(0, parseFloat(value) || 0)) }))} />
@@ -1095,13 +1250,18 @@ useEffect(() => {
                 </FilterSection>
 
                 <FilterSection
+                  theme={theme}
                   visible={activeMenu === "saved"}
                   title={t('filters.savedFilters')}
                   action={
                     <button
                       type="button"
                       onClick={() => { setSaveModalName(generateSuggestedName()); setShowSaveModal(true); }}
-                      className="h-9 px-3 rounded-lg bg-blue-600 text-white inline-flex items-center gap-2 hover:bg-blue-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
+                      className={cls(
+                        "h-9 px-3 rounded-lg text-white inline-flex items-center gap-2 transition-colors focus:outline-none",
+                        theme.primaryRing,
+                        theme.primaryBg
+                      )}
                       title={t('filters.saveCurrent')}
                     >
                       <FaSave aria-hidden="true" />
@@ -1114,10 +1274,49 @@ useEffect(() => {
                       {t('filters.noSavedFilters')}
                     </div>
                   ) : (
-                    <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       {savedFilters.map((sf) => (
-                        <div key={sf.id} className="py-2 flex items-center justify-between gap-3">
-                          <div className="flex-1 min-w-0">
+                        <div
+                          key={sf.id}
+                          className="rounded-xl border border-slate-200 bg-white p-3 hover:shadow-md transition"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium truncate">{sf.name}</div>
+                              <div className="text-xs text-slate-500 mt-0.5">
+                                {t('filters.createdOn')} {new Date(sf.createdAt).toLocaleDateString()}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => { deleteFilter(sf.id); showToast(t('filters.toasts.filterDeleted'), "success"); }}
+                              className="text-red-500 hover:text-red-700 transition-colors p-1 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-red-200"
+                              title={t('filters.deleteFilter', { name: sf.name })}
+                            >
+                              <FaTrash />
+                            </button>
+                          </div>
+
+                          {/* Aperçu des conditions */}
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {sf.filters?.featuredOnly && <span className="px-2 h-6 rounded bg-slate-100 text-xs inline-flex items-center gap-1"><FaStar className="text-[10px]" /> featured</span>}
+                            {sf.filters?.stickyOnly && <span className="px-2 h-6 rounded bg-slate-100 text-xs inline-flex items-center gap-1"><FaThumbtack className="text-[10px]" /> pinned</span>}
+                            {sf.filters?.unreadOnly && <span className="px-2 h-6 rounded bg-slate-100 text-xs inline-flex items-center gap-1"><FaEye className="text-[10px]" /> unread</span>}
+                            {!!(sf.filters?.categories?.length) && <span className="px-2 h-6 rounded bg-slate-100 text-xs">{sf.filters.categories.length} cat.</span>}
+                            {!!(sf.filters?.tags?.length) && <span className="px-2 h-6 rounded bg-slate-100 text-xs">{sf.filters.tags.length} tags</span>}
+                            {(sf.filters?.ratingMin > 0 || sf.filters?.ratingMax < 5) && (
+                              <span className="px-2 h-6 rounded bg-slate-100 text-xs">
+                                {sf.filters.ratingMin}–{sf.filters.ratingMax}★
+                              </span>
+                            )}
+                            {(sf.filters?.dateFrom || sf.filters?.dateTo) && (
+                              <span className="px-2 h-6 rounded bg-slate-100 text-xs">
+                                {sf.filters.dateFrom || "—"} → {sf.filters.dateTo || "—"}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="mt-3 flex items-center gap-2">
                             <button
                               type="button"
                               onClick={() => {
@@ -1127,23 +1326,17 @@ useEffect(() => {
                                 setActiveMenu(null);
                                 showToast(t('filters.toasts.filterLoaded', { name: sf.name }), "success");
                               }}
-                              className="text-left text-sm text-slate-800 hover:text-slate-900 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 rounded"
+                              className={cls(
+                                "h-9 px-3 rounded-lg text-white text-sm inline-flex items-center gap-2 transition-colors focus:outline-none",
+                                theme.primaryRing,
+                                theme.primaryBg
+                              )}
                               title={t('filters.loadFilter', { name: sf.name })}
                             >
-                              <div className="font-medium truncate">{sf.name}</div>
-                              <div className="text-xs text-slate-500">
-                                {t('filters.createdOn')} {new Date(sf.createdAt).toLocaleDateString()}
-                              </div>
+                              <FaRocket className="text-xs" />
+                              {t('filters.apply')}
                             </button>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => { deleteFilter(sf.id); showToast(t('filters.toasts.filterDeleted'), "success"); }}
-                            className="text-red-500 hover:text-red-700 transition-colors p-1 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-red-200"
-                            title={t('filters.deleteFilter', { name: sf.name })}
-                          >
-                            <FaTrash />
-                          </button>
                         </div>
                       ))}
                     </div>
@@ -1170,6 +1363,9 @@ useEffect(() => {
           cardColorEnabled={cardColorEnabled}
           toggleCardColor={toggleCardColor}
           t={t}
+          theme={theme}
+          themeKey={themeKey}
+          onThemeChange={saveTheme}
         />
       )}
 
@@ -1190,12 +1386,12 @@ useEffect(() => {
 // -------------------------------------------
 // Sub-components (desktop shared)
 // -------------------------------------------
-function FilterSection({ visible, title, children, onClear, action }) {
+function FilterSection({ visible, title, children, onClear, action, theme = THEME_STYLES.neutral }) {
   const { t } = useTranslation();
   if (!visible) return null;
   return (
     <div className="transition-all origin-top opacity-100 translate-y-0 scale-[1]">
-      <section className="rounded-2xl border border-blue-200 bg-white shadow-sm p-4">
+      <section className={cls("rounded-2xl bg-white shadow-sm p-4 border", theme.borderSoft)}>
         <header className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-slate-800">{title}</h3>
           <div className="flex items-center gap-2">
@@ -1204,8 +1400,12 @@ function FilterSection({ visible, title, children, onClear, action }) {
               <button
                 type="button"
                 onClick={onClear}
-                className="text-sm inline-flex items-center gap-2 text-slate-700 hover:text-slate-900 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 rounded px-2 py-1"
-                title={t('filters.resetSection', { section: title.toLowerCase() })}
+                className={cls(
+                  "text-sm inline-flex items-center gap-2 text-slate-700 transition-colors focus:outline-none rounded px-2 py-1 hover:bg-slate-50",
+                  "focus-visible:ring-2",
+                  theme.primaryRing
+                )}
+                title={t('filters.resetSection', { section: String(title).toLowerCase?.() || "" })}
               >
                 <FaEraser aria-hidden="true" />
                 <span>{t('filters.reset')}</span>
@@ -1330,7 +1530,7 @@ function MobileFiltersModalContent({
   localFilters, setLocalFilters,
   handleApplyFilters, handleResetFilters,
   cardColorEnabled, toggleCardColor,
-  t
+  t, theme, themeKey, onThemeChange
 }) {
   const sheetRef = useRef(null);
   const [openSection, setOpenSection] = useState("quick");
@@ -1340,7 +1540,6 @@ function MobileFiltersModalContent({
   const [tagLocalQuery, setTagLocalQuery] = useState("");
   const [authLocalQuery, setAuthLocalQuery] = useState("");
 
-  
   // Focus initial + swipe-to-close
   useEffect(() => {
     sheetRef.current?.querySelector("button, input, select")?.focus?.();
@@ -1402,14 +1601,29 @@ function MobileFiltersModalContent({
           <div className="flex items-center justify-between">
             <h3 className="text-base font-semibold">{t('filters.filters')}</h3>
             <div className="flex items-center gap-2">
+              {/* Select thème (mobile) */}
+              <label className="relative">
+                <span className="sr-only">Theme</span>
+                <select
+                  value={themeKey}
+                  onChange={(e) => onThemeChange?.(e.target.value)}
+                  className="h-9 px-2 rounded-lg border border-slate-200 bg-white text-sm"
+                  title="Theme"
+                >
+                  <option value="neutral">Neutral</option>
+                  <option value="pro">Pro</option>
+                  <option value="colored">Coloré</option>
+                </select>
+              </label>
+
               <button
                 type="button"
                 onClick={toggleCardColor}
                 className="h-9 w-9 rounded-lg border border-slate-200 bg-white inline-flex items-center justify-center hover:bg-slate-50"
-                title={cardColorEnabled ? (t('filters.cardsColor.disable') || 'Désactiver') : (t('filters.cardsColor.enable') || 'Activer')}
+                title="Couleurs cartes"
                 aria-pressed={cardColorEnabled}
               >
-                <FaPalette className={cls("text-base", cardColorEnabled ? "text-blue-600" : "text-black")} />
+                <FaPalette className={cls("text-base", theme.accentIcon)} />
               </button>
               <button
                 onClick={onClose}
@@ -1432,16 +1646,19 @@ function MobileFiltersModalContent({
           >
             <div className="flex gap-2 flex-wrap">
               <ToggleButton
+                theme={theme}
                 active={localFilters.featuredOnly}
                 onClick={() => setLocalFilters(p => ({ ...p, featuredOnly: !p.featuredOnly }))}
                 icon={<FaStar />} label={t('filters.featuredOnly')}
               />
               <ToggleButton
+                theme={theme}
                 active={localFilters.stickyOnly}
                 onClick={() => setLocalFilters(p => ({ ...p, stickyOnly: !p.stickyOnly }))}
                 icon={<FaThumbtack />} label={t('filters.pinnedOnly')}
               />
               <ToggleButton
+                theme={theme}
                 active={localFilters.unreadOnly}
                 onClick={() => setLocalFilters(p => ({ ...p, unreadOnly: !p.unreadOnly }))}
                 icon={<FaEye />} label={t('filters.unreadOnly')}
@@ -1453,7 +1670,7 @@ function MobileFiltersModalContent({
           <AccordionItem
             open={openSection === "categories"}
             onToggle={() => toggle("categories")}
-            title={t('filters.categories')}
+            title={`${t('filters.categories')} ${localFilters.categories.length ? `(${localFilters.categories.length})` : ''}`}
             onClear={localFilters.categories.length ? () => setLocalFilters(p => ({ ...p, categories: [] })) : undefined}
           >
             <div className="mb-2">
@@ -1476,7 +1693,7 @@ function MobileFiltersModalContent({
           <AccordionItem
             open={openSection === "tags"}
             onToggle={() => toggle("tags")}
-            title={t('filters.tags')}
+            title={`${t('filters.tags')} ${localFilters.tags.length ? `(${localFilters.tags.length})` : ''}`}
             onClear={localFilters.tags.length ? () => setLocalFilters(p => ({ ...p, tags: [] })) : undefined}
           >
             <div className="mb-2">
@@ -1499,7 +1716,7 @@ function MobileFiltersModalContent({
           <AccordionItem
             open={openSection === "authors"}
             onToggle={() => toggle("authors")}
-            title={t('filters.authors')}
+            title={`${t('filters.authors')} ${localFilters.authors.length ? `(${localFilters.authors.length})` : ''}`}
             onClear={localFilters.authors.length ? () => setLocalFilters(p => ({ ...p, authors: [] })) : undefined}
           >
             <div className="mb-2">
@@ -1575,7 +1792,6 @@ function MobileFiltersModalContent({
   );
 }
 
-
 function AccordionItem({ open, onToggle, title, children, onClear }) {
   return (
     <section className="rounded-xl border border-slate-200 overflow-hidden">
@@ -1614,13 +1830,18 @@ function AccordionItem({ open, onToggle, title, children, onClear }) {
 
 function ChipsGrid({ options = [], type, localFilters, setLocalFilters }) {
   if (!options || options.length === 0) {
-    return <div className="text-sm text-slate-500">—</div>;
+    return (
+      <div className="text-center p-8">
+        <div className="mx-auto mb-2 h-16 w-16 rounded-full bg-slate-100" aria-hidden="true" />
+        <p className="text-sm text-slate-500">—</p>
+      </div>
+    );
   }
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
       {options.map((opt) => {
         const id = String(opt.id);
-        const label = opt.name ?? `#${id}`;  // <-- corrige ici: const label =
+        const label = opt.name ?? `#${id}`;
         const isActive = (localFilters[type] || []).some((v) => String(v) === id);
         return (
           <button
@@ -1641,10 +1862,24 @@ function ChipsGrid({ options = [], type, localFilters, setLocalFilters }) {
             )}
             aria-pressed={isActive}
           >
-            {label}
+            <span className="inline-flex items-center gap-2">
+              {!isActive && <span className="h-2 w-2 rounded-full bg-slate-300" aria-hidden="true" />}
+              {isActive && <span className="h-2 w-2 rounded-full bg-blue-200" aria-hidden="true" />}
+              {label}
+            </span>
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function SkeletonChips() {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {Array.from({ length: 10 }).map((_, i) => (
+        <div key={i} className="h-7 w-20 rounded-lg bg-slate-200 animate-pulse" />
+      ))}
     </div>
   );
 }

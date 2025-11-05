@@ -65,6 +65,13 @@ function AuthInitializer({ children }) {
       .finally(() => setBooted(true));
   }, [dispatch]);
 
+
+  // Exemple (dans App.jsx ou RootLayout.jsx)
+useEffect(() => {
+  document.body.classList.add('desktop-scene');
+  return () => document.body.classList.remove('desktop-scene');
+}, []);
+
   if (!booted) return <BootScreen />;
   return children;
 }

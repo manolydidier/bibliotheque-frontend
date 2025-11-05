@@ -259,3 +259,51 @@
 
 /* (optionnel) Légère transparence pour le caret desktop */
 @keyframes caret-blink { 0%,49% { opacity: .85 } 50%,100% { opacity: 0 } }
+/* Blink du caret dans le hint */
+@keyframes caret-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.animate-caret-blink {
+  animation: caret-blink 1s steps(1) infinite;
+}
+
+/* Entrée des toasts */
+@keyframes toast-in {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+.animate-\[toast-in_240ms_ease-out\] {
+  animation: toast-in 240ms ease-out both;
+}
+
+/* Barre de progression des toasts */
+@keyframes toastbar {
+  from { transform: translateX(0%); }
+  to   { transform: translateX(-100%); }
+}
+.animate-\[toastbar_1\.8s_linear\] {
+  animation: toastbar 1.8s linear forwards;
+}
+
+/* Dropdown rapide */
+@keyframes dropdown-in {
+  from { transform: translateY(-4px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.animate-\[dropdown-in_.14s_ease-out\] {
+  animation: dropdown-in .14s ease-out both;
+}
+
+/* Bottom-sheet mobile */
+@keyframes sheet-in {
+  from { transform: translateY(12px); opacity: .98; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+.animate-sheet-in {
+  animation: sheet-in .18s ease-out both;
+}
+
+/* Petites aides utilitaires si besoin */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
