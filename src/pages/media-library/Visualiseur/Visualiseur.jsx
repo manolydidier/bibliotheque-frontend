@@ -438,44 +438,44 @@ export default function Visualiseur() {
 
 
   
- // ======= [PALETTE TOGGLE] État + logique =======
-const [cardColorEnabled, setCardColorEnabled] = useState(() => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.CARD_COLOR_ENABLED);
-    return raw == null ? true : JSON.parse(raw);
-  } catch { return true; }
-});
+  // ======= [PALETTE TOGGLE] État + logique =======
+  const [cardColorEnabled, setCardColorEnabled] = useState(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.CARD_COLOR_ENABLED);
+      return raw == null ? true : JSON.parse(raw);
+    } catch { return true; }
+  });
 
-// ✅ applique/retire la classe globale sur <html>
-const applyGlobalPalette = useCallback((enabled) => {
-  document.documentElement.classList.toggle("cards-colored", !!enabled);
-}, []);
+  // ✅ applique/retire la classe globale sur <html>
+  const applyGlobalPalette = useCallback((enabled) => {
+    document.documentElement.classList.toggle("cards-colored", !!enabled);
+  }, []);
 
-// ✅ synchronise l’état local avec la Toolbar via l’event
-useEffect(() => {
-  const onPref = (e) => {
-    const enabled = !!(e?.detail?.enabled);
-    setCardColorEnabled(enabled);        // reflète l’état (label/bouton local)
-    applyGlobalPalette(enabled);         // applique la classe globale
-  };
-  window.addEventListener("gridcard:colorpref", onPref);
-  return () => window.removeEventListener("gridcard:colorpref", onPref);
-}, [applyGlobalPalette]);
+  // ✅ synchronise l’état local avec la Toolbar via l’event
+  useEffect(() => {
+    const onPref = (e) => {
+      const enabled = !!(e?.detail?.enabled);
+      setCardColorEnabled(enabled);        // reflète l’état (label/bouton local)
+      applyGlobalPalette(enabled);         // applique la classe globale
+    };
+    window.addEventListener("gridcard:colorpref", onPref);
+    return () => window.removeEventListener("gridcard:colorpref", onPref);
+  }, [applyGlobalPalette]);
 
-// ✅ applique la classe au montage (si Visualiseur est la 1ère vue)
-useEffect(() => {
-  applyGlobalPalette(cardColorEnabled);
-}, [cardColorEnabled, applyGlobalPalette]);
+  // ✅ applique la classe au montage (si Visualiseur est la 1ère vue)
+  useEffect(() => {
+    applyGlobalPalette(cardColorEnabled);
+  }, [cardColorEnabled, applyGlobalPalette]);
 
-// (optionnel) si tu gardes le bouton local dans Visualiseur
-const toggleCardColor = useCallback(() => {
-  const next = !cardColorEnabled;
-  setCardColorEnabled(next);
-  try { localStorage.setItem(STORAGE_KEYS.CARD_COLOR_ENABLED, JSON.stringify(next)); } catch {}
-  applyGlobalPalette(next); // applique tout de suite
-  // notifie les autres vues (Grid, Toolbar, etc.)
-  window.dispatchEvent(new CustomEvent("gridcard:colorpref", { detail: { enabled: next } }));
-}, [cardColorEnabled, applyGlobalPalette]);
+  // (optionnel) si tu gardes le bouton local dans Visualiseur
+  const toggleCardColor = useCallback(() => {
+    const next = !cardColorEnabled;
+    setCardColorEnabled(next);
+    try { localStorage.setItem(STORAGE_KEYS.CARD_COLOR_ENABLED, JSON.stringify(next)); } catch {}
+    applyGlobalPalette(next); // applique tout de suite
+    // notifie les autres vues (Grid, Toolbar, etc.)
+    window.dispatchEvent(new CustomEvent("gridcard:colorpref", { detail: { enabled: next } }));
+  }, [cardColorEnabled, applyGlobalPalette]);
 
   // Aperçu rapide (modal indépendant des Tabs)
   const [qpOpen, setQpOpen] = useState(false);
@@ -497,23 +497,21 @@ const toggleCardColor = useCallback(() => {
   const toggleSidebar = useCallback(() => {
     setSidebarOpen((s) => !s);
   }, []);
-useEffect(() => {
-  if (!DL_DEBUG) return;
-  const onErr = (e) => dberr("window error", e.message, e);
-  const onRej = (e) => dberr("unhandledrejection", e.reason);
-  const onBU  = () => dbg("beforeunload fired (une navigation/refresh est déclenchée)");
-  window.addEventListener("error", onErr);
-  window.addEventListener("unhandledrejection", onRej);
-  window.addEventListener("beforeunload", onBU);
-  return () => {
-    window.removeEventListener("error", onErr);
-    window.removeEventListener("unhandledrejection", onRej);
-    window.removeEventListener("beforeunload", onBU);
-  };
-}, []);
 
-  // Sélecteur de langue
- 
+  useEffect(() => {
+    if (!DL_DEBUG) return;
+    const onErr = (e) => dberr("window error", e.message, e);
+    const onRej = (e) => dberr("unhandledrejection", e.reason);
+    const onBU  = () => dbg("beforeunload fired (une navigation/refresh est déclenchée)");
+    window.addEventListener("error", onErr);
+    window.addEventListener("unhandledrejection", onRej);
+    window.addEventListener("beforeunload", onBU);
+    return () => {
+      window.removeEventListener("error", onErr);
+      window.removeEventListener("unhandledrejection", onRej);
+      window.removeEventListener("beforeunload", onBU);
+    };
+  }, []);
 
   /* ------- Actions ------- */
   // Construit un "article-like" avec le média en tête (pour FilePreview)
@@ -538,96 +536,92 @@ useEffect(() => {
     setQpOpen(true);
   }, [selectedFile, article, buildArticleWith, t]);
 
- const filenameFrom = (u, fallback = 'fichier') => {
-  try {
-    const p = new URL(u, window.location.href).pathname;
-    const name = decodeURIComponent(p.split('/').pop() || '');
-    return name || fallback;
-  } catch { return fallback; }
-};
+  const filenameFrom = (u, fallback = 'fichier') => {
+    try {
+      const p = new URL(u, window.location.href).pathname;
+      const name = decodeURIComponent(p.split('/').pop() || '');
+      return name || fallback;
+    } catch { return fallback; }
+  };
 
-const sameOrigin = (u) => {
-  try {
-    const url = new URL(u, window.location.href);
-    return url.origin === window.location.origin;
-  } catch { return true; }
-};
+  const sameOrigin = (u) => {
+    try {
+      const url = new URL(u, window.location.href);
+      return url.origin === window.location.origin;
+    } catch { return true; }
+  };
 
-const downloadCurrent = async () => {
-  const u = selectedFile?.fileUrl || primaryMediaUrl(article);
-  if (!u) return;
+  const downloadCurrent = async () => {
+    const u = selectedFile?.fileUrl || primaryMediaUrl(article);
+    if (!u) return;
 
-  // --- Ping download avec Bearer si on a un token, sinon beacon public
-  try {
-    const fileId =
-      selectedFile?.id ??
-      (article?.media || []).find(m => toAbsolute(m.url) === u)?.id ??
-      null;
+    // --- Ping download avec Bearer si on a un token, sinon beacon public
+    try {
+      const fileId =
+        selectedFile?.id ??
+        (article?.media || []).find(m => toAbsolute(m.url) === u)?.id ??
+        null;
 
-    if (fileId) {
-      const url = api(`media/${fileId}/download`);
-      const payload = { dedupe_key: `${getOrCreateVuid()}:${(navigator.userAgent||'ua')}:${fileId}` };
-      const tokenGuard =localStorage.getItem("tokenGuard") || sessionStorage.getItem("tokenGuard") || null;
-      if (tokenGuard) {
-        await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${tokenGuard}`,
-          },
-          body: JSON.stringify(payload),
-          keepalive: true,
-        });
-      } else if (navigator.sendBeacon) {
-        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-        navigator.sendBeacon(url, blob); // route doit être publique dans ce cas
+      if (fileId) {
+        const url = api(`media/${fileId}/download`);
+        const payload = { dedupe_key: `${getOrCreateVuid()}:${(navigator.userAgent||'ua')}:${fileId}` };
+        const tokenGuard =localStorage.getItem("tokenGuard") || sessionStorage.getItem("tokenGuard") || null;
+        if (tokenGuard) {
+          await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': `Bearer ${tokenGuard}`,
+            },
+            body: JSON.stringify(payload),
+            keepalive: true,
+          });
+        } else if (navigator.sendBeacon) {
+          const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+          navigator.sendBeacon(url, blob); // route doit être publique dans ce cas
+        }
       }
+    } catch (e) {
+      // no-op
     }
-  } catch (e) {
-    // no-op
-  }
 
-  // --- Téléchargement
-  const name = selectedFile?.filename || selectedFile?.original_filename || filenameFrom(u);
+    // --- Téléchargement
+    const name = selectedFile?.filename || selectedFile?.original_filename || filenameFrom(u);
 
-  if (sameOrigin(u)) {
-    const a = document.createElement('a');
-    a.href = u;
-    a.download = name;
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    return;
-  }
+    if (sameOrigin(u)) {
+      const a = document.createElement('a');
+      a.href = u;
+      a.download = name;
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      return;
+    }
 
-  // Cross-origin (prod). Nécessite CORS côté backend si tu veux blob + Bearer.
-  try {
-    const res = await fetch(u, {
-      method: 'GET',
-      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      credentials: 'include', // selon ton besoin (JWT: pas obligatoire)
-    });
-    if (!res.ok) throw new Error('fetch failed');
-    const blob = await res.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = name;
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-  } catch {
-    window.open(u, '_blank', 'noopener'); // fallback
-  }
-};
-
-
-
-
+    // Cross-origin (prod). Nécessite CORS côté backend si tu veux blob + Bearer.
+    try {
+      const res = await fetch(u, {
+        method: 'GET',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        credentials: 'include', // selon ton besoin (JWT: pas obligatoire)
+      });
+      if (!res.ok) throw new Error('fetch failed');
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = name;
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } catch {
+      window.open(u, '_blank', 'noopener'); // fallback
+    }
+  };
 
   // Détermine le type à partir du mime OU de l'extension
   const typeFromMimeOrExt = (mime, url = "") => {
@@ -800,32 +794,26 @@ const downloadCurrent = async () => {
 
   useEffect(() => {}, [article?.visibility]);
 
-  // In Visualiseur.jsx
-useEffect(() => {
-  if (!article?.id) return;
+  // Comptage de vues (anti-spam local léger)
+  useEffect(() => {
+    if (!article?.id) return;
+    const visibility = String(article.visibility || '').toLowerCase();
+    if (visibility === 'private') return;
 
-  // On peut éviter de compter si l’article est privé et non accessible
-  const visibility = String(article.visibility || '').toLowerCase();
-  if (visibility === 'private') return;
+    const vuid  = getOrCreateVuid();
+    const ua    = (typeof navigator !== 'undefined' ? navigator.userAgent : 'ua');
+    const dkey  = `${vuid}:${ua}:${article.id}`;
 
-  const vuid  = getOrCreateVuid();
-  const ua    = (typeof navigator !== 'undefined' ? navigator.userAgent : 'ua');
-  const dkey  = `${vuid}:${ua}:${article.id}`;
+    const k = `viewed:${article.id}`;
+    const last = Number(sessionStorage.getItem(k) || 0);
+    if (Date.now() - last < 120000) return;
+    sessionStorage.setItem(k, String(Date.now()));
 
-  // (Optionnel) anti-spam local: 1 hit par 2 minutes
-  const k = `viewed:${article.id}`;
-  const last = Number(sessionStorage.getItem(k) || 0);
-  if (Date.now() - last < 120000) return; // 2 minutes
-  sessionStorage.setItem(k, String(Date.now()));
-
-  axios.post(`/articles/${article.id}/view`, {
-    dedupe_key: dkey,
-    delta: 1,
-    // ttl_seconds: 300, // si tu veux forcer un TTL spécifique
-  }).catch(() => {
-    // on ignore l'erreur pour ne pas gêner la lecture
-  });
-}, [article?.id, article?.visibility]);
+    axios.post(`/articles/${article.id}/view`, {
+      dedupe_key: dkey,
+      delta: 1,
+    }).catch(() => {});
+  }, [article?.id, article?.visibility]);
 
   /* ------- Ratings summary ------- */
   useEffect(() => {
@@ -926,6 +914,17 @@ useEffect(() => {
     url: typeof window !== "undefined" ? window.location.href : "",
     articleId: article?.id ?? null
   }), [article]);
+
+  // ==== commentaires sous l’article ====
+  const initialTopLevelApproved = React.useMemo(() => {
+    if (Array.isArray(article?.approved_comments)) {
+      return article.approved_comments.filter(c => c?.parent_id == null);
+    }
+    if (Array.isArray(article?.comments)) {
+      return article.comments.filter(c => c?.parent_id == null && c?.status === 'approved');
+    }
+    return [];
+  }, [article]);
 
   /* ------- Loading / errors / locks ------- */
   if (loading) {
@@ -1078,12 +1077,11 @@ useEffect(() => {
             {unlockError}
           </div>
         )}
-        {/* Bascule Sidebar (desktop) */}
-        <div className=" lg:block fixed left-3 top-[85px] z-40 group">
-          {/* Tooltip */}
-          <div className={`absolute left-12 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none ${
-            sidebarOpen ? 'hidden' : 'block'
-          }`}>
+
+        {/* Bascule Sidebar — TOUJOURS visible */}
+        <div className="fixed left-3 top-4 sm:top-[85px] z-[70] group">
+          {/* Tooltip (affiché seulement quand fermée) */}
+          <div className={`absolute left-12 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none ${sidebarOpen ? 'hidden' : 'block'}`}>
             <div className="bg-slate-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
               Ouvrir le menu
             </div>
@@ -1097,14 +1095,11 @@ useEffect(() => {
             aria-pressed={!sidebarOpen}
             className={`flex items-center gap-3 px-4 py-3 rounded-full border-2 bg-white hover:bg-blue-50 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 ${ACCENT.focus}`}
           >
-
-
             {sidebarOpen ? (
               <FaOutdent className="text-blue-600 text-lg" />
             ) : (
               <FaIndent className="text-blue-600 text-lg" />
             )}
-            
           </button>
         </div>
 
@@ -1118,13 +1113,12 @@ useEffect(() => {
               tags={article?.tags || []}
               mediaList={mediaList}
               selectedFile={selectedFile}
-              onSelectFile={setSelectedFile}            // la fermeture se fait dans Sidebar
+              onSelectFile={setSelectedFile}
               similar={similar}
               similarLoading={similarLoading}
               onOpenSimilar={(slugOrId) => {
                 setSelectedFile(null);
                 navigate(`/articles/${slugOrId}`);
-                // (la fermeture se fait aussi dans Sidebar après onOpenSimilar)
               }}
               onOpenTagManager={() => setTagModalOpen(true)}
               TagListComponent={TagList}
@@ -1132,74 +1126,99 @@ useEffect(() => {
               iconBgForType={iconBgForType}
               toAbsolute={toAbsolute}
             />
-
           )}
 
           {/* Main */}
-          <div className="flex-1  flex flex-col w-full">
+          <div className="flex-1 flex flex-col w-full">
             <div className="bg-white/60 backdrop-blur-xl rounded-2xl shadow-xl border border-white/40 overflow-hidden">
-             <div className={`sticky top-5 z-10 bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40 `}>
-              <div className={`absolute inset-x-0 -top-px h-px ${ACCENT.hairline}`} />
+              {/* Toolbar STICKY (déjà sticky) */}
+              <div className={`sticky top-5 z-50 bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40`}>
+                <div className={`absolute inset-x-0 -top-px h-px ${ACCENT.hairline}`} />
                 <Toolbar
                   onBack={() => navigate(-1)}
                   onRefresh={() => setActiveTab(t('visualiseur.tabs.preview'))}
                   onFullscreen={() => setFullscreen(true)}
                   onDownload={downloadCurrent}
                   shareData={shareData}
-                  global={true} 
+                  global={true}
                 />
-                
               </div>
 
-
-              <div className="flex gap-4 lg:gap-6 xl:gap-8">
+              {/* Grille : 1 col en mobile, + panneau Détails en >= lg */}
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)] gap-4 lg:gap-6 xl:gap-8 pt-2">
                 {/* Main panel */}
-                <div className="flex-1 min-w-0 border-r border-slate-200/30">
+                <div className="min-w-0 border-r border-slate-200/30">
                   <div className="p-5 sm:p-6 lg:p-8">
                     <Tabs list={tabs} active={activeTab} onChange={setActiveTab} />
-                    <div key={article?.id} ref={previewRef} className="file-preview-container min-h-[50vh]">
+                    <div key={article?.id} ref={previewRef} className="file-preview-container">
                       {activeTab === t('visualiseur.tabs.preview') && (
-                        <Apercu
-                          article={article}
-                          currentUrl={selectedFile?.fileUrl || currentUrl}
-                          currentType={selectedFile?.type || currentType}
-                          currentTitle={selectedFile?.title || currentTitle}
-                          onOpen={openInNew}
-                          onDownload={downloadCurrent}
-                        />
+                        <>
+                          <Apercu
+                            article={article}
+                            currentUrl={selectedFile?.fileUrl || currentUrl}
+                            currentType={selectedFile?.type || currentType}
+                            currentTitle={selectedFile?.title || currentTitle}
+                            onOpen={openInNew}
+                            onDownload={downloadCurrent}
+                          />
+
+                          {/* Commentaires SOUS l’article */}
+                          {article?.allow_comments !== false && (
+                            <div className="mt-8">
+                              <h3 className="text-xl font-medium text-slate-800 mb-4">
+                                {t('visualiseur.comments.title') ?? 'Commentaires'}
+                              </h3>
+                              <Comments
+                                key={article?.id}
+                                articleId={article?.id}
+                                initialComments={initialTopLevelApproved}
+                                meOverride={me}
+                                tokenOverride={token}
+                                rightsOverride={rights}
+                              />
+                            </div>
+                          )}
+                        </>
                       )}
+
                       {activeTab === t('visualiseur.tabs.media') && (
                         <Medias
                           mediaList={mediaList}
                           onPreview={(m) => { setQpFile(buildArticleWith(m)); setQpOpen(true); }}
                         />
                       )}
+
                       {activeTab === t('visualiseur.tabs.metadata') && (
                         <Metadonnees article={article} currentType={currentType} currentTitle={currentTitle} />
                       )}
+
                       {activeTab === t('visualiseur.tabs.versions') && hasHistory && <Versions history={article.history} />}
+
                       {activeTab === t('visualiseur.tabs.statistics') && <StatsCharts article={article} />}
+
                       {activeTab === t('visualiseur.tabs.seo') && <SeoPanel article={article} />}
                     </div>
                   </div>
                 </div>
 
-                {/* Right panel */}
-                <DetailsPanel
-                  article={article}
-                  currentType={currentType}
-                  currentTitle={currentTitle}
-                  selectedFile={selectedFile}
-                  me={me}
-                  token={token}
-                  rights={rights}
-                  onOpenRating={() => { setRatingMode("create"); setRatingOpen(true); }}
-                  onOpenRatingEdit={() => { setRatingMode("edit"); setRatingOpen(true); }}
-                  ratingAverage={article?.rating_average}
-                  ratingCount={article?.rating_count}
-                  myRating={myRating}
-                  ratingLoaded={ratingLoaded}
-                />
+                {/* Right panel — masqué en mobile */}
+                <div className="hidden lg:block">
+                  <DetailsPanel
+                    article={article}
+                    currentType={currentType}
+                    currentTitle={currentTitle}
+                    selectedFile={selectedFile}
+                    me={me}
+                    token={token}
+                    rights={rights}
+                    onOpenRating={() => { setRatingMode("create"); setRatingOpen(true); }}
+                    onOpenRatingEdit={() => { setRatingMode("edit"); setRatingOpen(true); }}
+                    ratingAverage={article?.rating_average}
+                    ratingCount={article?.rating_count}
+                    myRating={myRating}
+                    ratingLoaded={ratingLoaded}
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -1339,7 +1358,8 @@ function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDown
     article?.meta?.is_editing === true;
 
   return (
-    <div className="space-y-8 lg:space-y-10 overflow-auto max-h-screen relative">
+    // ⚠️ scroll global rétabli : plus de overflow-auto / max-h-screen ici
+    <div className="space-y-8 lg:space-y-10 relative">
       {isEdit && bgUrl && (
         <div
           aria-hidden
@@ -1363,17 +1383,17 @@ function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDown
             <p className="text-slate-600 mt-2 max-w-md mx-auto">{t('visualiseur.preview.addMedia')}</p>
           </div>
         ) : (
-         <div className={`bg-white/60 border border-slate-200/40 rounded-2xl overflow-hidden backdrop-blur-sm shadow-lg ${ACCENT.glowSoft}`}>
-    <FilePreview
-      file={{
-        ...article,
-        title: currentTitle || article?.title,
-        media: [{ url: currentUrl }, ...(article?.media || [])],
-        featured_image: undefined,
-      }}
-      activeTab={t('visualiseur.tabs.preview')}
-    />
-  </div>
+          <div className={`bg-white/60 border border-slate-200/40 rounded-2xl overflow-hidden backdrop-blur-sm shadow-lg ${ACCENT.glowSoft}`}>
+            <FilePreview
+              file={{
+                ...article,
+                title: currentTitle || article?.title,
+                media: [{ url: currentUrl }, ...(article?.media || [])],
+                featured_image: undefined,
+              }}
+              activeTab={t('visualiseur.tabs.preview')}
+            />
+          </div>
         )}
 
         {contentStr && (
@@ -1463,8 +1483,8 @@ function Medias({ mediaList, onPreview }) {
   const Card = ({ m }) => (
     <div
       key={m.id ?? m.fileUrl}
-       className={`rounded-2xl border border-slate-200/60 bg-white/70 backdrop-blur-sm p-4 hover:shadow-xl transition-all duration-300 w-64 ${ACCENT.glowSoft}`}
->
+      className={`rounded-2xl border border-slate-200/60 bg-white/70 backdrop-blur-sm p-4 hover:shadow-xl transition-all duration-300 w-64 ${ACCENT.glowSoft}`}
+    >
       <div className="flex items-center gap-3">
         <div className={`w-12 h-12 ${iconBgForType(m.type)} rounded-xl flex items-center justify-center`}>
           {iconForType(m.type, "text-lg")}
@@ -1495,7 +1515,7 @@ function Medias({ mediaList, onPreview }) {
       <div className="mt-3 flex items-center gap-2">
         <button
           onClick={() => onPreview?.(m)}
-         className={`px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm ${ACCENT.focus}`}
+          className={`px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm ${ACCENT.focus}`}
           title={t('visualiseur.media.preview')}
         >
           <FaEye className="inline -mt-0.5 mr-2" />
@@ -1614,7 +1634,6 @@ function Medias({ mediaList, onPreview }) {
             </span>
           ))}
           <button onClick={resetAll} className={`ml-1 text-[11px] font-semibold underline text-blue-700 ${ACCENT.focus}`}>
-
             {t('visualiseur.media.reset')}
           </button>
         </div>
@@ -1807,18 +1826,11 @@ function StatsCharts({ article }) {
     { name: t('visualiseur.statistics.ratings'), value: ratings, icon: <FaStar /> },
   ].filter(d => d.value > 0);
 
-  const tagsBarData = (article.tags || []).map(t => ({
-    name: t.name,
-    usage: Number(t.usage_count || 0)
-  })).filter(d => d.usage > 0);
-
   const actionsCount = (article.history || []).reduce((acc, h) => {
     const k = (h.action || t('visualiseur.other')).toLowerCase();
     acc[k] = (acc[k] || 0) + 1;
     return acc;
   }, {});
-
-  const historyBarData = Object.entries(actionsCount).map(([k, v]) => ({ name: k, count: v }));
 
   return (
     <div className="w-full bg-gradient-to-br from-slate-50/30 via-white/30 to-blue-50/30 backdrop-blur-sm rounded-2xl p-4 sm:p-6 lg:p-8">
@@ -1885,7 +1897,12 @@ function StatsCharts({ article }) {
             icon={engagementData.length ? <FaTag /> : <FaHistory />}>
             <div className="h-56 md:h-64 xl:h-72 2xl:h-[24rem]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={(article.tags || []).length ? (article.tags || []).map(t => ({ name: t.name, usage: Number(t.usage_count || 0) })) : Object.entries((article.history || []).reduce((acc, h) => { const k = (h.action || t('visualiseur.other')).toLowerCase(); acc[k] = (acc[k] || 0) + 1; return acc; }, {})).map(([k, v]) => ({ name: k, count: v }))} margin={{ top: 16, right: 16, left: 12, bottom: 52 }}>
+                <BarChart
+                  data={(article.tags || []).length
+                    ? (article.tags || []).map(t => ({ name: t.name, usage: Number(t.usage_count || 0) }))
+                    : Object.entries((article.history || []).reduce((acc, h) => { const k = (h.action || t('visualiseur.other')).toLowerCase(); acc[k] = (acc[k] || 0) + 1; return acc; }, {})).map(([k, v]) => ({ name: k, count: v }))}
+                  margin={{ top: 16, right: 16, left: 12, bottom: 52 }}
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" opacity={0.6} />
                   <XAxis
                     dataKey="name"
@@ -1959,16 +1976,6 @@ function DetailsPanel({
   ratingAverage, ratingCount, myRating, ratingLoaded
 }) {
   const { t } = useTranslation();
-  
-  const initialTopLevelApproved = useMemo(() => {
-    if (Array.isArray(article?.approved_comments)) {
-      return article.approved_comments.filter(c => c?.parent_id == null);
-    }
-    if (Array.isArray(article?.comments)) {
-      return article.comments.filter(c => c?.parent_id == null && c?.status === 'approved');
-    }
-    return [];
-  }, [article]);
 
   const statusLabel = (article?.status || "—").toString();
   const statusKey = statusLabel.toLowerCase();
@@ -2000,7 +2007,7 @@ function DetailsPanel({
             {iconForType(currentType, "text-lg")}
           </div>
 
-        <div className="min-w-0">
+          <div className="min-w-0">
             <h3 className="text-base font-semibold text-slate-900 truncate leading-tight">
               {currentTitle || t('visualiseur.untitled')}
             </h3>
@@ -2100,25 +2107,14 @@ function DetailsPanel({
 
           {article?.allow_rating !== false && (
             <div className={ACCENT.focus}>
-            <RateButton
-              onClick={ratingLoaded && typeof myRating === "number" ? onOpenRatingEdit : onOpenRating}
-              label={ratingLoaded && typeof myRating === "number" ? t('visualiseur.details.editRating') : t('visualiseur.details.rate')}
-            />
-          </div>
+              <RateButton
+                onClick={ratingLoaded && typeof myRating === "number" ? onOpenRatingEdit : onOpenRating}
+                label={ratingLoaded && typeof myRating === "number" ? t('visualiseur.details.editRating') : t('visualiseur.details.rate')}
+              />
+            </div>
           )}
         </div>
       </div>
-
-      {article?.allow_comments !== false && (
-        <Comments
-          key={article?.id}
-          articleId={article?.id}
-          initialComments={initialTopLevelApproved}
-          meOverride={me}
-          tokenOverride={token}
-          rightsOverride={rights}
-        />
-      )}
     </aside>
   );
 }

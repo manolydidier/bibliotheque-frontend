@@ -500,7 +500,7 @@ const AuthPage = ({ initialView = 'login' }) => {
         onClose={()=>setOtpOpen(false)}
       />
 
-      <div className="min-h-screen flex items-center justify-center p-4 bg-bleu-pale">
+      <div className="min-h-screen flex items-center justify-center p-4 bg-bleu-pale z-0">
         <div className="auth-container card flat" role="dialog" aria-modal="true" aria-labelledby="auth-title">
           <button
             onClick={toggleAuthMode}

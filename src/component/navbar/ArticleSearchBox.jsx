@@ -166,7 +166,7 @@ function createLRU(max = 30, ttlMs = 5 * 60 * 1000) {
       }
     },
     clear() { map.clear(); },
-    setTtl(ms) { /* optionnel si tu veux changer dynamiquement */ }
+    setTtl(ms) {}
   };
 }
 const queryCache = createLRU();
@@ -284,11 +284,11 @@ export default function ArticleSearchBox({
   placeholder = "Rechercher…",
   perPage = 8,
   className = "",
-  hotkey = "k",               // Ctrl/Cmd + K
-  openOnSlash = true,         // "/" pour ouvrir si pas dans un input
-  cacheTtlMs = 5 * 60 * 1000, // TTL cache
-  compactOnMobile = false,    // ✅ Variante compacte sous 480px
-  navbarHeightPx = 80,        // hauteur nav (h-20 = 80px)
+  hotkey = "k",
+  openOnSlash = true,
+  cacheTtlMs = 5 * 60 * 1000,
+  compactOnMobile = false,
+  navbarHeightPx = 80,
 
   /* ====== Auth guard ====== */
   requireAuth = false,
@@ -345,7 +345,6 @@ export default function ArticleSearchBox({
     const fromDom = () => {
       const out = [];
       try {
-        // Desktop nav
         document.querySelectorAll(".nav-links a[href]").forEach((a) => {
           const label = a.textContent?.trim() || a.getAttribute("aria-label") || "Page";
           const path = a.getAttribute("href");
@@ -354,11 +353,9 @@ export default function ArticleSearchBox({
           const r = normalizeRoute(label, path, section);
           if (r) out.push(r);
         });
-        // Drawer / quick access (mobile)
         document.querySelectorAll('#mobile-drawer a[href]').forEach((a) => {
           const label = a.textContent?.trim() || a.getAttribute("aria-label") || "Page";
           const path = a.getAttribute("href");
-          // Essayer d'inférer une section “Mobile”
           const section = a.closest('#mobile-drawer') ? 'Mobile' : null;
           const r = normalizeRoute(label, path, section);
           if (r) out.push(r);
@@ -427,13 +424,19 @@ export default function ArticleSearchBox({
 
   /* ===== Recherche articles avec cache + debounce ===== */
   const doSearch = useCallback(
-    async (query, f = { category, dateFrom, dateTo }) => {
+    async (query, filters = {}) => {
       if (mode !== "articles") return;
       if (disabled) {
         setItems([]); setErr(""); setLoading(false); setShowAuthHint(true); onRequireAuth(); return;
       }
 
-      const key = `${query}::${perPage}::${f.category||''}::${f.dateFrom||''}::${f.dateTo||''}`;
+      const actualFilters = {
+        category: filters.category || category,
+        dateFrom: filters.dateFrom || dateFrom,
+        dateTo: filters.dateTo || dateTo
+      };
+
+      const key = `${query}::${perPage}::${actualFilters.category||''}::${actualFilters.dateFrom||''}::${actualFilters.dateTo||''}`;
       const cached = queryCache.get(key);
       if (cached) { setItems(cached); setErr(""); setLoading(false); return; }
 
@@ -443,12 +446,12 @@ export default function ArticleSearchBox({
       setLoading(true); setErr(""); setShowHistory(false);
 
       try {
-        const arr = await searchArticles(query, ctrl.signal, perPage, f);
+        const arr = await searchArticles(query, ctrl.signal, perPage, actualFilters);
         const filtered = arr.filter(it => {
-          const okCat = !f.category || (it.category || '').toLowerCase() === f.category.toLowerCase();
+          const okCat = !actualFilters.category || (it.category || '').toLowerCase() === actualFilters.category.toLowerCase();
           const ts = it.published_at ? Date.parse(it.published_at) : null;
-          const okFrom = !f.dateFrom || (ts && ts >= Date.parse(f.dateFrom));
-          const okTo   = !f.dateTo   || (ts && ts <= Date.parse(f.dateTo + 'T23:59:59'));
+          const okFrom = !actualFilters.dateFrom || (ts && ts >= Date.parse(actualFilters.dateFrom));
+          const okTo   = !actualFilters.dateTo   || (ts && ts <= Date.parse(actualFilters.dateTo + 'T23:59:59'));
           return okCat && okFrom && okTo;
         });
         setItems(filtered);
@@ -476,13 +479,15 @@ export default function ArticleSearchBox({
       setShowHistory((useCompact || open) && hasHistory);
       return;
     }
-    if (debRef.current) clearTimeout(debRef.current);
+    if (debRef.current) {
+      clearTimeout(debRef.current);
+      debRef.current = null;
+    }
 
     debRef.current = setTimeout(() => {
       if (mode === "articles") {
         doSearch(q.trim());
       } else {
-        // mode routes : rien à fetch
         setLoading(false);
         setErr("");
       }
@@ -576,11 +581,9 @@ export default function ArticleSearchBox({
         return;
       }
 
-      // mode articles
       if (showHistory && searchHistory[highlight]) {
         const historyItem = searchHistory[highlight];
-        setQ(historyItem.query);
-        doSearch(historyItem.query);
+        handleHistoryClick(historyItem.query);
       } else if (!showHistory && items[highlight]) {
         const newTab = e.ctrlKey || e.metaKey;
         goToArticle(items[highlight], newTab);
@@ -617,6 +620,26 @@ export default function ArticleSearchBox({
     if (newTab) window.open(item.path, "_blank", "noopener,noreferrer");
     else navigate(item.path);
   };
+
+  /* ===== Fonction pour clic sur historique (FIX) ===== */
+  const handleHistoryClick = useCallback((query) => {
+    setQ(query);
+    setShowHistory(false);
+
+    // Annuler le debounce en cours
+    if (debRef.current) {
+      clearTimeout(debRef.current);
+      debRef.current = null;
+    }
+
+    // Lancer la recherche après le cycle de setState pour éviter la collision avec useEffect([q])
+    setLoading(true);
+    setTimeout(() => {
+      doSearch(query);
+    }, 0);
+
+    inputRef.current?.focus();
+  }, [doSearch]);
 
   /* ===== Ouvrir / fermer (overlay) ===== */
   const openAndFocus = () => {
@@ -757,18 +780,61 @@ export default function ArticleSearchBox({
             {/* Header + toggle + bouton filtres */}
             <div className="px-4 py-2 text-xs text-gray-600 bg-gray-50 border-b flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <button
-                  className={`px-2 py-1 rounded-full ${mode==='articles'?'bg-blue-600 text-white':'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                  onClick={()=> setMode('articles')}
+                <div 
+                  className="relative bg-black/10 backdrop-blur-md border border-white/20 rounded-2xl p-1.5"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    backdropFilter: 'blur(20px)',
+                    WebkitBackdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)'
+                  }}
                 >
-                  Articles
-                </button>
-                <button
-                  className={`px-2 py-1 rounded-full ${mode==='routes'?'bg-blue-600 text-white':'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                  onClick={()=> setMode('routes')}
-                >
-                  Navigation
-                </button>
+                  <div
+                    className={`absolute top-1.5 bottom-1.5 rounded-xl transition-all duration-300 ease-out ${
+                      mode === 'articles' ? 'left-1.5' : 'left-[calc(100%-3rem-1.5px)]'
+                    }`}
+                    style={{
+                      width: 'calc(50% - 6px)',
+                      background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.15))',
+                      backdropFilter: 'blur(20px)',
+                      WebkitBackdropFilter: 'blur(20px)',
+                      border: '1px solid rgba(255, 255, 255, 0.3)',
+                      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1) inset',
+                    }}
+                  >
+                    <div 
+                      className="absolute inset-0 rounded-xl"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, transparent 50%)',
+                        mixBlendMode: 'overlay'
+                      }}
+                    />
+                  </div>
+
+                  <div className="relative z-10 flex items-center justify-between">
+                    <button
+                      onClick={() => setMode('articles')}
+                      className={`flex-1 text-center py-2 px-4 text-sm font-medium transition-all duration-300 rounded-lg ${
+                        mode === 'articles' 
+                          ? 'text-blue-600 font-semibold' 
+                          : 'text-white/80 hover:text-white'
+                      }`}
+                    >
+                      Articles
+                    </button>
+                    <button
+                      onClick={() => setMode('routes')}
+                      className={`flex-1 text-center py-2 px-4 text-sm font-medium transition-all duration-300 rounded-lg ${
+                        mode === 'routes' 
+                          ? 'text-blue-600 font-semibold' 
+                          : 'text-white/80 hover:text-white'
+                      }`}
+                    >
+                      Navigation
+                    </button>
+                  </div>
+                </div>
               </div>
               {mode==='articles' && !showHistory && (
                 <button
@@ -810,11 +876,7 @@ export default function ArticleSearchBox({
                       }`}
                       onMouseEnter={() => setHighlight(idx)}
                       onMouseLeave={() => setHighlight(-1)}
-                      onClick={() => {
-                        setQ(item.query);
-                        setShowHistory(false);
-                        doSearch(item.query);
-                      }}
+                      onClick={() => handleHistoryClick(item.query)}
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3 truncate">
@@ -999,7 +1061,7 @@ export default function ArticleSearchBox({
   /* ===================== RENDER – OVERLAY ===================== */
   const overlay = open ? (
     <div ref={overlayRef}>
-      <div className="fixed inset-0 z-[9999] animate-fadeIn">
+      <div className="fixed inset-0 z-[99990] animate-fadeIn">
         <div className="absolute inset-0 bg-black/40 backdrop-blur-md" onClick={handleClose} />
         <div
           className="absolute top-8 left-1/2 -translate-x-1/2 w-[95vw] max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100"
@@ -1048,17 +1110,40 @@ export default function ArticleSearchBox({
               )}
 
               {/* Onglets */}
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-                <button
-                  className={`text-[12px] px-2 py-1 rounded ${mode==='articles'?'bg-blue-600 text-white':'bg-gray-100 text-gray-700'} border`}
-                  onClick={()=> setMode('articles')}
-                  title="Articles"
-                >Articles</button>
-                <button
-                  className={`text-[12px] px-2 py-1 rounded ${mode==='routes'?'bg-blue-600 text-white':'bg-gray-100 text-gray-700'} border`}
-                  onClick={()=> setMode('routes')}
-                  title="Navigation"
-                >Navigation</button>
+              <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                <div className="relative bg-blue-50/80 backdrop-blur-sm border border-blue-200 rounded-xl p-1">
+                  <div
+                    className={`absolute top-1 bottom-1 rounded-lg bg-white shadow-sm transition-all duration-300 ease-out ${
+                      mode === 'articles' ? 'left-1' : 'left-[calc(100%-4.5rem)]'
+                    }`}
+                    style={{ width: 'calc(50% - 8px)' }}
+                  />
+                  
+                  <div className="relative z-10 flex items-center">
+                    <button
+                      onClick={() => setMode('articles')}
+                      className={`text-[12px] px-3 py-1.5 font-medium transition-colors duration-200 rounded ${
+                        mode === 'articles' 
+                          ? 'text-blue-700' 
+                          : 'text-blue-600 hover:text-blue-800'
+                      }`}
+                      title="Articles"
+                    >
+                      Articles
+                    </button>
+                    <button
+                      onClick={() => setMode('routes')}
+                      className={`text-[12px] px-3 py-1.5 font-medium transition-colors duration-200 rounded ${
+                        mode === 'routes' 
+                          ? 'text-blue-700' 
+                          : 'text-blue-600 hover:text-blue-800'
+                      }`}
+                      title="Navigation"
+                    >
+                      Navigation
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1098,7 +1183,7 @@ export default function ArticleSearchBox({
 
           {/* Liste */}
           <div ref={listRef} id="article-search-listbox" role="listbox" className="max-h-[70vh] overflow-auto">
-            {/* Historique */}
+            {/* Historique dans l'overlay */}
             {mode==='articles' && showHistory && hasHistory && (
               <div>
                 <div className="flex items-center justify-between px-6 py-3 bg-gray-50">
@@ -1127,12 +1212,7 @@ export default function ArticleSearchBox({
                       }`}
                       onMouseEnter={() => setHighlight(idx)}
                       onMouseLeave={() => setHighlight(-1)}
-                      onClick={() => {
-                        setQ(item.query);
-                        setShowHistory(false);
-                        doSearch(item.query);
-                        inputRef.current?.focus();
-                      }}
+                      onClick={() => handleHistoryClick(item.query)}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4 min-w-0 flex-1">

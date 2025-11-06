@@ -497,7 +497,7 @@ export default function ArticleLibrary({
         </div>
       )}
 
-      <div className="mt-6 text-xs text-slate-500 flex justify-between items-center">
+      {/* <div className="mt-6 text-xs text-slate-500 flex justify-between items-center">
         <span>{viewRows.length} articles affichés sur {total} au total</span>
         {total > 0 && (
           <button
@@ -507,7 +507,7 @@ export default function ArticleLibrary({
             Exporter en CSV
           </button>
         )}
-      </div>
+      </div> */}
     </div>
   );
 }

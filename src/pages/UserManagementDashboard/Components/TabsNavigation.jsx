@@ -36,28 +36,50 @@ const ICONS = {
 
 const TabsNavigation = ({ tabs, activeTab, setActiveTab }) => {
   const { t } = useTranslation();
+  const activeIndex = tabs.findIndex(tab => tab.id === activeTab);
 
   return (
     <div className="mb-6">
-      <div className="border-b border-gray-200">
-        <nav
-          className="flex -mb-px space-x-8 overflow-x-auto pb-2"
-          role="tablist"
-          aria-label={t('tabs', 'Onglets')}
-        >
+      <div 
+        className="relative bg-white/80 backdrop-blur-md border border-white/50 rounded-xl p-2 inline-flex shadow-sm max-w-full overflow-x-auto"
+        style={{
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          minWidth: 'fit-content'
+        }}
+      >
+        {/* Knob glass */}
+        <div
+          className="absolute top-2 bottom-2 rounded-lg transition-all duration-300 ease-out"
+          style={{
+            width: `calc(100% / ${tabs.length} - 16px)`,
+            left: `calc(${activeIndex * (100 / tabs.length)}% + 8px)`,
+            background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05))',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(59, 130, 246, 0.2)',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+          }}
+        />
+        
+        {/* Options */}
+        <div className="relative z-10 flex min-w-max">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
-            const icon = ICONS[tab.icon] || faUser; // fallback si clé inconnue
+            const icon = ICONS[tab.icon] || faUser;
 
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)} // le parent mettra aussi à jour l’URL ?tab=
-                className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 ${
+                onClick={() => setActiveTab(tab.id)}
+                className={`text-sm px-6 py-3 font-medium transition-all duration-200 rounded-lg whitespace-nowrap flex items-center justify-center ${
                   isActive
-                    ? 'border-blue-500 text-blue-700'
-                    : 'border-transparent text-gray-600 hover:text-gray-800 hover:border-gray-300'
+                    ? "text-blue-600 font-semibold"
+                    : "text-gray-600 hover:text-gray-800"
                 }`}
+                style={{
+                  width: `${100 / tabs.length}%`,
+                  minWidth: '140px'
+                }}
                 role="tab"
                 aria-selected={isActive}
                 aria-current={isActive ? 'page' : undefined}
@@ -65,18 +87,14 @@ const TabsNavigation = ({ tabs, activeTab, setActiveTab }) => {
               >
                 <FontAwesomeIcon
                   icon={icon}
-                  className={`mr-2 ${isActive ? 'text-blue-600' : 'text-gray-400'}`}
+                  className={`mr-3 ${isActive ? 'text-blue-600' : 'text-gray-500'}`}
+                  size="sm"
                 />
                 {tab.label}
-                {isActive && (
-                  <span className="ml-2 bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full">
-                    {t('active', 'Actif')}
-                  </span>
-                )}
               </button>
             );
           })}
-        </nav>
+        </div>
       </div>
     </div>
   );

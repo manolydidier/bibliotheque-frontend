@@ -20,14 +20,24 @@ const ACTION_ICONS = {
   database: faDatabase,
 };
 
-// Niveaux d'accès (ex-“skills”), libellés et couleurs en bleu
+// Niveaux d'accès : dégradés bleus
 const LEVEL_COLORS = {
-  full:        { badge: 'from-blue-700 to-blue-800', bar: 'from-blue-600 to-blue-700' },   // ≥90%
-  advanced:    { badge: 'from-blue-600 to-blue-700', bar: 'from-blue-500 to-blue-600' },   // ≥70%
-  partial:     { badge: 'from-blue-500 to-blue-600', bar: 'from-blue-400 to-blue-500' },   // ≥40%
-  limited:     { badge: 'from-blue-300 to-blue-400', bar: 'from-blue-300 to-blue-400' },   // >0%
-  none:        { badge: 'from-gray-200 to-gray-300', bar: 'from-gray-200 to-gray-300' },   // 0
+  full:     { badge: 'from-blue-700 to-blue-800', bar: 'from-blue-600 to-blue-700' },   // ≥90%
+  advanced: { badge: 'from-blue-600 to-blue-700', bar: 'from-blue-500 to-blue-600' },   // ≥70%
+  partial:  { badge: 'from-blue-500 to-blue-600', bar: 'from-blue-400 to-blue-500' },   // ≥40%
+  limited:  { badge: 'from-blue-300 to-blue-400', bar: 'from-blue-300 to-blue-400' },   // >0%
+  none:     { badge: 'from-gray-200 to-gray-300', bar: 'from-gray-200 to-gray-300' },   // 0
 };
+
+// Libellés courts pour actions
+const shortActionLabel = (t, key) => ({
+  create: t('create_short','Créer'),
+  read:   t('read_short','Lire'),
+  update: t('update_short','Éditer'),
+  delete: t('delete_short','Suppr.'),
+  code:   t('code_short','Code'),
+  database: t('database_short','DB'),
+}[key] || t(key, key));
 
 export default function MyLibraryPermissionsDisplay({
   userId,
@@ -48,7 +58,7 @@ export default function MyLibraryPermissionsDisplay({
   });
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'grid'
 
-  // --- Recherche (UI + debounce)
+  // Recherche compacte (debounce)
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   useEffect(() => {
@@ -89,7 +99,7 @@ export default function MyLibraryPermissionsDisplay({
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Calcul du “niveau d’accès” par ressource
+  // Calcul niveau d'accès par ressource
   const allResources = useMemo(() => {
     const act = state.actions?.length ? state.actions : actions;
     return (state.resources || []).map(resource => {
@@ -115,21 +125,21 @@ export default function MyLibraryPermissionsDisplay({
   }, [allResources, debouncedQuery]);
 
   const rolesLabel = useMemo(() => {
-    if (!state.roles?.length) return t('no_roles', 'Aucun rôle');
+    if (!state.roles?.length) return t('no_roles_short', '—');
     return state.roles.map(r => r.name).join(', ');
   }, [state.roles, t]);
 
   const levelLabel = (lvl) => ({
-    full:     t('full_access', 'Accès complet'),
-    advanced: t('advanced_access', 'Accès avancé'),
-    partial:  t('partial_access', 'Accès partiel'),
-    limited:  t('limited_access', 'Accès limité'),
-    none:     t('no_access', 'Aucun accès'),
+    full:     t('full_access_short', 'Complet'),
+    advanced: t('advanced_access_short', 'Avancé'),
+    partial:  t('partial_access_short', 'Partiel'),
+    limited:  t('limited_access_short', 'Limité'),
+    none:     t('no_access_short', 'Aucun'),
   }[lvl] || lvl);
 
   // Export CSV (données filtrées)
   const exportCSV = () => {
-    const cols = ['resource', 'access_level', 'coverage', ...state.actions];
+    const cols = ['resource', 'level', 'coverage', ...state.actions];
     const esc = (v) => `"${String(v ?? '').replaceAll('"','""')}"`;
     const rows = dataView.map(s => {
       const actionCols = state.actions.map(a => (s.grants?.[a] ? 'allowed' : 'denied'));
@@ -142,32 +152,32 @@ export default function MyLibraryPermissionsDisplay({
     URL.revokeObjectURL(url);
   };
 
-  // Carte par ressource
+  // Carte par ressource (compact)
   const ResourceCard = ({ item }) => {
     const colors = LEVEL_COLORS[item.level];
     return (
       <div className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden border border-gray-100">
         <div className={`h-1.5 bg-gradient-to-r ${colors.bar}`} />
-        <div className="p-5">
-          <div className="flex items-start justify-between mb-3">
-            <h3 className="text-base font-semibold text-slate-800 leading-6">
+        <div className="p-4">
+          <div className="flex items-start justify-between mb-2">
+            <h3 className="text-sm font-semibold text-slate-800 leading-6 truncate" title={item.resource}>
               {t(item.resource, item.resource)}
             </h3>
             <div className="flex items-center gap-2 shrink-0">
-              <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold bg-gradient-to-r ${colors.badge} text-white tracking-wide`}>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gradient-to-r ${colors.badge} text-white tracking-wide`}>
                 {levelLabel(item.level)}
               </span>
               {(item.level === 'full' || item.level === 'advanced' || item.level === 'partial') && (
-                <FontAwesomeIcon icon={faStar} className="text-blue-400" />
+                <FontAwesomeIcon icon={faStar} className="text-blue-400 text-xs" />
               )}
             </div>
           </div>
 
-          {/* Couverture des actions autorisées */}
-          <div className="mb-4">
-            <div className="flex justify-between items-center mb-1.5">
-              <span className="text-xs text-slate-500">{t('action_coverage', 'Couverture des actions autorisées')}</span>
-              <span className="text-xs font-semibold text-slate-700">{Math.round(item.percentage)}%</span>
+          {/* Couverture */}
+          <div className="mb-3">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[11px] text-slate-500">{t('coverage_short', 'Couv.')}</span>
+              <span className="text-[11px] font-semibold text-slate-700">{Math.round(item.percentage)}%</span>
             </div>
             <div className="w-full bg-slate-200/70 rounded-full h-1.5">
               <div
@@ -178,21 +188,21 @@ export default function MyLibraryPermissionsDisplay({
           </div>
 
           {/* Détail des permissions */}
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium text-gray-700 mb-2">{t('detailed_permissions', 'Permissions détaillées')}</h4>
-            <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1.5">
+            <h4 className="text-xs font-semibold text-gray-700">{t('perms_short', 'Détails')}</h4>
+            <div className="grid grid-cols-2 gap-1.5">
               {state.actions.map((action) => {
                 const allowed = !!item.grants[action];
                 return (
                   <div
                     key={action}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] ${
+                    className={`flex items-center gap-2 px-2 py-1 rounded-md text-[12px] ${
                       allowed ? 'bg-blue-50 text-blue-700' : 'bg-slate-50 text-slate-400'
                     }`}
                     title={t(action, action)}
                   >
                     <FontAwesomeIcon icon={ACTION_ICONS[action] || faCheckCircle} className={allowed ? 'text-blue-500' : 'text-slate-300'} />
-                    <span className="font-medium">{t(action, action)}</span>
+                    <span className="font-medium truncate">{shortActionLabel(t, action)}</span>
                     <span className="ml-auto">
                       <FontAwesomeIcon icon={allowed ? faCheckCircle : faTimesCircle} className={allowed ? 'text-blue-500' : 'text-slate-300'} />
                     </span>
@@ -206,26 +216,26 @@ export default function MyLibraryPermissionsDisplay({
     );
   };
 
-  // Vue tableau
+  // Vue tableau (entêtes courtes)
   const GridView = () => (
     <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
       <table className="min-w-full">
         <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
           <tr>
-            <th className="px-5 py-3 text-left text-[13px] font-semibold">
-              {t('resource', 'Ressource')}
+            <th className="px-4 py-3 text-left text-[12px] font-semibold">
+              {t('resource_short', 'Ressource')}
             </th>
-            <th className="px-5 py-3 text-center text-[13px] font-semibold">
-              {t('access_level', 'Niveau d’accès')}
+            <th className="px-4 py-3 text-center text-[12px] font-semibold">
+              {t('level_short', 'Niv.')}
             </th>
-            <th className="px-5 py-3 text-center text-[13px] font-semibold">
-              {t('coverage', 'Couverture')}
+            <th className="px-4 py-3 text-center text-[12px] font-semibold">
+              {t('coverage_short', 'Couv.')}
             </th>
             {state.actions.map((action) => (
-              <th key={action} className="px-4 py-3 text-center text-[13px] font-semibold">
-                <div className="flex flex-col items-center gap-1">
-                  <FontAwesomeIcon icon={ACTION_ICONS[action] || faCheckCircle} />
-                  <span className="text-[11px]">{t(action, action)}</span>
+              <th key={action} className="px-3 py-3 text-center text-[11px] font-semibold">
+                <div className="flex flex-col items-center gap-0.5">
+                  <FontAwesomeIcon icon={ACTION_ICONS[action] || faCheckCircle} className="text-sm" />
+                  <span className="text-[10px] leading-3">{shortActionLabel(t, action)}</span>
                 </div>
               </th>
             ))}
@@ -236,28 +246,28 @@ export default function MyLibraryPermissionsDisplay({
             const colors = LEVEL_COLORS[item.level];
             return (
               <tr key={item.resource} className="hover:bg-slate-50">
-                <td className="px-5 py-3 font-medium text-slate-800">{t(item.resource, item.resource)}</td>
-                <td className="px-5 py-3 text-center">
-                  <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold bg-gradient-to-r ${colors.badge} text-white`}>
+                <td className="px-4 py-3 font-medium text-slate-800">{t(item.resource, item.resource)}</td>
+                <td className="px-4 py-3 text-center">
+                  <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gradient-to-r ${colors.badge} text-white`}>
                     {levelLabel(item.level)}
                   </span>
                 </td>
-                <td className="px-5 py-3">
+                <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <div className="flex-1 bg-slate-200/70 rounded-full h-1.5">
                       <div className={`h-1.5 rounded-full bg-gradient-to-r ${colors.bar}`} style={{ width: `${item.percentage}%` }} />
                     </div>
-                    <span className="text-xs font-medium text-slate-700">{Math.round(item.percentage)}%</span>
+                    <span className="text-[11px] font-medium text-slate-700">{Math.round(item.percentage)}%</span>
                   </div>
                 </td>
                 {state.actions.map((action) => {
                   const allowed = !!item.grants[action];
                   return (
-                    <td key={`${item.resource}-${action}`} className="px-4 py-3 text-center">
-                      <div className={`inline-flex items-center justify-center w-8 h-8 rounded-full ${
+                    <td key={`${item.resource}-${action}`} className="px-3 py-3 text-center">
+                      <div className={`inline-flex items-center justify-center w-7 h-7 rounded-full ${
                         allowed ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-400'
                       }`}>
-                        <FontAwesomeIcon icon={allowed ? faCheckCircle : faTimesCircle} className="text-sm" />
+                        <FontAwesomeIcon icon={allowed ? faCheckCircle : faTimesCircle} className="text-xs" />
                       </div>
                     </td>
                   );
@@ -277,40 +287,40 @@ export default function MyLibraryPermissionsDisplay({
 
   return (
     <div className="mt-8">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-blue-800 rounded-t-xl p-5 text-white">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-white/15 p-3 rounded-full">
-              <FontAwesomeIcon icon={faUser} className="text-lg" />
+      {/* Header compact */}
+      <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-blue-800 rounded-t-xl p-4 text-white">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="bg-white/15 p-2.5 rounded-full">
+              <FontAwesomeIcon icon={faUser} className="text-base" />
             </div>
-            <div>
-              <h2 className="text-xl font-bold">
-                {title || t('my_library_permissions', 'Mes permissions — Bibliothèque en ligne')}
+            <div className="min-w-0">
+              <h2 className="text-lg font-bold truncate">
+                {title || t('my_library_permissions_short', 'Mes permissions')}
               </h2>
-              <p className="text-white/90 text-sm mt-0.5">
-                {t('roles', 'Rôles')}: {rolesLabel}
+              <p className="text-white/90 text-[12px] mt-0.5 truncate">
+                {t('roles_short', 'Rôles')}: {rolesLabel}
               </p>
             </div>
           </div>
 
-          {/* Outils */}
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {/* Outils compacts */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
             {/* Search */}
             <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                <FontAwesomeIcon icon={faSearch} className="text-white/80" />
+              <span className="absolute inset-y-0 left-0 flex items-center pl-2 pointer-events-none">
+                <FontAwesomeIcon icon={faSearch} className="text-white/80 text-xs" />
               </span>
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={t('search_resource', 'Rechercher une ressource…')}
-                className="pl-9 pr-3 py-2 rounded-lg bg-white/10 text-white placeholder-white/80 border border-white/20 focus:ring-2 focus:ring-white/50 focus:border-white/50"
+                placeholder={t('search_resource_short', 'Rech…')}
+                className="pl-7 pr-6 py-1.5 rounded-md bg-white/10 text-white placeholder-white/80 border border-white/20 focus:ring-2 focus:ring-white/50 focus:border-white/50 text-sm w-56"
               />
               {query && (
                 <button
                   onClick={() => setQuery('')}
-                  className="absolute inset-y-0 right-0 pr-3 text-white/80 hover:text-white"
+                  className="absolute inset-y-0 right-0 pr-2 text-white/80 hover:text-white text-sm"
                   aria-label={t('clear_search','Effacer')}
                 >
                   ×
@@ -321,32 +331,34 @@ export default function MyLibraryPermissionsDisplay({
             {/* Export */}
             <button
               onClick={exportCSV}
-              className="px-3 py-2 rounded-md bg-white/15 hover:bg-white/25 transition flex items-center gap-2"
+              className="px-3 py-1.5 rounded-md bg-white/15 hover:bg-white/25 transition flex items-center gap-1.5 text-sm"
               title={t('export','Exporter')}
             >
               <FontAwesomeIcon icon={faDownload} />
-              <span className="text-sm font-medium">{t('export','Exporter')}</span>
+              <span>{t('export_short','CSV')}</span>
             </button>
 
             {/* Switch de vue */}
-            <div className="flex gap-1 bg-white/10 rounded-lg p-1">
+            <div className="flex gap-1 bg-white/10 rounded-md p-1">
               <button
                 onClick={() => setViewMode('cards')}
-                className={`px-3 py-1.5 rounded-md text-sm transition ${
+                className={`px-2.5 py-1.5 rounded text-sm ${
                   viewMode === 'cards' ? 'bg-white text-blue-700 font-semibold' : 'text-white hover:bg-white/10'
                 }`}
                 aria-pressed={viewMode === 'cards'}
+                title={t('cards','Cartes')}
               >
-                {t('cards', 'Cartes')}
+                {t('cards_short','Cartes')}
               </button>
               <button
                 onClick={() => setViewMode('grid')}
-                className={`px-3 py-1.5 rounded-md text-sm transition ${
+                className={`px-2.5 py-1.5 rounded text-sm ${
                   viewMode === 'grid' ? 'bg-white text-blue-700 font-semibold' : 'text-white hover:bg-white/10'
                 }`}
                 aria-pressed={viewMode === 'grid'}
+                title={t('table','Tableau')}
               >
-                {t('table', 'Tableau')}
+                {t('table_short','Tableau')}
               </button>
             </div>
           </div>
@@ -356,62 +368,62 @@ export default function MyLibraryPermissionsDisplay({
       {/* Body */}
       <div className="bg-slate-50 rounded-b-xl">
         {state.loading && (
-          <div className="p-12 text-center">
-            <FontAwesomeIcon icon={faSpinner} className="animate-spin text-3xl text-blue-600 mb-3" />
-            <p className="text-slate-600">{t('loading','Chargement')}…</p>
+          <div className="p-10 text-center">
+            <FontAwesomeIcon icon={faSpinner} className="animate-spin text-2xl text-blue-600 mb-2" />
+            <p className="text-slate-600 text-sm">{t('loading','Chargement')}…</p>
           </div>
         )}
 
         {state.error && !state.loading && (
-          <div className="p-5 m-5 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex items-center gap-2 text-red-600">
+          <div className="p-4 m-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center gap-2 text-red-600 text-sm">
               <FontAwesomeIcon icon={faTimesCircle} />
-              <span className="font-medium text-sm">{state.error}</span>
+              <span className="font-medium">{state.error}</span>
             </div>
           </div>
         )}
 
         {!state.loading && !state.error && (
-          <div className="p-5">
-            {/* KPIs */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <div className="bg-white rounded-lg p-4 text-center shadow-sm border border-gray-100">
-                <div className="text-xl font-bold text-blue-700">{dataView.length}</div>
-                <div className="text-xs text-slate-600">{t('resources', 'Ressources')}</div>
+          <div className="p-4">
+            {/* KPIs compacts */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+              <div className="bg-white rounded-lg p-3 text-center shadow-sm border border-gray-100">
+                <div className="text-lg font-bold text-blue-700">{dataView.length}</div>
+                <div className="text-[11px] text-slate-600">{t('resources_short', 'Ressources')}</div>
               </div>
-              <div className="bg-white rounded-lg p-4 text-center shadow-sm border border-gray-100">
-                <div className="text-xl font-bold text-blue-700">
+              <div className="bg-white rounded-lg p-3 text-center shadow-sm border border-gray-100">
+                <div className="text-lg font-bold text-blue-700">
                   {dataView.filter(s => s.level === 'full' || s.level === 'advanced').length}
                 </div>
-                <div className="text-xs text-slate-600">{t('high_access', 'Accès élevés')}</div>
+                <div className="text-[11px] text-slate-600">{t('high_access_short', 'Accès élevés')}</div>
               </div>
-              <div className="bg-white rounded-lg p-4 text-center shadow-sm border border-gray-100">
-                <div className="text-xl font-bold text-blue-700">
+              <div className="bg-white rounded-lg p-3 text-center shadow-sm border border-gray-100">
+                <div className="text-lg font-bold text-blue-700">
                   {dataView.filter(s => s.level === 'partial').length}
                 </div>
-                <div className="text-xs text-slate-600">{t('partial_access_short', 'Accès partiels')}</div>
+                <div className="text-[11px] text-slate-600">{t('partial_access_short', 'Accès partiels')}</div>
               </div>
-              <div className="bg-white rounded-lg p-4 text-center shadow-sm border border-gray-100">
-                <div className="text-xl font-bold text-blue-700">
+              <div className="bg-white rounded-lg p-3 text-center shadow-sm border border-gray-100">
+                <div className="text-lg font-bold text-blue-700">
                   {dataView.length ? avg : 0}%
                 </div>
-                <div className="text-xs text-slate-600">{t('avg_coverage', 'Couverture moyenne')}</div>
+                <div className="text-[11px] text-slate-600">{t('avg_coverage_short', 'Couv. moy.')}</div>
               </div>
             </div>
 
             {/* Vue principale */}
             {dataView.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="text-5xl text-slate-300 mb-3">🔐</div>
-                <h3 className="text-lg font-semibold text-slate-700 mb-1">
-                  {t('no_permissions_to_show', 'Aucune permission à afficher')}
+              <div className="text-center py-10">
+                <div className="text-5xl text-slate-300 mb-2">🔐</div>
+                <h3 className="text-base font-semibold text-slate-700 mb-1">
+                  {t('no_permissions_to_show_short', 'Aucune permission')}
                 </h3>
                 <p className="text-slate-500 text-sm">
-                  {t('no_permissions_hint', 'Aucun résultat pour ce filtre. Ajustez votre recherche.')}
+                  {t('no_permissions_hint_short', 'Ajustez votre recherche.')}
                 </p>
               </div>
             ) : viewMode === 'cards' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {dataView.map(item => <ResourceCard key={item.resource} item={item} />)}
               </div>
             ) : (

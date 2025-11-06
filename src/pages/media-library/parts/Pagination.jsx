@@ -1,8 +1,8 @@
 // ------------------------------
-// File: media-library/parts/Pagination.jsx (version avec Font Awesome + i18n)
+// File: media-library/parts/Pagination.jsx
 // ------------------------------
 import { useMemo, useState, useCallback } from "react";
-import { useTranslation } from 'react-i18next';
+import { useTranslation, Trans } from 'react-i18next';
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faChevronLeft,
@@ -14,21 +14,21 @@ import {
 /**
  * Pagination — composant accessible, réactif et stylé (Tailwind) avec i18n
  *
- * Props compatibles avec votre version initiale + options facultatives :
+ * Props :
  * - page: number (1-indexed)
  * - perPage: number
  * - total: number
  * - onChange: (nextPage:number) => void
  *
- * Options facultatives (toutes avec valeurs par défaut) :
- * - className: string — classes supplémentaires pour le conteneur
- * - siblingCount: number — nb de pages autour de la page active (par défaut 1)
- * - boundaryCount: number — nb de pages au début/fin (par défaut 1)
- * - showFirstLast: boolean — afficher « première »/« dernière » (par défaut true)
- * - showJump: boolean — champ « Aller à la page » (par défaut true)
- * - showPageSize: boolean — afficher le sélecteur de taille de page (par défaut false)
- * - pageSizeOptions: number[] — options du sélecteur (par défaut [10,20,50,100])
- * - onPageSizeChange: (size:number) => void — rappel pour changer perPage
+ * Options (facultatives) :
+ * - className: string
+ * - siblingCount: number (déf. 1)
+ * - boundaryCount: number (déf. 1)
+ * - showFirstLast: boolean (déf. true)
+ * - showJump: boolean (déf. true)
+ * - showPageSize: boolean (déf. false)
+ * - pageSizeOptions: number[] (déf. [10,20,50,100])
+ * - onPageSizeChange: (size:number) => void
  */
 export default function Pagination({
   page = 1,
@@ -45,7 +45,7 @@ export default function Pagination({
   onPageSizeChange,
 }) {
   const { t, i18n } = useTranslation();
-  
+
   const pages = Math.max(1, Math.ceil((total || 0) / Math.max(1, perPage)));
   const current = Math.min(Math.max(1, page), pages);
   const canPrev = current > 1;
@@ -96,7 +96,6 @@ export default function Pagination({
       ...endPages,
     ].filter(Boolean);
 
-    // Si peu de pages, on simplifie
     if (totalPages <= boundaryCount * 2 + siblingCount * 2 + 3) {
       return range(1, totalPages);
     }
@@ -110,9 +109,7 @@ export default function Pagination({
 
   const [jump, setJump] = useState("");
 
-  // ————————————————————————————————————————————————
-  // Styles (accent bleu, épuré & intuitif)
-  // ————————————————————————————————————————————————
+  // Styles
   const btnBase =
     "inline-flex items-center justify-center h-9 min-w-9 px-3 rounded-md border text-sm transition focus:outline-none focus:ring-2 focus:ring-blue-400/60 disabled:opacity-50 disabled:cursor-not-allowed";
   const btnGhost =
@@ -120,7 +117,7 @@ export default function Pagination({
   const btnSolid =
     "bg-blue-600 text-white hover:bg-blue-700 border-blue-600 dark:bg-blue-500 dark:text-white dark:hover:bg-blue-600";
 
-  // Accessibilité clavier: flèches gauche/droite pour naviguer (hors champs input)
+  // Accessibilité clavier
   const onKeyDownNav = (e) => {
     if (e.target.tagName === "INPUT") return;
     if (e.key === "ArrowLeft" && canPrev) {
@@ -132,30 +129,38 @@ export default function Pagination({
     }
   };
 
-  // Formatage des nombres selon la locale
+  // Formatage selon locale
   const nf = useMemo(() => new Intl.NumberFormat(i18n.language), [i18n.language]);
 
   return (
     <nav
       className={`w-full flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between py-4 ${className}`}
       role="navigation"
-      aria-label={t('pagination.ariaLabel')}
+      aria-label={t('pagination.ariaLabel', 'Pagination')}
       onKeyDown={onKeyDownNav}
     >
       {/* Infos */}
       <div className="flex flex-wrap items-center gap-3">
+        {/* ✅ Version riche avec <b>…</b> */}
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          {t('pagination.displayInfo', {
-            start: nf.format(startItem),
-            end: nf.format(endItem),
-            total: nf.format(total)
-          })}
+          <Trans
+            i18nKey="pagination.displayInfoHtml"
+            components={{ b: <b /> }}
+            values={{
+              start: nf.format(startItem),
+              end: nf.format(endItem),
+              total: nf.format(total),
+            }}
+          >
+            {/* Fallback si la clé i18n n’existe pas */}
+            Affichage <b>{{ start: nf.format(startItem) }}</b>–<b>{{ end: nf.format(endItem) }}</b> sur <b>{{ total: nf.format(total) }}</b>
+          </Trans>
         </p>
 
         {showPageSize && (
           <div className="flex items-center gap-2 text-sm">
             <label htmlFor="page-size" className="text-slate-600 dark:text-slate-300">
-              {t('pagination.itemsPerPage')}
+              {t('pagination.itemsPerPage', 'Éléments/page')}
             </label>
             <select
               id="page-size"
@@ -178,7 +183,7 @@ export default function Pagination({
         {showFirstLast && (
           <button
             type="button"
-            aria-label={t('pagination.firstPage')}
+            aria-label={t('pagination.firstPage', 'Première page')}
             className={`${btnBase} ${btnGhost}`}
             disabled={!canPrev}
             onClick={() => go(1)}
@@ -189,7 +194,7 @@ export default function Pagination({
 
         <button
           type="button"
-          aria-label={t('pagination.previousPage')}
+          aria-label={t('pagination.previousPage', 'Page précédente')}
           className={`${btnBase} ${btnGhost}`}
           disabled={!canPrev}
           onClick={() => go(current - 1)}
@@ -198,7 +203,7 @@ export default function Pagination({
         </button>
 
         {/* Pages numériques (compact sur mobile) */}
-        <ul className="hidden sm:flex items-center gap-1" aria-label={t('pagination.pages')}>
+        <ul className="hidden sm:flex items-center gap-1" aria-label={t('pagination.pages', 'Pages')}>
           {pageItems.map((item, idx) => {
             if (item === "ellipsis") {
               return (
@@ -224,7 +229,7 @@ export default function Pagination({
 
         <button
           type="button"
-          aria-label={t('pagination.nextPage')}
+          aria-label={t('pagination.nextPage', 'Page suivante')}
           className={`${btnBase} ${btnGhost}`}
           disabled={!canNext}
           onClick={() => go(current + 1)}
@@ -235,7 +240,7 @@ export default function Pagination({
         {showFirstLast && (
           <button
             type="button"
-            aria-label={t('pagination.lastPage')}
+            aria-label={t('pagination.lastPage', 'Dernière page')}
             className={`${btnBase} ${btnGhost}`}
             disabled={!canNext}
             onClick={() => go(pages)}
@@ -247,7 +252,7 @@ export default function Pagination({
         {showJump && (
           <div className="ml-1 flex items-center gap-2">
             <label htmlFor="jump" className="sr-only">
-              {t('pagination.jumpToPage')}
+              {t('pagination.jumpToPage', 'Aller à la page')}
             </label>
             <input
               id="jump"
@@ -264,7 +269,7 @@ export default function Pagination({
                   setJump("");
                 }
               }}
-              placeholder={t('pagination.jumpPlaceholder')}
+              placeholder={t('pagination.jumpPlaceholder', 'N° de page')}
               className="h-9 w-24 rounded-md border border-blue-200 bg-white px-3 text-sm placeholder:text-blue-400/70 focus:outline-none focus:ring-2 focus:ring-blue-400/60 dark:border-blue-700 dark:bg-slate-900"
             />
           </div>

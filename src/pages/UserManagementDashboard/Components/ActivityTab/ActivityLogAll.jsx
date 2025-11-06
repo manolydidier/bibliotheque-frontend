@@ -18,7 +18,6 @@ const TYPE_MAP = {
   default:            { icon: faClock,      colorWrap: 'bg-gray-100',    colorIcon: 'text-gray-600' },
 };
 
-// Rend <a> si URL absolue, sinon <Link>
 const AnchorOrLink = ({ to, className, children }) => {
   if (!to) return <span className={className}>{children}</span>;
   const isAbsolute = /^https?:\/\//i.test(to);
@@ -29,17 +28,12 @@ const AnchorOrLink = ({ to, className, children }) => {
   );
 };
 
-// Lien basé exclusivement sur les slugs d'article
 const buildActivityLink = (a) => {
   const direct = a.url || a.link;
   if (direct) return direct;
-
   const articleSlug = a.article_slug || a.slug;
-
   switch (a.type) {
-    case 'article_created':
-      return articleSlug ? `/articles/${articleSlug}` : null;
-
+    case 'article_created':   return articleSlug ? `/articles/${articleSlug}` : null;
     case 'comment_approved': {
       if (!articleSlug) return null;
       const commentId =
@@ -49,17 +43,12 @@ const buildActivityLink = (a) => {
           : null);
       return commentId ? `/articles/${articleSlug}#comment-${commentId}` : `/articles/${articleSlug}`;
     }
-
     case 'role_assigned':
-    case 'permission_changed':
-      return '/settings';
-
-    default:
-      return null;
+    case 'permission_changed': return '/settings';
+    default: return null;
   }
 };
 
-// ✅ lit le token où qu’il soit (remember me ou non)
 const getTokenGuard = () => {
   try {
     return (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('tokenGuard')) ||
@@ -74,8 +63,7 @@ const ActivityLogAll = () => {
   const { t } = useTranslation();
   const userId = useSelector(state => state?.library?.auth?.user?.id);
 
-  // scope: 'mine' | 'all'
-  const [scope, setScope] = useState('mine');
+  const [scope, setScope] = useState('mine'); // 'mine' | 'all'
 
   const [filters, setFilters] = useState({
     q: '',
@@ -84,8 +72,7 @@ const ActivityLogAll = () => {
     to: '',
     page: 1,
     perPage: 10,
-    asTarget: false, // pour la vue "mes rôles reçus" côté /users/{id}/activities
-    // Filtres "all"
+    asTarget: false,
     actorId: '',
     targetId: '',
     involveUser: '',
@@ -99,7 +86,6 @@ const ActivityLogAll = () => {
     error: null
   });
 
-  // Debounce recherche texte
   const [debouncedQ, setDebouncedQ] = useState('');
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQ(filters.q.trim()), 400);
@@ -117,7 +103,7 @@ const ActivityLogAll = () => {
       from: '',
       to: '',
       page: 1,
-      perPage: 10,
+      perPage: filters.perPage,
       asTarget: false,
       actorId: '',
       targetId: '',
@@ -129,7 +115,7 @@ const ActivityLogAll = () => {
     if (scope === 'mine') {
       return filters.q || filters.type || filters.from || filters.to || filters.asTarget;
     }
-    return filters.q || filters.type || filters.from || filters.to || filters.actorId || filters.targetId || filters.involveUser;
+    return filters.q || filters.type || filters.from || filters.to || filters.actorId || filters.targetId || filters.involveUser || filters.asTarget;
   }, [scope, filters]);
 
   const formatDate = useCallback((iso) => {
@@ -167,10 +153,7 @@ const ActivityLogAll = () => {
 
       if (scope === 'mine') {
         url = `/users/${userId}/activities`;
-        params = {
-          ...commonParams,
-          as_target: filters.asTarget ? 1 : 0,
-        };
+        params = { ...commonParams, as_target: filters.asTarget ? 1 : 0 };
       } else {
         url = `/activities`;
         params = {
@@ -178,7 +161,6 @@ const ActivityLogAll = () => {
           ...(filters.actorId && { actor_id: filters.actorId }),
           ...(filters.targetId && { target_id: filters.targetId }),
           ...(filters.involveUser && { user: filters.involveUser }),
-          // as_target peut aussi influer sur l’intitulé des rôles côté all :
           ...(filters.asTarget ? { as_target: 1 } : { as_target: 0 }),
         };
       }
@@ -246,9 +228,7 @@ const ActivityLogAll = () => {
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = `activities_${scope}_p${filters.page}.csv`;
-    a.click();
+    a.href = url; a.download = `activities_${scope}_p${filters.page}.csv`; a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -261,11 +241,11 @@ const ActivityLogAll = () => {
           <span className="inline-flex items-center text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700">
             {scope === 'mine' ? (
               <>
-                <FontAwesomeIcon icon={faUser} className="mr-1" /> {t('my_activities', 'Mes activités')}
+                <FontAwesomeIcon icon={faUser} className="mr-1" /> {t('my_activities_short', 'Moi')}
               </>
             ) : (
               <>
-                <FontAwesomeIcon icon={faGlobe} className="mr-1" /> {t('all_activities', 'Toutes les activités')}
+                <FontAwesomeIcon icon={faGlobe} className="mr-1" /> {t('all_short', 'Tous')}
               </>
             )}
           </span>
@@ -277,47 +257,48 @@ const ActivityLogAll = () => {
             <button
               className={`px-3 py-2 ${scope === 'mine' ? 'bg-indigo-600 text-white' : 'text-gray-700 hover:bg-gray-50'}`}
               onClick={() => { setScope('mine'); updateFilter('page', 1); }}
+              title={t('mine','Moi')}
             >
-              {t('mine', 'Moi')}
+              {t('mine','Moi')}
             </button>
             <button
               className={`px-3 py-2 ${scope === 'all' ? 'bg-indigo-600 text-white' : 'text-gray-700 hover:bg-gray-50'}`}
               onClick={() => { setScope('all'); updateFilter('page', 1); }}
+              title={t('all','Tous')}
             >
-              {t('all', 'Tous')}
+              {t('all','Tous')}
             </button>
           </div>
 
           <select
             value={filters.perPage}
             onChange={(e) => updateFilter('perPage', Number(e.target.value))}
-            className="px-3 py-2 rounded-lg border border-gray-200 text-sm"
+            className="px-2.5 py-2 rounded-lg border border-gray-200 text-sm"
             title={t('per_page', 'Par page')}
           >
-            <option value={10}>10</option>
-            <option value={20}>20</option>
-            <option value={50}>50</option>
+            <option value={10}>10</option><option value={20}>20</option><option value={50}>50</option>
           </select>
 
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm ${
               showFilters ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
                           : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
             }`}
+            title={t('filters','Filtres')}
           >
             <FontAwesomeIcon icon={faFilter} />
-            {t('filters', 'Filtres')}
+            {t('filter_short','Filtrer')}
             {hasActiveFilters && (
-              <span className="ml-1 bg-indigo-100 text-indigo-800 text-xs px-2 py-0.5 rounded-full">
+              <span className="ml-1 bg-indigo-100 text-indigo-800 text-[11px] px-1.5 py-0.5 rounded-full">
                 {
                   [
                     filters.q,
                     filters.type,
                     filters.from,
                     filters.to,
-                    scope === 'mine' ? (filters.asTarget ? 'asTarget' : '') : null,
-                    scope === 'all' ? (filters.actorId || filters.targetId || filters.involveUser) : null
+                    filters.asTarget && '1',
+                    scope === 'all' && (filters.actorId || filters.targetId || filters.involveUser)
                   ].filter(Boolean).length
                 }
               </span>
@@ -326,85 +307,81 @@ const ActivityLogAll = () => {
 
           <button
             onClick={exportCSV}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
           >
             <FontAwesomeIcon icon={faDownload} />
-            {t('export', 'Exporter')}
+            {t('export_short','CSV')}
           </button>
         </div>
       </div>
 
-      {/* Filters Panel */}
+      {/* Filters Panel — COMPACT */}
       {showFilters && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-medium text-gray-900">{t('filter_activities', 'Filtrer les activités')}</h3>
+        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-medium text-gray-900 text-sm">{t('filters','Filtres')}</h3>
             {hasActiveFilters && (
-              <button onClick={clearFilters} className="text-sm text-gray-500 hover:text-gray-700 underline">
-                {t('clear_all', 'Tout effacer')}
+              <button onClick={clearFilters} className="text-xs text-gray-500 hover:text-gray-700 underline">
+                {t('clear_all_short','Effacer')}
               </button>
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            {/* Search */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">{t('search', 'Rechercher')}</label>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
+            {/* Recherche */}
+            <div className="space-y-1 lg:col-span-2">
+              <label className="block text-xs font-medium text-gray-700">{t('search_short','Rech.')}</label>
               <div className="relative">
-                <FontAwesomeIcon icon={faSearch} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                <FontAwesomeIcon icon={faSearch} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
                 <input
                   type="text"
                   value={filters.q}
                   onChange={(e) => updateFilter('q', e.target.value)}
-                  placeholder={t('search_placeholder', 'Rechercher dans les activités...')}
-                  className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder={t('search_placeholder_short','Texte…')}
+                  className="w-full pl-8 pr-2 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                 />
               </div>
             </div>
 
             {/* Type */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">{t('activity_type', "Type d'activité")}</label>
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-gray-700">{t('type_short','Type')}</label>
               <select
                 value={filters.type}
                 onChange={(e) => updateFilter('type', e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                className="w-full px-2 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
               >
-                <option value="">{t('all_types', 'Tous les types')}</option>
-                <option value="permission_changed">{t('permission_changed', 'Permissions modifiées')}</option>
-                <option value="role_assigned">{t('role_assigned', 'Rôle attribué')}</option>
-                <option value="article_created">{t('article_created', 'Article créé')}</option>
-                <option value="comment_approved">{t('comment_approved', 'Commentaire approuvé')}</option>
+                <option value="">{t('all_short','Tous')}</option>
+                <option value="permission_changed">{t('permission_changed_short','Perm.')}</option>
+                <option value="role_assigned">{t('role_assigned_short','Rôles')}</option>
+                <option value="article_created">{t('article_created_short','Articles')}</option>
+                <option value="comment_approved">{t('comment_approved_short','Comms')}</option>
               </select>
             </div>
 
-            {/* From */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">{t('from_date', 'Date de début')}</label>
+            {/* Du / Au */}
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-gray-700">{t('from_short','Du')}</label>
               <input
                 type="date"
                 value={filters.from}
                 onChange={(e) => updateFilter('from', e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                className="w-full px-2 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
               />
             </div>
-
-            {/* To */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">{t('to_date', 'Date de fin')}</label>
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-gray-700">{t('to_short','Au')}</label>
               <input
                 type="date"
                 value={filters.to}
                 onChange={(e) => updateFilter('to', e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                className="w-full px-2 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
               />
             </div>
 
-            {/* asTarget toggle (utile aussi en scope all pour wording rôles) */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
-                {t('as_target_label', 'Rôles où la personne est la cible')}
-              </label>
+            {/* Ciblé (utile aussi en scope all) */}
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-gray-700">{t('target_short','Ciblé')}</label>
               <div className="flex items-center gap-3">
                 <button
                   type="button"
@@ -412,108 +389,102 @@ const ActivityLogAll = () => {
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition
                     ${filters.asTarget ? 'bg-indigo-600' : 'bg-gray-200'}`}
                   aria-pressed={filters.asTarget}
-                  aria-label={t('as_target_label', 'Rôles où la personne est la cible')}
+                  aria-label={t('target_short','Ciblé')}
                 >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition
-                      ${filters.asTarget ? 'translate-x-6' : 'translate-x-1'}`}
-                  />
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${filters.asTarget ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
-                <span className="text-sm text-gray-700">
-                  {filters.asTarget
-                    ? t('as_target_on', 'Afficher les rôles attribués à la cible')
-                    : t('as_target_off', 'Afficher les rôles attribués par l’acteur')}
+                <span className="text-xs text-gray-700">
+                  {filters.asTarget ? t('on_short','On') : t('off_short','Off')}
                 </span>
               </div>
             </div>
 
-            {/* Filtres supplémentaires pour scope "all" */}
+            {/* Filtres supplémentaires — scope all */}
             {scope === 'all' && (
               <>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">{t('actor_id', 'Acteur (ID)')}</label>
+                <div className="space-y-1">
+                  <label className="block text-xs font-medium text-gray-700">{t('actor_short','Acteur')}</label>
                   <input
                     type="number"
                     value={filters.actorId}
                     onChange={(e) => updateFilter('actorId', e.target.value)}
-                    placeholder="ex: 12"
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="ID"
+                    className="w-full px-2 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">{t('target_id', 'Cible (ID)')}</label>
+                <div className="space-y-1">
+                  <label className="block text-xs font-medium text-gray-700">{t('target_short','Cible')}</label>
                   <input
                     type="number"
                     value={filters.targetId}
                     onChange={(e) => updateFilter('targetId', e.target.value)}
-                    placeholder="ex: 34"
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="ID"
+                    className="w-full px-2 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">{t('involve_user', 'Implique (ID)')}</label>
+                <div className="space-y-1">
+                  <label className="block text-xs font-medium text-gray-700">{t('involve_short','Implique')}</label>
                   <input
                     type="number"
                     value={filters.involveUser}
                     onChange={(e) => updateFilter('involveUser', e.target.value)}
-                    placeholder="acteur OU cible"
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="ID"
+                    className="w-full px-2 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                   />
                 </div>
               </>
             )}
           </div>
 
-          {/* Badges actifs */}
+          {/* Badges actifs — compacts */}
           {hasActiveFilters && (
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <div className="flex flex-wrap gap-2">
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <div className="flex flex-wrap gap-1.5">
                 {filters.q && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
-                    <FontAwesomeIcon icon={faSearch} className="text-xs" />
-                    "{filters.q}"
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full">
+                    <FontAwesomeIcon icon={faSearch} className="text-[10px]" /> {filters.q}
                     <button onClick={() => updateFilter('q', '')} className="ml-1 hover:text-blue-900">×</button>
                   </span>
                 )}
                 {filters.type && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-800 text-sm rounded-full">
-                    {t(filters.type, filters.type.replace('_', ' '))}
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-800 text-xs rounded-full">
+                    {t(filters.type, filters.type.replace('_',' '))}
                     <button onClick={() => updateFilter('type', '')} className="ml-1 hover:text-purple-900">×</button>
                   </span>
                 )}
                 {filters.from && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full">
-                    {t('from', 'Du')} {new Date(filters.from).toLocaleDateString('fr-FR')}
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
+                    {new Date(filters.from).toLocaleDateString('fr-FR')}
                     <button onClick={() => updateFilter('from', '')} className="ml-1 hover:text-green-900">×</button>
                   </span>
                 )}
                 {filters.to && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-orange-100 text-orange-800 text-sm rounded-full">
-                    {t('to', 'Au')} {new Date(filters.to).toLocaleDateString('fr-FR')}
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-800 text-xs rounded-full">
+                    {new Date(filters.to).toLocaleDateString('fr-FR')}
                     <button onClick={() => updateFilter('to', '')} className="ml-1 hover:text-orange-900">×</button>
                   </span>
                 )}
                 {filters.asTarget && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-800 text-sm rounded-full">
-                    {t('as_target_badge', 'Rôles reçus')}
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-800 text-xs rounded-full">
+                    {t('target_short','Ciblé')}
                     <button onClick={() => updateFilter('asTarget', false)} className="ml-1 hover:text-indigo-900">×</button>
                   </span>
                 )}
                 {scope === 'all' && filters.actorId && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-teal-100 text-teal-800 text-sm rounded-full">
-                    actor_id: {filters.actorId}
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-teal-100 text-teal-800 text-xs rounded-full">
+                    actor:{filters.actorId}
                     <button onClick={() => updateFilter('actorId', '')} className="ml-1 hover:text-teal-900">×</button>
                   </span>
                 )}
                 {scope === 'all' && filters.targetId && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-800 text-sm rounded-full">
-                    target_id: {filters.targetId}
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full">
+                    target:{filters.targetId}
                     <button onClick={() => updateFilter('targetId', '')} className="ml-1 hover:text-yellow-900">×</button>
                   </span>
                 )}
                 {scope === 'all' && filters.involveUser && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-pink-100 text-pink-800 text-sm rounded-full">
-                    user: {filters.involveUser}
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-pink-100 text-pink-800 text-xs rounded-full">
+                    user:{filters.involveUser}
                     <button onClick={() => updateFilter('involveUser', '')} className="ml-1 hover:text-pink-900">×</button>
                   </span>
                 )}
@@ -588,7 +559,6 @@ const ActivityLogAll = () => {
                             {formatDate(activity.created_at)}
                           </span>
                         )}
-                        {/* En scope "all", on affiche aussi les IDs acteurs/cibles si présents */}
                         {scope === 'all' && (activity.actor_id != null) && (
                           <span className="bg-gray-100 px-2 py-0.5 rounded">actor_id: {activity.actor_id}</span>
                         )}

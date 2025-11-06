@@ -81,11 +81,11 @@ export default function Toolbar({
 
   return (
     <div
-      className={`transition-all duration-500 ease-out
+      className={`transition-all duration-500 ease-out 
         ${
           activeCompact
             ? "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex gap-3 bg-white/80 border border-slate-300/50 rounded-2xl px-3 py-2 shadow-lg backdrop-blur-md animate-fadeUp"
-            : "sticky top-0 z-30 flex justify-between items-center bg-gradient-to-r from-white/60 via-white/40 to-transparent border-b border-slate-200/40 backdrop-blur-xl shadow-sm px-4 sm:px-6 py-3 sm:py-4 animate-fadeDown"
+            : "sticky top-5 z-30 flex justify-between items-center bg-gradient-to-r from-white/60 via-white/40 to-transparent border-b border-slate-200/40 backdrop-blur-xl shadow-sm px-4 sm:px-6 py-3 sm:py-4 animate-fadeDown"
         }`}
     >
       {/* === Mode compact (dock flottant mobile) === */}
@@ -206,18 +206,18 @@ function ActionButton({ icon, label, color = "blue", onClick }) {
 }
 
 /* Petit bouton pour le dock compact */
-function ToggleButton({ paletteOn, onToggle }) {
-  return (
-    <button
-      onClick={onToggle}
-      title={paletteOn ? "Désactiver les couleurs" : "Activer les couleurs"}
-      className={`p-3 rounded-xl text-slate-600 active:scale-95 transition-all duration-300 shadow-sm
-        ${paletteOn ? "hover:text-blue-600 hover:bg-blue-50/80" : "hover:text-emerald-600 hover:bg-emerald-50/80"}`}
-    >
-      <FaPalette />
-    </button>
-  );
-}
+// function ToggleButton({ paletteOn, onToggle }) {
+//   return (
+//     <button
+//       onClick={onToggle}
+//       title={paletteOn ? "Désactiver les couleurs" : "Activer les couleurs"}
+//       className={`p-3 rounded-xl text-slate-600 active:scale-95 transition-all duration-300 shadow-sm
+//         ${paletteOn ? "hover:text-blue-600 hover:bg-blue-50/80" : "hover:text-emerald-600 hover:bg-emerald-50/80"}`}
+//     >
+//       <FaPalette />
+//     </button>
+//   );
+// }
 
 /* =========================================================
    Animations CSS globales (fade/slide)

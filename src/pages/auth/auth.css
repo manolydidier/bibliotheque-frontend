@@ -573,7 +573,7 @@ input:-webkit-autofill{
     position: fixed; inset: 0; pointer-events: none; z-index: 0;
     background: radial-gradient(420px 420px at var(--mx, 50%) var(--my, 30%),
                 rgba(255,255,255,.26), transparent 72%);
-    transition: background .08s linear;
+    transition: all .08s linear;
   }
 
   @media (prefers-color-scheme: dark) {
