@@ -5,7 +5,7 @@ import { faUserPlus, faSignInAlt, faEye, faEyeSlash } from '@fortawesome/free-so
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-
+import GlobalErrorBanner from './GlobalErrorBanner';
 import './auth.css';
 import LoadingComponent from '../../component/loading/LoadingComponent';
 import Toaster from '../../component/toast/Toaster';
@@ -156,6 +156,11 @@ const slugify = (s='') =>
 const isLaravelUnique = (msg='') => /(already been taken|déjà.*pris|déjà.*utilisé|déjà.*utilisée|unique)/i.test(msg);
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/* === Password regex aligné backend === */
+// Unicode-aware: minuscules, majuscules, chiffres, et un non lettre/chiffre
+const PASSWORD_REGEX = /^(?=.*\p{Ll})(?=.*\p{Lu})(?=.*\p{Nd})(?=.*[^\p{L}\p{N}]).{8,}$/u;
+const PW_RULE_MSG_FR = "Le mot de passe doit comporter au moins 8 caractères, avec une minuscule, une majuscule, un chiffre et un caractère spécial.";
+
 /* ===== Détection du "fixed containing block" pour corriger le décalage au drag ===== */
 function getFixedContainingBlock(node) {
   let el = node?.parentElement;
@@ -229,6 +234,13 @@ const AuthPage = ({ initialView = 'login' }) => {
   // Forgot password modal
   const [forgotOpen, setForgotOpen] = useState(false);
 
+  const dismissDelayMs = 5000;
+
+  // helper pratique
+  const setGlobalError = useCallback((message) => {
+    setErrors(e => ({ ...e, general: message }));
+  }, []);
+
   // ✅ Pré-remplir email si mémorisé (remember_email en localStorage)
   useEffect(() => {
     try {
@@ -300,12 +312,20 @@ const AuthPage = ({ initialView = 'login' }) => {
     }
   };
 
+  /* ==== Validation locale avec REGEX fort ==== */
   const validateForm = ()=>{
     const ne = {};
     if(!formData.email.trim()) ne.email=t('email_required');
     else if(!emailRegex.test(formData.email)) ne.email=t('invalid_email');
-    if(!formData.password.trim()) ne.password=t('password_required');
-    else if(formData.password.length<8) ne.password=t('password_min_length');
+
+    if(!formData.password.trim()) {
+    ne.password = t('password_required');
+  } else {
+    // ⚠️ On ne vérifie "fort" que pour l'inscription
+    if (!isLoginActive && !PASSWORD_REGEX.test(formData.password)) {
+      ne.password = PW_RULE_MSG_FR;
+    }
+  }
     if(!isLoginActive){
       if(!formData.username.trim()) ne.username=t('username_required');
       else if(formData.username.length<3) ne.username=t('username_too_short');
@@ -377,8 +397,22 @@ const AuthPage = ({ initialView = 'login' }) => {
       return;
     }
 
+    // ===== REGISTER =====
     if(!isLoginActive){
+      // 🔒 Bloque l'OTP si PW invalide (regex forte)
+      if(!PASSWORD_REGEX.test(formData.password)){
+        setErrors(p => ({ ...p, password: PW_RULE_MSG_FR }));
+        setGlobalError(PW_RULE_MSG_FR);
+        return;
+      }
+      if(formData.password !== formData.confirmPassword){
+        const msg = t('password_mismatch');
+        setErrors(p => ({ ...p, confirmPassword: msg }));
+        setGlobalError(msg);
+        return;
+      }
       if(uniqueStatus.email==='taken'||uniqueStatus.username==='taken') return;
+
       setSubmitting(true);
       try{
         const pre = await dispatch(preVerifyEmail(formData.email, langue, 'register'));
@@ -406,8 +440,26 @@ const AuthPage = ({ initialView = 'login' }) => {
         await dispatch(loginUser(pendingLogin));
         setPendingLogin(null);
       } else if (otpCtx.intent === 'register' && pendingRegister) {
-        await dispatch(registerUser(pendingRegister));
-        setPendingRegister(null);
+        const res = await dispatch(registerUser(pendingRegister));
+        if (res?.error) {
+          const apiErrors = res.payload?.errors || {};
+          // alimente les champs et le bandeau global
+          setErrors(prev => ({
+            ...prev,
+            ...Object.fromEntries(
+              Object.entries(apiErrors).map(([k, v]) => [k, Array.isArray(v) ? v[0] : String(v)])
+            )
+          }));
+          const first =
+            apiErrors?.password?.[0] ||
+            apiErrors?.email?.[0] ||
+            apiErrors?.username?.[0] ||
+            res.payload?.message ||
+            'Validation failed';
+          setGlobalError(first);
+        } else {
+          setPendingRegister(null);
+        }
       }
     } finally {
       setSubmitting(false);
@@ -502,6 +554,16 @@ const AuthPage = ({ initialView = 'login' }) => {
 
       <div className="min-h-screen flex items-center justify-center p-4 bg-bleu-pale z-0">
         <div className="auth-container card flat" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+           {/* ✅ Bandeau global éphémère */}
+        <GlobalErrorBanner
+          key={errors?.general || ''}        // ✅ relance l’animation
+          message={errors?.general}
+          onClose={() => setErrors(e => ({ ...e, general: '' }))}
+          duration={dismissDelayMs}
+          prominent                            // ✅ style “en évidence”
+          focusOnShow                          // ✅ focus + scroll
+        />
+
           <button
             onClick={toggleAuthMode}
             className="floating-btn"
