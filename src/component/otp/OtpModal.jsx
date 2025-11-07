@@ -1,3 +1,4 @@
+// src/component/otp/OtpModal.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "./otp.css";
@@ -152,7 +153,7 @@ const OtpModal = ({
       setDialogOpen(true);
     }, 1200);
 
-    // auto-close modal après 2.2s environ
+    // auto-close modal après ~2.2s
     clearTimeout(autoCloseTimer.current);
     autoCloseTimer.current = setTimeout(() => {
       setDialogOpen(false);
@@ -165,7 +166,8 @@ const OtpModal = ({
     if (code.length !== 6) return;
     setSubmitting(true);
     try {
-      const res = await dispatch(verifyEmailCode(email, code, langue));
+      // ✅ Correction: on passe markOnRegister quand intent === 'register'
+      const res = await dispatch(verifyEmailCode(email, code, langue, intent === 'register'));
       if (res?.verified) {
         showToastThenDialog(
           langue === "fr" ? "Vérification réussie" : "Verification success",
@@ -194,6 +196,17 @@ const OtpModal = ({
           ? "Vérifiez votre boîte e-mail."
           : "Please check your inbox."
       );
+    } catch (e) {
+      // Optionnel: message lisible avec un éventuel retry_in côté backend
+      const msg = e?.response?.data?.message;
+      const retry = e?.response?.data?.retry_in;
+      setToastMsg(retry ? `${msg} (${retry}s)` : (msg || (langue==='fr'?'Échec de renvoi.':'Resend failed.')));
+      setToastOpen(true);
+      clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => {
+        setToastOpen(false);
+        setToastMsg('');
+      }, 2200);
     } finally {
       setResending(false);
       setDigits(["", "", "", "", "", ""]);

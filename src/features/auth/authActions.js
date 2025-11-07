@@ -1,4 +1,3 @@
-// src/features/auth/authActions.js
 import axios from 'axios';
 import { toast } from '../../component/toast/toast';
 import { loginStart, loginSuccess, loginFailure, logoutUser as logoutAction } from '../../store/slices/Slice';
@@ -33,11 +32,9 @@ const saveSession = (token, user, { persist = false, rememberEmail = null } = {}
     if (token) target.setItem(TOKEN_KEY, token);
     if (user)  target.setItem(USER_KEY, JSON.stringify(user));
 
-    // Nettoyer l'autre stockage pour éviter les doublons / incohérences
     other.removeItem(TOKEN_KEY);
     other.removeItem(USER_KEY);
 
-    // Mémorisation d'email (toujours en localStorage)
     if (rememberEmail) localStorage.setItem(REMEMBER_EMAIL, rememberEmail);
     else localStorage.removeItem(REMEMBER_EMAIL);
   } catch {}
@@ -67,13 +64,18 @@ axios.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// ==== Helpers erreurs ======================================================
+// ==== Helpers erreurs (propager status, code, errors) =======================
 const handleAuthError = (error) => {
   if (error?.response) {
-    const { data } = error.response;
-    return { message: data?.message || 'Validation failed', errors: data?.errors || {} };
+    const { data, status } = error.response;
+    return {
+      message: data?.message || 'Validation failed',
+      errors: data?.errors || {},
+      status,
+      code: data?.code || null,
+    };
   }
-  return { message: error?.message || 'An error occurred', errors: {} };
+  return { message: error?.message || 'An error occurred', errors: {}, status: 0, code: null };
 };
 
 // ==== OTP (inchangé) =======================================================
@@ -159,6 +161,33 @@ export const verifyEmailCode = (email, code, langue='fr') => async () => {
   }
 };
 
+// === NOUVEAUX HELPERS: challenge login & policy inscription ===============
+export const checkPasswordPolicy = async (password, langue='fr') => {
+  try {
+    const { data } = await axios.post('/password/validate', { password, lang: langue });
+    return data;
+  } catch (e) {
+    return { valid: false, errors: ['server'], message: (langue==='fr'?'Vérification impossible.':'Validation failed.') };
+  }
+};
+
+export const challengeLoginCredentials = async (email, password, langue='fr') => {
+  try {
+    const { data } = await axios.post('/login/challenge', { email, password, lang: langue });
+    return data; // { ok: true }
+  } catch (error) {
+    // Normaliser pour le front
+    const err = handleAuthError(error);
+    const fieldErrors = err.errors || {};
+    // Rejeter avec forme exploitable
+    const e = new Error(err.message || 'Challenge failed');
+    e.status = err.status;
+    e.code = err.code;
+    e.fieldErrors = fieldErrors;
+    throw e;
+  }
+};
+
 // ==== AUTH ================================================================
 export const loginUser = (credentials) => async (dispatch) => {
   dispatch(loginStart());
@@ -170,7 +199,6 @@ export const loginUser = (credentials) => async (dispatch) => {
     const enriched = { ...credentials, last_login: new Date().toISOString() };
     const { data } = await axios.post('/login', enriched);
 
-    // ✅ Persistance contrôlée par rememberMe
     saveSession(
       data.token,
       data.user,
@@ -180,7 +208,6 @@ export const loginUser = (credentials) => async (dispatch) => {
       }
     );
 
-    // (optionnel) Assure l'en-tête immédiatement après login (utile avant la 1re requête interceptée)
     axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`;
 
     dispatch(loginSuccess({
@@ -229,7 +256,6 @@ export const registerUser = (userData) => async (dispatch) => {
       transformRequest: [(d) => JSON.stringify(d)],
     });
 
-    // 🔒 Par défaut après inscription: session-only (non persistant)
     saveSession(
       data.token,
       data.user,
@@ -278,7 +304,6 @@ export const fetchCurrentUser = () => async (dispatch) => {
     const { data } = await axios.get('/user');
     const user = data.user || data;
 
-    // 🔄 Range le user dans le même stockage que le token
     try {
       const where = getActiveStorage() || 'local';
       const store = where === 'session' ? sessionStorage : localStorage;

@@ -10,6 +10,10 @@ import './auth.css';
 import LoadingComponent from '../../component/loading/LoadingComponent';
 import Toaster from '../../component/toast/Toaster';
 import { loginUser, registerUser, checkUnique, preVerifyEmail } from '../../features/auth/authActions';
+import { checkPasswordPolicy, challengeLoginCredentials } from '../../features/auth/authActions'; // ✅ NEW
+
+
+
 import { startGoogleOAuth } from '../../features/auth/oauthActions';
 
 import OtpModal from '../../component/otp/OtpModal';
@@ -379,57 +383,102 @@ const AuthPage = ({ initialView = 'login' }) => {
     setSubmitAttempted(true);
     if(!validateForm()) return;
 
-    if(isLoginActive){
-      try{
-        setSubmitting(true);
-        const pre = await dispatch(preVerifyEmail(formData.email, langue, 'login'));
-        setPendingLogin({
-          email: formData.email,
-          password: formData.password,
-          rememberMe: formData.rememberMe,
-          langue
-        });
-        setOtpCtx({ email: formData.email, ttl: Math.max(30, pre?.ttl || 120), intent: 'login' });
-        setOtpOpen(true);
-      } finally {
-        setSubmitting(false);
-      }
+  if (isLoginActive) {
+  try {
+    setSubmitting(true);
+
+    // ✅ 0) Vérifs minimales côté client (format email + présence password)
+    if (!formData.email.trim() || !emailRegex.test(formData.email)) {
+      const msg = t('invalid_email');
+      setErrors(p => ({ ...p, email: msg }));
+      setGlobalError(msg);
       return;
     }
+    if (!formData.password.trim()) {
+      const msg = t('password_required');
+      setErrors(p => ({ ...p, password: msg }));
+      setGlobalError(msg);
+      return;
+    }
+
+    // ✅ 1) Challenge identifiants AVANT OTP (PAS de regex/strong policy ici)
+    await challengeLoginCredentials(formData.email, formData.password, langue);
+
+    // ✅ 2) Envoi OTP seulement si les identifiants sont bons
+    const pre = await dispatch(preVerifyEmail(formData.email, langue, 'login'));
+    setPendingLogin({
+      email: formData.email,
+      password: formData.password,
+      rememberMe: formData.rememberMe,
+      langue
+    });
+    setOtpCtx({ email: formData.email, ttl: Math.max(30, pre?.ttl || 120), intent: 'login' });
+    setOtpOpen(true);
+  } catch (e) {
+    // Mapping des erreurs serveur vers les champs
+    if (e?.fieldErrors) {
+      setErrors(prev => ({
+        ...prev,
+        email: e.fieldErrors.email ? e.fieldErrors.email[0] : prev.email,
+        password: e.fieldErrors.password ? e.fieldErrors.password[0] : prev.password,
+        general: !e.fieldErrors.email && !e.fieldErrors.password ? (e.message || '') : prev.general,
+      }));
+      setGlobalError(e.message || '');
+    } else {
+      setGlobalError(e?.message || t('auth.unknown_error', 'Unknown error'));
+    }
+    return;
+  } finally {
+    setSubmitting(false);
+  }
+}
+
+
 
     // ===== REGISTER =====
-    if(!isLoginActive){
-      // 🔒 Bloque l'OTP si PW invalide (regex forte)
-      if(!PASSWORD_REGEX.test(formData.password)){
-        setErrors(p => ({ ...p, password: PW_RULE_MSG_FR }));
-        setGlobalError(PW_RULE_MSG_FR);
-        return;
-      }
-      if(formData.password !== formData.confirmPassword){
-        const msg = t('password_mismatch');
-        setErrors(p => ({ ...p, confirmPassword: msg }));
-        setGlobalError(msg);
-        return;
-      }
-      if(uniqueStatus.email==='taken'||uniqueStatus.username==='taken') return;
+   // ===== REGISTER =====
+if (!isLoginActive) {
+  if (!PASSWORD_REGEX.test(formData.password)) {
+    setErrors(p => ({ ...p, password: PW_RULE_MSG_FR }));
+    setGlobalError(PW_RULE_MSG_FR);
+    return;
+  }
+  if (formData.password !== formData.confirmPassword) {
+    const msg = t('password_mismatch');
+    setErrors(p => ({ ...p, confirmPassword: msg }));
+    setGlobalError(msg);
+    return;
+  }
+  if (uniqueStatus.email === 'taken' || uniqueStatus.username === 'taken') return;
 
-      setSubmitting(true);
-      try{
-        const pre = await dispatch(preVerifyEmail(formData.email, langue, 'register'));
-        setPendingRegister({
-          username:formData.username,
-          first_name:formData.firstName,
-          last_name:formData.lastName,
-          email:formData.email,
-          password:formData.password,
-          password_confirmation:formData.confirmPassword,
-          langue
-        });
-        setOtpCtx({ email: formData.email, ttl: Math.max(30, pre?.ttl || 120), intent: 'register' });
-        setOtpOpen(true);
-      } finally { setSubmitting(false); }
-      return;
-    }
+  // ✅ en plus: policy côté serveur pour rester aligné avec le backend
+  const pwSrv = await checkPasswordPolicy(formData.password, langue);
+  if (!pwSrv?.valid) {
+    const msg = PW_RULE_MSG_FR;
+    setErrors(p => ({ ...p, password: msg }));
+    setGlobalError(msg);
+    return;
+  }
+
+  setSubmitting(true);
+  try {
+    const pre = await dispatch(preVerifyEmail(formData.email, langue, 'register'));
+    setPendingRegister({
+      username: formData.username,
+      first_name: formData.firstName,
+      last_name: formData.lastName,
+      email: formData.email,
+      password: formData.password,
+      password_confirmation: formData.confirmPassword,
+      langue
+    });
+    setOtpCtx({ email: formData.email, ttl: Math.max(30, pre?.ttl || 120), intent: 'register' });
+    setOtpOpen(true);
+  } finally {
+    setSubmitting(false);
+  }
+  return;
+}
   };
 
   const onOtpVerified = async () => {
