@@ -1,57 +1,204 @@
-import React, { useEffect, useState, useCallback } from 'react';
+// src/pages/activity/ActivityLog.jsx
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faUserEdit, faKey, faEllipsisV, faClock, faDownload, faSearch,
   faFilter, faTriangleExclamation, faChevronLeft, faChevronRight,
-  faArrowsRotate, faNewspaper, faUserShield,
+  faArrowsRotate, faNewspaper, faUserShield, faUser, faCommentDots,
 } from '@fortawesome/free-solid-svg-icons';
 import axios from 'axios';
 import { useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 
+/* ---------------------------------------------------------------------------------- */
+/* Icons & styles per type                                                            */
+/* ---------------------------------------------------------------------------------- */
 const TYPE_MAP = {
-  permission_changed: { icon: faKey,        colorWrap: 'bg-indigo-100',  colorIcon: 'text-indigo-600' },
-  role_assigned:      { icon: faUserShield, colorWrap: 'bg-emerald-100', colorIcon: 'text-emerald-700' },
-  article_created:    { icon: faNewspaper,  colorWrap: 'bg-blue-100',    colorIcon: 'text-blue-600' },
-  comment_approved:   { icon: faUserEdit,   colorWrap: 'bg-purple-100',  colorIcon: 'text-purple-600' },
-  default:            { icon: faClock,      colorWrap: 'bg-gray-100',    colorIcon: 'text-gray-600' },
+  permission_changed: { icon: faKey,        colorWrap: 'bg-indigo-100',  colorIcon: 'text-indigo-600',  label: 'Permission' },
+  role_assigned:      { icon: faUserShield, colorWrap: 'bg-emerald-100', colorIcon: 'text-emerald-700', label: 'Rôle' },
+  article_created:    { icon: faNewspaper,  colorWrap: 'bg-blue-100',    colorIcon: 'text-blue-600',    label: 'Article' },
+  comment_approved:   { icon: faUserEdit,   colorWrap: 'bg-purple-100',  colorIcon: 'text-purple-600',  label: 'Commentaire' },
+  comment_rejected:   { icon: faCommentDots,colorWrap: 'bg-amber-100',   colorIcon: 'text-amber-700',   label: 'Commentaire' },
+  default:            { icon: faClock,      colorWrap: 'bg-gray-100',    colorIcon: 'text-gray-600',    label: 'Activité' },
 };
 
-const AnchorOrLink = ({ to, className, children }) => {
-  if (!to) return <span className={className}>{children}</span>;
-  const isAbsolute = /^https?:\/\//i.test(to);
-  return isAbsolute ? (
-    <a href={to} className={className} target="_blank" rel="noopener noreferrer">{children}</a>
-  ) : (
-    <Link to={to} className={className}>{children}</Link>
-  );
+/* ---------------------------------------------------------------------------------- */
+/* Links helpers                                                                      */
+/* ---------------------------------------------------------------------------------- */
+const isAbs = (u) => /^https?:\/\//i.test(String(u || ''));
+const withQuery = (href, params = {}) => {
+  if (!href) return null;
+  const m = String(href).match(/^([^?#]*)(\?[^#]*)?(#.*)?$/);
+  const base = m?.[1] ?? href;
+  const qs0  = (m?.[2] ?? '').replace(/^\?/, '');
+  const hash = m?.[3] ?? '';
+  const search = new URLSearchParams(qs0);
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') search.set(k, String(v));
+  });
+  const qs = search.toString();
+  return `${base}${qs ? `?${qs}` : ''}${hash}`;
 };
 
+const toFrontPath = (href) => {
+  if (!href) return null;
+  if (href.startsWith('/')) return href;
+  try { const u = new URL(href); return `${u.pathname}${u.search}${u.hash}`; }
+  catch { return href; }
+};
+
+/** Construit le lien idéal en fonction du type + ajoute les params de modération si besoin */
 const buildActivityLink = (a) => {
+  // priorité aux liens fournis par l’API
   const direct = a.url || a.link;
   if (direct) return direct;
-  const articleSlug = a.article_slug || a.slug;
+
+  const articleSlug =
+    a.article_slug || a.slug || a.article?.slug || a.target_article_slug || null;
+
   switch (a.type) {
-    case 'article_created':   return articleSlug ? `/articles/${articleSlug}` : null;
-    case 'comment_approved': {
+    case 'article_created':
+      return articleSlug ? `/articles/${articleSlug}` : null;
+
+    case 'comment_approved':
+    case 'comment_rejected': {
       if (!articleSlug) return null;
       const commentId =
-        a.comment_id ||
+        a.comment_id || a.comment?.id ||
         (typeof a.id === 'string' && a.id.startsWith('comment-approve-')
           ? a.id.replace('comment-approve-', '')
           : null);
-      return commentId ? `/articles/${articleSlug}#comment-${commentId}` : `/articles/${articleSlug}`;
+      const base = commentId
+        ? `/articles/${articleSlug}#comment-${commentId}`
+        : `/articles/${articleSlug}`;
+      // Ajoute le contexte "moderate" pour auto-focus dans Comments.jsx si dispo
+      return withQuery(base, {
+        moderate: 1,
+        comment_id: commentId || undefined,
+        status: a.type === 'comment_approved' ? 'approved'
+              : a.type === 'comment_rejected' ? 'rejected'
+              : undefined,
+      });
     }
+
     case 'role_assigned':
-    case 'permission_changed': return '/settings';
-    default: return null;
+    case 'permission_changed':
+      return '/settings';
+
+    default:
+      return null;
   }
 };
 
+const AnchorOrLink = ({ to, className, children, onClick }) => {
+  if (!to) return <span className={className}>{children}</span>;
+  const rel = toFrontPath(to);
+  return isAbs(to) ? (
+    <a href={to} className={className} target="_blank" rel="noopener noreferrer" onClick={onClick}>{children}</a>
+  ) : (
+    <Link to={rel} className={className} onClick={onClick}>{children}</Link>
+  );
+};
+
+/* ---------------------------------------------------------------------------------- */
+/* Read/unread (local)                                                                */
+/* ---------------------------------------------------------------------------------- */
+const SEEN_KEY = (uid) => `act_seen_ts:${uid}`;
+const getSeen = (uid) => { try { return localStorage.getItem(SEEN_KEY(uid)); } catch { return null; } };
+const setSeenNow = (uid) => { try { localStorage.setItem(SEEN_KEY(uid), new Date().toISOString()); } catch {} };
+
+const OPEN_KEY = (type, id) => `opened:${type}:${id}`;
+const getOpenedAt = (type, id) => { try { return localStorage.getItem(OPEN_KEY(type, id)); } catch { return null; } };
+const setOpenedNow = (type, id) => { try { localStorage.setItem(OPEN_KEY(type, id), new Date().toISOString()); } catch {} };
+
+const isAfter = (isoA, isoB) => {
+  if (!isoA || !isoB) return false;
+  const a = Date.parse(isoA), b = Date.parse(isoB);
+  return !Number.isNaN(a) && !Number.isNaN(b) && a > b;
+};
+
+/** Non-lu ssi jamais ouvert et créé après la dernière “seen ts” */
+const isUnread = (item, userId) => {
+  const id = item?.id;
+  if (!id) return false;
+  const opened = getOpenedAt(item.type || 'activity', id);
+  if (opened) return false;
+  const lastSeen = userId ? getSeen(userId) : null;
+  const created = item?.created_at || item?.createdAt;
+  return lastSeen ? isAfter(created, lastSeen) : false;
+};
+
+/* ---------------------------------------------------------------------------------- */
+/* Safe field readers (tolère payloads variés)                                        */
+/* ---------------------------------------------------------------------------------- */
+const pickText = (...vals) => vals.find(v => typeof v === 'string' && v.trim()) || null;
+const pickObj = (...vals) => vals.find(v => v && typeof v === 'object') || null;
+
+/** Construit un bloc “détails” human-friendly en fonction du type */
+const buildDetails = (a, t) => {
+  const articleTitle = pickText(
+    a.article_title, a.article?.title, a.target_article_title, a.title2
+  );
+
+  const commentText = pickText(
+    a.comment_excerpt, a.comment?.excerpt, a.comment?.content, a.comment_snippet
+  );
+
+  const actor = pickObj(a.actor, a.user, a.by_user);
+  const actorName = pickText(
+    actor?.username, actor?.name, `${actor?.first_name || ''} ${actor?.last_name || ''}`.trim()
+  );
+
+  const targetUser = pickObj(a.target_user, a.grantee, a.affected_user);
+  const targetUserName = pickText(
+    targetUser?.username, targetUser?.name, `${targetUser?.first_name || ''} ${targetUser?.last_name || ''}`.trim()
+  );
+
+  const roleName = pickText(a.role_name, a.role?.name, a.role);
+  const permName = pickText(a.permission_name, a.permission?.name, a.permission);
+
+  switch (a.type) {
+    case 'article_created':
+      return articleTitle
+        ? t('details_article_created', 'Article: {{x}}', { x: articleTitle })
+        : t('details_article_created_no_title', 'Article créé');
+
+    case 'comment_approved':
+    case 'comment_rejected':
+      return [
+        commentText ? t('details_comment', 'Commentaire: {{x}}', { x: commentText }) : null,
+        articleTitle ? t('details_on_article', 'Sur: {{x}}', { x: articleTitle }) : null,
+        targetUserName ? t('details_by_user', 'Auteur: {{x}}', { x: targetUserName }) : null,
+      ].filter(Boolean).join(' • ');
+
+    case 'role_assigned':
+      return [
+        roleName ? t('details_role', 'Rôle: {{x}}', { x: roleName }) : null,
+        targetUserName ? t('details_to_user', 'À: {{x}}', { x: targetUserName }) : null,
+      ].filter(Boolean).join(' • ');
+
+    case 'permission_changed':
+      return [
+        permName ? t('details_permission', 'Permission: {{x}}', { x: permName }) : null,
+        targetUserName ? t('details_to_user', 'À: {{x}}', { x: targetUserName }) : null,
+      ].filter(Boolean).join(' • ');
+
+    default:
+      return [
+        articleTitle || null,
+        targetUserName ? t('details_user', 'Utilisateur: {{x}}', { x: targetUserName }) : null,
+      ].filter(Boolean).join(' • ');
+  }
+};
+
+/* ---------------------------------------------------------------------------------- */
+/* Main component                                                                     */
+/* ---------------------------------------------------------------------------------- */
 const ActivityLog = () => {
   const { t } = useTranslation();
-  const userId = useSelector(state => state?.library?.auth?.user?.id);
+  const user = useSelector((s) => s?.library?.auth?.user);
+  const userId = user?.id;
 
   const [filters, setFilters] = useState({
     q: '',
@@ -60,7 +207,8 @@ const ActivityLog = () => {
     to: '',
     page: 1,
     perPage: 10,
-    asTarget: false,
+    asActor: true,   // Nouvel interrupteur : activités faites par moi
+    asTarget: false, // Celles qui me concernent
   });
   const [showFilters, setShowFilters] = useState(false);
 
@@ -82,10 +230,22 @@ const ActivityLog = () => {
   };
 
   const clearFilters = () => {
-    setFilters({ q: '', type: '', from: '', to: '', page: 1, perPage: filters.perPage, asTarget: false });
+    setFilters(prev => ({
+      q: '',
+      type: '',
+      from: '',
+      to: '',
+      page: 1,
+      perPage: prev.perPage,
+      asActor: true,
+      asTarget: false,
+    }));
   };
 
-  const hasActiveFilters = filters.q || filters.type || filters.from || filters.to || filters.asTarget;
+  const hasActiveFilters = useMemo(
+    () => !!(filters.q || filters.type || filters.from || filters.to || filters.asActor || filters.asTarget),
+    [filters]
+  );
 
   const formatDate = useCallback((iso) => {
     if (!iso) return '';
@@ -104,7 +264,7 @@ const ActivityLog = () => {
     if (!userId) return;
     setData(prev => ({ ...prev, loading: true, error: null }));
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('tokenGuard');
       const params = {
         per_page: filters.perPage,
         page: filters.page,
@@ -112,15 +272,18 @@ const ActivityLog = () => {
         ...(filters.type && { type: filters.type }),
         ...(filters.from && { from: filters.from }),
         ...(filters.to && { to: filters.to }),
+        // Deux portées : as_actor et as_target. L'API peut n'en accepter qu'une ; on envoie les deux pour être explicite.
+        ...(filters.asActor ? { as_actor: 1 } : { as_actor: 0 }),
         ...(filters.asTarget ? { as_target: 1 } : { as_target: 0 }),
       };
       const { data: response } = await axios.get(`/users/${userId}/activities`, {
         params,
         headers: token ? { Authorization: `Bearer ${token}` } : undefined
       });
+
       setData(prev => ({
         ...prev,
-        items: response?.data || [],
+        items: Array.isArray(response?.data) ? response.data : [],
         meta: {
           current_page: response?.meta?.current_page || 1,
           last_page: response?.meta?.last_page || 1,
@@ -129,6 +292,7 @@ const ActivityLog = () => {
         },
         loading: false
       }));
+
       if (response?.meta?.current_page && response.meta.current_page !== filters.page) {
         setFilters(prev => ({ ...prev, page: response.meta.current_page }));
       }
@@ -143,9 +307,12 @@ const ActivityLog = () => {
         loading: false
       }));
     }
-  }, [userId, filters.page, filters.perPage, debouncedQ, filters.type, filters.from, filters.to, filters.asTarget, t]);
+  }, [userId, filters.page, filters.perPage, debouncedQ, filters.type, filters.from, filters.to, filters.asActor, filters.asTarget, t]);
 
   useEffect(() => { fetchActivities(); }, [fetchActivities]);
+
+  // Marquer tous comme "vus" quand on ouvre la page — optionnel ; sinon commente la ligne ci-dessous
+  useEffect(() => { if (userId) setSeenNow(userId); }, [userId]);
 
   const handlePagination = (direction) => {
     const newPage = direction === 'prev'
@@ -155,10 +322,11 @@ const ActivityLog = () => {
   };
 
   const exportCSV = () => {
-    const headers = ['id', 'type', 'title', 'subtitle', 'created_at', 'link'];
+    const headers = ['id', 'type', 'title', 'details', 'created_at', 'link'];
     const rows = data.items.map(item => {
       const link = buildActivityLink(item) || '';
-      return [item.id || '', item.type || '', item.title || '', item.subtitle || '', item.created_at || '', link]
+      const details = buildDetails(item, t) || '';
+      return [item.id || '', item.type || '', item.title || '', details, item.created_at || '', link]
         .map(field => `"${String(field).replaceAll('"','""')}"`);
     });
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -175,7 +343,9 @@ const ActivityLog = () => {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">{t('activity_log', "Journal d'Activité")}</h2>
-          <p className="text-gray-500 text-sm">{t('user_actions_history', 'Historique des actions utilisateur')}</p>
+          <p className="text-gray-500 text-sm">
+            {t('user_actions_history', 'Historique des actions utilisateur')} — {user?.username || user?.name || t('me','Moi')}
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -201,7 +371,7 @@ const ActivityLog = () => {
             {hasActiveFilters && (
               <span className="ml-1 bg-indigo-100 text-indigo-800 text-[11px] px-1.5 py-0.5 rounded-full">
                 {
-                  [filters.q, filters.type, filters.from, filters.to, filters.asTarget && '1']
+                  [filters.q, filters.type, filters.from, filters.to, filters.asActor && '1', filters.asTarget && '1']
                     .filter(Boolean).length
                 }
               </span>
@@ -218,7 +388,7 @@ const ActivityLog = () => {
         </div>
       </div>
 
-      {/* Filters Panel — VERSION COMPACTE */}
+      {/* Filters Panel */}
       {showFilters && (
         <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6 shadow-sm">
           <div className="flex items-center justify-between mb-3">
@@ -230,9 +400,9 @@ const ActivityLog = () => {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
             {/* Recherche */}
-            <div className="space-y-1">
+            <div className="space-y-1 lg:col-span-2">
               <label className="block text-xs font-medium text-gray-700">{t('search_short','Rech.')}</label>
               <div className="relative">
                 <FontAwesomeIcon icon={faSearch} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
@@ -258,7 +428,8 @@ const ActivityLog = () => {
                 <option value="permission_changed">{t('permission_changed_short','Perm.')}</option>
                 <option value="role_assigned">{t('role_assigned_short','Rôles')}</option>
                 <option value="article_created">{t('article_created_short','Articles')}</option>
-                <option value="comment_approved">{t('comment_approved_short','Comms')}</option>
+                <option value="comment_approved">{t('comment_approved_short','Comms ✔')}</option>
+                <option value="comment_rejected">{t('comment_rejected_short','Comms ✕')}</option>
               </select>
             </div>
 
@@ -283,31 +454,31 @@ const ActivityLog = () => {
               />
             </div>
 
-            {/* Ciblé */}
+            {/* Portées */}
             <div className="space-y-1">
-              <label className="block text-xs font-medium text-gray-700">{t('target_short','Ciblé')}</label>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => updateFilter('asTarget', !filters.asTarget)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition
-                    ${filters.asTarget ? 'bg-indigo-600' : 'bg-gray-200'}`}
-                  aria-pressed={filters.asTarget}
-                  aria-label={t('target_short','Ciblé')}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition
-                      ${filters.asTarget ? 'translate-x-6' : 'translate-x-1'}`}
+              <label className="block text-xs font-medium text-gray-700">{t('scope','Portée')}</label>
+              <div className="flex items-center gap-4">
+                <label className="inline-flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={!!filters.asActor}
+                    onChange={(e) => updateFilter('asActor', e.target.checked)}
                   />
-                </button>
-                <span className="text-xs text-gray-700">
-                  {filters.asTarget ? t('on_short','On') : t('off_short','Off')}
-                </span>
+                  {t('as_actor','Par moi')}
+                </label>
+                <label className="inline-flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={!!filters.asTarget}
+                    onChange={(e) => updateFilter('asTarget', e.target.checked)}
+                  />
+                  {t('as_target','Me concernant')}
+                </label>
               </div>
             </div>
           </div>
 
-          {/* Badges actifs (compacts) */}
+          {/* Badges actifs */}
           {hasActiveFilters && (
             <div className="mt-3 pt-3 border-t border-gray-200">
               <div className="flex flex-wrap gap-1.5">
@@ -336,9 +507,15 @@ const ActivityLog = () => {
                     <button onClick={() => updateFilter('to', '')} className="ml-1 hover:text-orange-900">×</button>
                   </span>
                 )}
+                {filters.asActor && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-800 text-xs rounded-full">
+                    {t('as_actor','Par moi')}
+                    <button onClick={() => updateFilter('asActor', false)} className="ml-1 hover:text-indigo-900">×</button>
+                  </span>
+                )}
                 {filters.asTarget && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-800 text-xs rounded-full">
-                    {t('target_short','Ciblé')}
+                    {t('as_target','Me concernant')}
                     <button onClick={() => updateFilter('asTarget', false)} className="ml-1 hover:text-indigo-900">×</button>
                   </span>
                 )}
@@ -383,36 +560,65 @@ const ActivityLog = () => {
 
         {data.items.length > 0 && (
           <div className="divide-y divide-gray-200">
-            {data.items.map(activity => {
-              const typeConfig = TYPE_MAP[activity.type] || TYPE_MAP.default;
-              const link = buildActivityLink(activity);
+            {data.items.map(a => {
+              const typeConfig = TYPE_MAP[a.type] || TYPE_MAP.default;
+              const link = buildActivityLink(a);
+              const unread = isUnread(a, userId);
+              const titleText =
+                a.title ||
+                (TYPE_MAP[a.type]?.label
+                  ? `${TYPE_MAP[a.type].label} — ${a?.action || ''}`.trim()
+                  : a.type || t('activity','Activité'));
+
+              const details = buildDetails(a, t);
+
+              const onOpen = () => {
+                // Marquer l'activité comme “ouverte”
+                if (a?.id) setOpenedNow(a.type || 'activity', a.id);
+              };
+
               return (
-                <div key={activity.id} className="p-4 hover:bg-gray-50 transition-colors">
+                <div key={a.id || `${a.type}-${a.created_at}`} className="p-4 hover:bg-gray-50 transition-colors">
                   <div className="flex items-start">
-                    <div className={`flex-shrink-0 ${typeConfig.colorWrap} p-2 rounded-full mr-3`}>
+                    <div className={`flex-shrink-0 ${typeConfig.colorWrap} p-2 rounded-full mr-3 relative`}>
                       <FontAwesomeIcon icon={typeConfig.icon} className={typeConfig.colorIcon} />
+                      {unread && (
+                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-600" />
+                      )}
                     </div>
+
                     <div className="flex-1 min-w-0">
                       <AnchorOrLink
                         to={link}
-                        className={`text-sm font-medium ${link ? 'text-indigo-700 hover:underline' : 'text-gray-900'} truncate`}
+                        onClick={onOpen}
+                        className={`text-sm ${unread ? 'font-semibold' : 'font-medium'} ${
+                          link ? 'text-indigo-700 hover:underline' : 'text-gray-900'
+                        } truncate flex items-center gap-2`}
                       >
-                        {activity.title || t('user_updated_permissions', 'Permissions mises à jour')}
+                        {titleText}
+                        {/* Affiche l'utilisateur ciblé si pertinent */}
+                        {a?.target_user && (
+                          <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                            <FontAwesomeIcon icon={faUser} />
+                            {a.target_user?.username || a.target_user?.name}
+                          </span>
+                        )}
                       </AnchorOrLink>
 
-                      {activity.subtitle && (
-                        <p className="text-sm text-gray-500 mt-1">
-                          <span className="bg-gray-100 px-2 py-1 rounded text-xs">{activity.subtitle}</span>
+                      {details && (
+                        <p className={`text-[13px] mt-1 ${unread ? 'text-gray-700' : 'text-gray-500'}`}>
+                          {details}
                         </p>
                       )}
 
-                      {activity.created_at && (
+                      {a.created_at && (
                         <p className="text-xs text-gray-500 mt-2">
                           <FontAwesomeIcon icon={faClock} className="mr-1" />
-                          {formatDate(activity.created_at)}
+                          {formatDate(a.created_at)}
                         </p>
                       )}
                     </div>
+
                     <button className="text-gray-400 hover:text-gray-600 ml-2">
                       <FontAwesomeIcon icon={faEllipsisV} />
                     </button>

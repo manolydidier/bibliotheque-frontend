@@ -1009,7 +1009,30 @@ i18n
     "reset": "Reset to auto"
   }
 },
+// === Navbar & Notifications (missing keys) ===
+"moderation": "Moderation",
+"hello": "Hello",
+"open": "Open",
+"to_moderate": "to moderate",
+"activities": "Activities",
+"pending": "To moderate",
+"pending_item": "Item to moderate",
+"no_activity": "No activity for now",
+"nothing_to_moderate": "Nothing to moderate",
+"see_all": "See all",
+"mark_all_read": "Mark all as read",
+"see_more": "See more",
+"no_more": "End",
 
+// Time-ago helpers
+"just_now": "just now",
+"x_min_ago": "{{x}} min ago",
+"x_h_ago": "{{x}} h ago",
+
+// Aliases / typos used in code
+"sumary": "Summary",     // alias if code uses 'sumary'
+"playdoier": "Advocacy"  // keep key; better label than 'Playdoier'
+,
               "role_permissions_management": "Role Permissions Management",
             "manage_role_permissions_description": "Manage associations between roles and permissions",
             "search_roles_permissions": "Search roles and permissions...",
@@ -2152,7 +2175,31 @@ i18n
   }
 
 ,
+// === Navbar & Notifications (clés manquantes) ===
+"moderation": "Modération",
+"hello": "Bonjour",
+"open": "Ouvrir",
+"to_moderate": "à modérer",
+"activities": "Activités",
+"pending": "À modérer",
+"pending_item": "Élément à modérer",
+"no_activity": "Aucune activité pour le moment",
+"nothing_to_moderate": "Rien à modérer",
+"see_all": "Tout voir",
+"mark_all_read": "Tout marquer lu",
+"see_more": "Voir plus",
+"No_more": "Fin",        // si tu préfères tout en minuscules, utilise "no_more"
+"no_more": "Fin",
 
+// Helpers "time-ago"
+"just_now": "à l'instant",
+"x_min_ago": "il y a {{x}} min",
+"x_h_ago": "il y a {{x}} h",
+
+// Aliases / typos
+"sumary": "Résumé",          // alias si le code appelle 'sumary'
+"playdoier": "Plaidoyer"     // meilleure étiquette FR
+,
         "role_permissions_management": "Gestion des Permissions de Rôles",
         "manage_role_permissions_description": "Gérer les associations entre rôles et permissions",
         "search_roles_permissions": "Rechercher rôles et permissions...",

@@ -349,8 +349,8 @@ const ArticleForm = () => {
   const [tenantLocked, setTenantLocked] = useState(true);
 
   // Autosave
-  const [autosaveEnabled, setAutosaveEnabled] = useState(true);
-  const autosaveLockRef = useRef(false);
+  // const [autosaveEnabled, setAutosaveEnabled] = useState(true);
+  // const autosaveLockRef = useRef(false);
 
   /* ---------- ERREURS LARAVEL (422) ---------- */
   const [errors, setErrors] = useState({});
@@ -826,7 +826,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
     }
   }, [isEdit, model, tabFields, featFile, avatarFile]);
 
-  const handleSaveActiveTab = () => savePartial(activeTab);
+  
 
   const isCreateValid = !isEdit && Boolean(String(model.title || '').trim()) && Boolean(String(model.content || '').trim());
 
@@ -952,20 +952,20 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
   };
 
   /* ========= Autosave (onglet actif) ========= */
-  useEffect(() => {
-    if (!isEdit || !autosaveEnabled) return;
-    const timer = setInterval(async () => {
-      if (autosaveLockRef.current) return;
-      if (!isTabDirty(activeTab)) return;
-      autosaveLockRef.current = true;
-      try {
-        await savePartial(activeTab);
-      } finally {
-        autosaveLockRef.current = false;
-      }
-    }, AUTOSAVE_PERIOD_MS);
-    return () => clearInterval(timer);
-  }, [isEdit, autosaveEnabled, activeTab, isTabDirty, savePartial]);
+  // useEffect(() => {
+  //   if (!isEdit || !autosaveEnabled) return;
+  //   const timer = setInterval(async () => {
+  //     if (autosaveLockRef.current) return;
+  //     if (!isTabDirty(activeTab)) return;
+  //     autosaveLockRef.current = true;
+  //     try {
+  //       await savePartial(activeTab);
+  //     } finally {
+  //       autosaveLockRef.current = false;
+  //     }
+  //   }, AUTOSAVE_PERIOD_MS);
+  //   return () => clearInterval(timer);
+  // }, [isEdit, autosaveEnabled, activeTab, isTabDirty, savePartial]);
 
   /* ========= Badge calculé (Brouillon/Programmé/Publié/Expiré) ========= */
   const computedBadge = useMemo(() => {
@@ -982,6 +982,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 relative h-[1200px] overflow-auto">
+
       {/* Barre de progression */}
       <div className="fixed top-0 left-0 right-0 z-[9999] h-1.5 bg-slate-200/60">
         <div
@@ -1033,7 +1034,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
 
             {/* Actions header */}
             <div className="flex items-center gap-3">
-              <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold cursor-pointer">
+              {/* <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold cursor-pointer">
                 <input
                   type="checkbox"
                   className="sr-only"
@@ -1044,19 +1045,58 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
                   <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${autosaveEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
                 </span>
                 Autosave {AUTOSAVE_PERIOD_MS/1000}s
-              </label>
+              </label> */}
+  
+                    <div className="w-full gap-4 z-40 bg-white/80 backdrop-blur-xl border-t border-slate-200">
+                      <div className="mx-auto max-w-screen-2xl px-6 lg:px-8 py-4 flex items-center justify-between">
+                        {/* <div className="text-xs text-slate-500">
+                          {isEdit ? `Édition de l’article #${model.id ?? ''}` : 'Création d’un nouvel article'}
+                        </div> */}
 
-              <button
-                type="button"
-                onClick={handlePublishNow}
-                disabled={isSubmitting}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow
-                  ${isSubmitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}
-                title="Publier immédiatement"
-              >
-                <FiPlay className="w-4 h-4" />
-                Publier maintenant
-              </button>
+                        <div className="flex items-center gap-3">
+                          {!isEdit && (
+                            <button
+                              type="button"
+                              onClick={handlePublishNow}
+                              disabled={isSubmitting || !isCreateValid}
+                              className={`inline-flex md:hidden items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow
+                              ${(!isCreateValid || isSubmitting) ? 'bg-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                              title={!isCreateValid ? 'Renseignez au moins le titre et le contenu' : undefined}
+                            >
+                              <FiPlay className="w-4 h-4" />
+                              Publier
+                            </button>
+                          )}
+
+                          {isEdit ? (
+                            isAnyTabDirty ? (
+                              <button
+                                type="button"
+                                onClick={handleSubmit}
+                                disabled={isSubmitting}
+                                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow
+                                  ${isSubmitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                              >
+                                <FiSave className="w-4 h-4" />
+                                {isSubmitting ? 'Enregistrement…' : 'Mettre à jour'}
+                              </button>
+                            ) : null
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={handleSubmit}
+                              disabled={isSubmitting || !isCreateValid}
+                              title={!isCreateValid ? 'Renseignez au moins le titre et le contenu' : undefined}
+                              className={`hidden md:inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow
+                                ${(!isCreateValid || isSubmitting) ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                            >
+                              <FiSave className="w-4 h-4" />
+                              {isSubmitting ? 'Enregistrement…' : 'Enregistrer'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>    
             </div>
           </div>
 
@@ -1109,42 +1149,13 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
             </ul>
           </nav>
         </div>
-
-        {/* BARRE DE SAUVEGARDE D’ONGLET */}
-        {isEdit && isTabDirty(activeTab) && (
-          <div className="border-t border-slate-200 bg-white/80 backdrop-blur sticky top-[72px] z-40">
-            <div className="mx-auto max-w-screen-2xl px-6 lg:px-8 py-3 flex items-center justify-between">
-              <div className="text-sm text-slate-700">
-                Des modifications non enregistrées dans <span className="font-semibold">« {({content:'Contenu',settings:'Paramètres',author:'Auteur',taxonomy:'Taxonomie',media:'Médias',analytics:'Stats',management:'Gestion',preview:'Aperçu'})[activeTab]} »</span>.
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleSaveActiveTab}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow bg-blue-600 hover:bg-blue-700"
-                >
-                  <FiSave className="w-4 h-4" />
-                  Enregistrer cet onglet
-                </button>
-                <button
-                  type="button"
-                  onClick={handlePublishNow}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow bg-emerald-600 hover:bg-emerald-700"
-                >
-                  <FiPlay className="w-4 h-4" />
-                  Publier maintenant
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </header>
 
       {/* Main */}
       <main className="mx-auto max-w-screen-2xl px-6 lg:px-8 py-8 relative z-10">
         {/* CONTENT */}
         {activeTab === 'content' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-auto mb-96">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-auto mb-24">
             <section className={`${card} p-8 space-y-6`}>
               <div className="space-y-3">
                 <label className={sectionTitle}>
@@ -1397,7 +1408,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
 
         {/* SETTINGS */}
         {activeTab === 'settings' && (
-          <div className="grid grid-cols-1 gap-6 h-screen mb-96 overflow-auto ">
+          <div className="grid grid-cols-1 gap-6 h-screen mb-24 overflow-auto ">
             <section className={`${card} p-8`}>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-3">
@@ -1537,7 +1548,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
 
         {/* AUTHOR — liste avatars + nom/bio */}
         {activeTab === 'author' && (
-          <div className="grid grid-cols-1 gap-6  mb-96 overflow-auto ">
+          <div className="grid grid-cols-1 gap-6  mb-24 overflow-auto ">
             <section className={`${card} p-8`}>
               <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-3">
                 <span className="p-2 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-500 text-white shadow-lg">
@@ -1708,7 +1719,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
 
         {/* TAXONOMY */}
         {activeTab === 'taxonomy' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6  mb-96 overflow-auto ">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6   ">
             <section className={`${card} p-8 space-y-4`}>
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-3">
                 <span className="p-2 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-500 text-white shadow-lg">
@@ -1789,7 +1800,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
 
         {/* ANALYTICS */}
         {activeTab === 'analytics' && (
-          <div className="grid grid-cols-1 gap-6  mb-96 overflow-auto ">
+          <div className="grid grid-cols-1 gap-6 ">
             <section className={`${card} p-8`}>
               <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-3">
                 <span className="p-2 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500 text-white shadow-lg">
@@ -1843,7 +1854,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
 
         {/* MANAGEMENT */}
         {activeTab === 'management' && (
-          <div className="grid grid-cols-1 gap-6  mb-96 overflow-auto ">
+          <div className="grid grid-cols-1 gap-6  overflow-auto ">
             <section className={`${card} p-8`}>
               <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-3">
                 <span className="p-2 rounded-2xl bg-gradient-to-br from-red-500 to-pink-500 text-white shadow-lg">
@@ -1988,7 +1999,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
         )}
 
         {activeTab === 'media' && (
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-6 overflow-auto"> 
                <section className={`${card} p-6 w-full`}>
                 <label className="text-sm font-bold text-slate-800 flex items-center gap-2">
                   <span className="p-1.5 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 text-white">
@@ -2122,57 +2133,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
           )}
       </main>
 
-      {/* Footer actions */}
-      <footer className="sticky bottom-0 z-40 bg-white/80 backdrop-blur-xl border-t border-slate-200">
-        <div className="mx-auto max-w-screen-2xl px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div className="text-xs text-slate-500">
-            {isEdit ? `Édition de l’article #${model.id ?? ''}` : 'Création d’un nouvel article'}
-          </div>
-
-          <div className="flex items-center gap-3">
-            {!isEdit && (
-              <button
-                type="button"
-                onClick={handlePublishNow}
-                disabled={isSubmitting || !isCreateValid}
-                className={`inline-flex md:hidden items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow
-                ${(!isCreateValid || isSubmitting) ? 'bg-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}
-                title={!isCreateValid ? 'Renseignez au moins le titre et le contenu' : undefined}
-              >
-                <FiPlay className="w-4 h-4" />
-                Publier
-              </button>
-            )}
-
-            {isEdit ? (
-              isAnyTabDirty ? (
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={isSubmitting}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow
-                    ${isSubmitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
-                >
-                  <FiSave className="w-4 h-4" />
-                  {isSubmitting ? 'Enregistrement…' : 'Mettre à jour'}
-                </button>
-              ) : null
-            ) : (
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={isSubmitting || !isCreateValid}
-                title={!isCreateValid ? 'Renseignez au moins le titre et le contenu' : undefined}
-                className={`hidden md:inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow
-                  ${(!isCreateValid || isSubmitting) ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
-              >
-                <FiSave className="w-4 h-4" />
-                {isSubmitting ? 'Enregistrement…' : 'Enregistrer'}
-              </button>
-            )}
-          </div>
-        </div>
-      </footer>
+    
 
       {/* Dialog post-save */}
       {postSaveDialog.open && (

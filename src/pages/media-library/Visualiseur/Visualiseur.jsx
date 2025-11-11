@@ -1162,22 +1162,23 @@ export default function Visualiseur() {
                             onDownload={downloadCurrent}
                           />
 
-                          {/* Commentaires SOUS l’article */}
-                          {article?.allow_comments !== false && (
-                            <div className="mt-8">
-                              <h3 className="text-xl font-medium text-slate-800 mb-4">
-                                {t('visualiseur.comments.title') ?? 'Commentaires'}
-                              </h3>
-                              <Comments
-                                key={article?.id}
-                                articleId={article?.id}
-                                initialComments={initialTopLevelApproved}
-                                meOverride={me}
-                                tokenOverride={token}
-                                rightsOverride={rights}
-                              />
-                            </div>
-                          )}
+                          {/* Commentaires SOUS l’article — mobile & tablettes uniquement */}
+                            {article?.allow_comments !== false && (
+                              <div className="mt-8 lg:hidden">
+                                <h3 className="text-xl font-medium text-slate-800 mb-4">
+                                  {t('visualiseur.comments.title') ?? 'Commentaires'}
+                                </h3>
+                                <Comments
+                                  key={article?.id}
+                                  articleId={article?.id}
+                                  initialComments={initialTopLevelApproved}
+                                  meOverride={me}
+                                  tokenOverride={token}
+                                  rightsOverride={rights}
+                                />
+                              </div>
+                            )}
+
                         </>
                       )}
 
@@ -1218,6 +1219,24 @@ export default function Visualiseur() {
                     myRating={myRating}
                     ratingLoaded={ratingLoaded}
                   />
+                  {/* Commentaires — colonne de droite uniquement en desktop */}
+                  {article?.allow_comments !== false && (
+                    <div className="mt-6">
+                      <h3 className="text-lg font-medium text-slate-800 mb-3">
+                        {t('visualiseur.comments.title') ?? 'Commentaires'}
+                      </h3>
+                      <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-200/40 p-4">
+                        <Comments
+                          key={`sidebar-${article?.id}`}
+                          articleId={article?.id}
+                          initialComments={initialTopLevelApproved}
+                          meOverride={me}
+                          tokenOverride={token}
+                          rightsOverride={rights}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

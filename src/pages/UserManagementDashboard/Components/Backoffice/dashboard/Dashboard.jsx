@@ -1767,9 +1767,6 @@ const fetchTrending = async (metric, days = 30, limit = 6) => {
                   </div>
                 </>
               )}
-          
-
-           
           </Section>
         </div>
       )}

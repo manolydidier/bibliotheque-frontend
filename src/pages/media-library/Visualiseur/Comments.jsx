@@ -2,6 +2,8 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import axios from "axios";
+import { useLocation, useNavigate } from "react-router-dom";
+
 import {
   FaUser, FaSpinner, FaTrash, FaThumbsUp, FaThumbsDown,
   FaCheck, FaTimes, FaBan, FaStar, FaEnvelope, FaSmile, FaEyeSlash,
@@ -94,6 +96,9 @@ function buildCommentApi(axiosi) {
     reject: (id, notes) => axiosi.post(`/comments/${id}/reject`, { notes }).then(r => r.data),
     spam: (id, notes = null) => axiosi.post(`/comments/${id}/spam`, notes ? { notes } : {}).then(r => r.data),
     feature: (id, featured) => axiosi.post(`/comments/${id}/feature`, { featured }).then(r => r.data),
+
+    // ➕ new
+    showOne: (id) => axiosi.get(`/comment/${id}`).then(r => r.data),
   };
 }
 function extractLaravelError(err) {
@@ -521,6 +526,44 @@ export default function Comments({
   const [featuredFirstRoot, setFeaturedFirstRoot] = useState(true);
   const sortReplies = sortRoot;
 
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const q = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const moderateFlag  = q.get("moderate") === "1";
+  const targetIdStr   = q.get("comment_id");
+  const moderateStatus = q.get("status") || null;
+  const targetId = targetIdStr ? Number(targetIdStr) : null;
+
+  // État local pour focus + bannière
+  const [modCtx, setModCtx] = useState({
+    active: !!moderateFlag && !!targetId,
+    targetId: targetId,
+    status: moderateStatus,
+    focusing: false,
+    done: false,
+  });
+
+  // map d'éléments DOM: id -> ref
+  const nodeRefs = useRef({});
+  const setNodeRef = useCallback((id) => (el) => { if (el) nodeRefs.current[id] = el; }, []);
+  const highlight = (id) => {
+    const el = nodeRefs.current[id];
+    if (!el) return;
+    el.classList.add("ring-2","ring-amber-400","rounded-xl","bg-amber-50/50");
+    setTimeout(() => {
+      el.classList.remove("ring-2","ring-amber-400","bg-amber-50/50");
+    }, 2200);
+  };
+  // helper: insérer/merger un commentaire root dans la liste
+  const upsertRoot = useCallback((node) => {
+    setComments(prev => {
+      const exists = prev.some(c => c.id === node.id);
+      if (exists) return prev;
+      return sortRoot === "newest" ? [node, ...prev] : [...prev, node];
+    });
+  }, [sortRoot]);
+
   /* ========= Utils ========= */
   function normalizeComment(c, seed, i = 0) {
     const u = c?.user || {};
@@ -546,6 +589,11 @@ export default function Comments({
       like_count: c?.like_count ?? 0,
       dislike_count: c?.dislike_count ?? 0,
       reply_count: c?.reply_count ?? 0,
+
+      // ➕ new
+      parent_id: c?.parent_id ?? c?.parent?.id ?? null,
+      article_id: c?.article_id ?? c?.article?.id ?? null,
+
       _liked: !!c?._liked,
       _disliked: !!c?._disliked,
       _raw: c,
@@ -923,6 +971,77 @@ export default function Comments({
     });
   }, []);
 
+  /* ========= Effet de MODÉRATION (après callbacks pour éviter TDZ) ========= */
+  useEffect(() => {
+    if (!modCtx.active || modCtx.done || !articleId || !api?.showOne) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        setModCtx(s => ({ ...s, focusing: true }));
+
+        // 1) récupère la cible
+        const raw = await api.showOne(modCtx.targetId);
+        const target = normalizeComment(raw, seed);
+
+        // 2) sécurité: même article ?
+        if (target.article_id && Number(target.article_id) !== Number(articleId)) {
+          setModCtx(s => ({ ...s, focusing: false, done: true }));
+          return;
+        }
+
+        // 3) root vs reply
+        if (!target.parent_id) {
+          // root: insérer si absent + scroll
+          upsertRoot(target);
+          setTimeout(() => {
+            if (cancelled) return;
+            const el = nodeRefs.current[target.id];
+            if (el) {
+              el.scrollIntoView({ behavior: "smooth", block: "center" });
+              highlight(target.id);
+            }
+            setModCtx(s => ({ ...s, focusing: false, done: true }));
+          }, 0);
+        } else {
+          // reply: s’assurer que le parent est là, ouvrir, charger, puis scroll
+          const parentRaw = await api.showOne(target.parent_id);
+          const parent = normalizeComment(parentRaw, seed);
+
+          upsertRoot(parent);
+          openReplies(parent.id);
+          await fetchReplies(parent.id, 1, (repliesMap[parent.id]?.per_page || 3));
+
+          // merge “manuel” si nécessaire
+          setRepliesMap(prev => {
+            const r = prev[parent.id] || {};
+            const items = r.items || [];
+            const has = items.some(x => x.id === target.id);
+            const merged = has ? items : (sortReplies === "newest" ? [target, ...items] : [...items, target]);
+            return { ...prev, [parent.id]: { ...r, items: merged, open: true } };
+          });
+
+          setTimeout(() => {
+            if (cancelled) return;
+            const el = nodeRefs.current[target.id];
+            if (el) {
+              el.scrollIntoView({ behavior: "smooth", block: "center" });
+              highlight(target.id);
+            }
+            setModCtx(s => ({ ...s, focusing: false, done: true }));
+          }, 50);
+        }
+      } catch {
+        setModCtx(s => ({ ...s, focusing: false, done: true }));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [
+    modCtx.active, modCtx.done, modCtx.targetId,
+    articleId, api, seed, sortReplies,
+    openReplies, fetchReplies, upsertRoot
+  ]);
+
   /* ---------------- RENDER ---------------- */
   const meBanner = currentUser && (
     <div className="mb-2 flex items-center gap-3 text-sm text-gray-700 px-3 py-2 rounded-xl bg-gray-50">
@@ -937,6 +1056,27 @@ export default function Comments({
   return (
     <div>
       <h2 className="text-xl font-semibold text-gray-900 mb-2">Commentaires</h2>
+      {modCtx.active && !modCtx.done && (
+        <div className="mb-3 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm flex items-center justify-between">
+          <span>
+            Mode modération activé{modCtx.status ? ` — statut cible: ${modCtx.status}` : ""}… 
+            {modCtx.focusing ? " repérage du commentaire…" : ""}
+          </span>
+          <button
+            onClick={() => {
+              const url = new URL(window.location.href);
+              url.searchParams.delete("moderate");
+              url.searchParams.delete("comment_id");
+              url.searchParams.delete("status");
+              navigate(`${url.pathname}${url.search}${url.hash}`, { replace: true });
+              setModCtx(s => ({ ...s, active: false }));
+            }}
+            className="text-xs px-2 py-1 rounded bg-white hover:bg-gray-50 border border-amber-300 text-amber-800"
+          >
+            Quitter
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-row gap-3 mb-3 justify-between items-center">
         {meLoading ? (
@@ -977,7 +1117,7 @@ export default function Comments({
           {visibleComments.map((c, idx) => {
             const r = repliesMap[c.id] || {};
             const visibleReplies = (r.items || []).filter(isVisible);
-            const hasReplies = (c.reply_count ?? 0) > 0 || visibleReplies.length > 0; // (non utilisé ici mais utile si besoin)
+            const hasReplies = (c.reply_count ?? 0) > 0 || visibleReplies.length > 0;
             const showDeleteThis = canSeeDeleteFor(c);
             const allowEdit = canEdit(c);
             const isEditing = editingId === c.id;
@@ -986,6 +1126,7 @@ export default function Comments({
             return (
               <article
                 key={c.id}
+                ref={setNodeRef(c.id)}
                 className={`group relative rounded-2xl border
                             ${c.featured ? "border-amber-300/70 bg-amber-50/40" : "border-gray-100 bg-gray-50/50"}
                             p-4 hover:shadow-sm transition-all transform
@@ -1147,7 +1288,7 @@ export default function Comments({
                               const showMyReplyBadge = isSelf(rep) && (isAdmin || isModerator);
 
                               return (
-                                <div key={rep.id} className="group/reply relative flex mb-4">
+                                <div key={rep.id} ref={setNodeRef(rep.id)} className="group/reply relative flex mb-4">
                                   {(showDelReply || isModerator || isAdmin || allowEditReply) && (
                                     <div className="absolute right-0 top-0 opacity-0 group-hover/reply:opacity-100 transition-opacity">
                                       <ActionsMenu>

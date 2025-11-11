@@ -95,13 +95,43 @@ const buildActivityLink = (a) => {
   }
 };
 
+const withQuery = (href, params = {}) => {
+  if (!href) return null;
+  const m = String(href).match(/^([^?#]*)(\?[^#]*)?(#.*)?$/);
+  const base = m?.[1] ?? href;
+  const qs0  = (m?.[2] ?? '').replace(/^\?/, '');
+  const hash = m?.[3] ?? '';
+  const search = new URLSearchParams(qs0);
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) search.set(k, String(v));
+  });
+  const qs = search.toString();
+  return `${base}${qs ? `?${qs}` : ''}${hash}`;
+};
+
 const buildPendingLink = (item) => {
   const articleSlug = item.article_slug || item.slug || item.article?.slug || null;
-  const commentId = item.comment_id || (item.type && String(item.type).includes('comment') && item.id) || null;
-  if (item.url)  return item.url;
-  if (item.link) return item.link;
-  if (articleSlug) return commentId ? `/articles/${articleSlug}#comment-${commentId}` : `/articles/${articleSlug}`;
-  return '/settings';
+  const commentId   = item.comment_id || item.id || null;
+  const status      = item.status || 'pending';
+  let href = item.url || item.link || null;
+
+  if (!href) {
+    if (articleSlug) {
+      href = commentId
+        ? `/articles/${articleSlug}#comment-${commentId}`
+        : `/articles/${articleSlug}`;
+    } else {
+      href = '/settings';
+    }
+  }
+
+  href = withQuery(href, {
+    moderate: 1,
+    comment_id: commentId || undefined,
+    status
+  });
+
+  return href;
 };
 
 const timeAgo = (iso, t) => {
@@ -131,7 +161,6 @@ function Portal({ children, containerId = 'overlays-root' }) {
     const el = document.createElement('div');
     el.style.position = 'fixed';
     el.style.inset = '0';
-    // important: ensure stacking context above app
     el.style.zIndex = '999'; // container; children will set higher
     root.appendChild(el);
     setHost(el);
@@ -165,7 +194,6 @@ function FocusTrap({ active, children, initialFocusRef }) {
     const root = wrapRef.current;
     if (!root) return;
 
-    // focus initial
     const target = initialFocusRef?.current
       || root.querySelector('[data-autofocus]')
       || root.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
@@ -188,6 +216,20 @@ function FocusTrap({ active, children, initialFocusRef }) {
 
   return <div ref={wrapRef}>{children}</div>;
 }
+
+/* ---------- Read/Open tracking ---------- */
+const OPEN_KEY = (type, id) => `opened:${type}:${id}`; // e.g. opened:activity:123
+const getOpenedAt = (type, id) => {
+  try { return localStorage.getItem(OPEN_KEY(type, id)); } catch { return null; }
+};
+const setOpenedNow = (type, id) => {
+  try { localStorage.setItem(OPEN_KEY(type, id), new Date().toISOString()); } catch {}
+};
+const isAfter = (isoA, isoB) => {
+  if (!isoA || !isoB) return false;
+  const a = Date.parse(isoA), b = Date.parse(isoB);
+  return !Number.isNaN(a) && !Number.isNaN(b) && a > b;
+};
 
 /* ========================= UI bits ========================= */
 const BookLogo = ({ title = 'Library' }) => (
@@ -234,6 +276,7 @@ const Navbar = () => {
 
   const API_BASE_STORAGE = import.meta.env.VITE_API_BASE_STORAGE;
   const API_BASE_URL     = import.meta.env.VITE_API_BASE_URL || '';
+  const USE_SSE          = import.meta.env.VITE_USE_SSE === '1'; // PATCH: flag pour activer SSE
 
   const { isAuthenticated, user } = useSelector((s) => s.library?.auth || {});
   const userId = user?.id;
@@ -277,6 +320,8 @@ const Navbar = () => {
   const [newCount, setNewCount] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
 
+  const canModerate = !!user?.roles?.includes('moderator') || !!user?.permissions?.includes('moderate'); // déjà présent plus bas ; déplacé ici si besoin
+
   const recomputeNewCount = useCallback(async () => {
     if (!isAuthenticated || !userId) { setNewCount(0); return; }
     const token = getTokenGuard();
@@ -301,21 +346,25 @@ const Navbar = () => {
     } catch {}
   }, [API_BASE_URL, isAuthenticated, userId]);
 
+  // PATCH: ne touche pas aux routes de modération si non modérateur
   const recomputePendingCount = useCallback(async () => {
-    if (!isAuthenticated) { setPendingCount(0); return; }
+    if (!isAuthenticated || !canModerate) { setPendingCount(0); return; }
     try {
       const token = getTokenGuard();
       const resp = await fetchJson(`${API_BASE_URL}/moderation/pending-count`, {}, token);
       setPendingCount(Number(resp?.pending || 0));
     } catch {}
-  }, [API_BASE_URL, isAuthenticated]);
+  }, [API_BASE_URL, isAuthenticated, canModerate]);
 
+  // PATCH: SSE désactivable pour éviter erreurs 500/ERR_ABORTED si backend non prêt
   useEffect(() => {
+    if (!USE_SSE) return;                    // ⬅️ rien n’est ouvert, donc pas d’erreur réseau
     if (!isAuthenticated || !userId) return;
-    const token = getTokenGuard();
+
     let es;
     try {
-      es = new EventSource(`${API_BASE_URL}/users/${userId}/activities/stream?token=${encodeURIComponent(token || '')}`);
+      // Option: n’ajoute pas le token en query si le backend n’en a pas besoin
+      es = new EventSource(`${API_BASE_URL}/users/${userId}/activities/stream`);
       es.onmessage = (ev) => {
         try {
           const data = JSON.parse(ev.data);
@@ -326,7 +375,7 @@ const Navbar = () => {
       es.onerror = () => { es.close(); };
     } catch {}
     return () => es?.close();
-  }, [API_BASE_URL, isAuthenticated, userId]);
+  }, [API_BASE_URL, isAuthenticated, userId, USE_SSE]);
 
   useEffect(() => {
     const tick = () => { recomputeNewCount(); recomputePendingCount(); };
@@ -336,7 +385,7 @@ const Navbar = () => {
   }, [recomputeNewCount, recomputePendingCount]);
 
   /* Responsive + overlays state */
-  const MOBILE_Q = '(max-width: 990px)'; // seuil mobile demandé
+  const MOBILE_Q = '(max-width: 990px)';
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia && window.matchMedia(MOBILE_Q).matches
   );
@@ -360,17 +409,17 @@ const Navbar = () => {
     if (location.pathname !== locationRef.current) {
       locationRef.current = location.pathname;
       setNotifOpen(false);
-      // on ferme le menu quand on change de route
       setShowMobileMenu(false);
     }
   }, [location.pathname]);
 
+  // PATCH: ne charge “pending” que si autorisé
   const toggleNotifications = () => {
     setNotifOpen(prev => {
       const next = !prev;
       if (next) {
         loadNews(1, true);
-        loadPending(1, true);
+        if (canModerate) loadPending(1, true); // condition
         if (userId) { setLastSeenNow(userId); setNewCount(0); }
       }
       return next;
@@ -396,8 +445,9 @@ const Navbar = () => {
     }
   };
 
+  // PATCH: garde-fou canModerate
   const loadPending = async (page, replace = false) => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !canModerate) return;
     const token = getTokenGuard();
     setPending((s) => ({ ...s, loading: true, error: null }));
     try {
@@ -410,10 +460,18 @@ const Navbar = () => {
         loading: false,
         error: null
       });
-    } catch (e) {
-      setPending((s) => ({ ...s, loading: false, error: e?.message || 'Load failed' }));
+    } catch {
+      setPending((s) => ({ ...s, loading: false, error: null }));
     }
   };
+
+  // PATCH: chargement lazy du tab “pending”
+  useEffect(() => {
+    if (!notifOpen) return;
+    if (notifTab === 'pending' && canModerate) {
+      if (pending.items.length === 0 && !pending.loading) loadPending(1, true);
+    }
+  }, [notifOpen, notifTab, canModerate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Scroll-aware navbar */
   const [isHidden, setIsHidden] = useState(false);
@@ -455,8 +513,7 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', onScroll);
   }, [location.pathname]);
 
-  const canModerate = !!user?.roles?.includes('moderator') || !!user?.permissions?.includes('moderate');
-
+  // NOTE: canModerate est déjà défini plus haut
   const navLinks = [
     { label: t('home'), path: '/', submenu: null },
     { label: t('platform'), path: '/articles', submenu: [
@@ -491,6 +548,9 @@ const Navbar = () => {
   const textScaleClass = isCompact ? 'text-xl' : 'text-2xl';
   const translateClass = isHidden ? '-translate-y-full' : 'translate-y-0';
   const shadowClass = isCompact ? 'shadow-lg' : 'shadow-md';
+
+  // ---- lastSeen for unread logic
+  const lastSeen = (isAuthenticated && userId) ? (getLastSeenTs(userId) || null) : null;
 
   return (
     <>
@@ -656,97 +716,97 @@ const Navbar = () => {
             )}
 
             {/* Avatar (desktop) */}
-        {isAuthenticated && !isMobile && (
-          <div className="relative group">
-            <button
-              className="flex items_center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 rounded-lg"
-              aria-haspopup="true"
-              aria-expanded="false"
-            >
-              <img
-                src={avatarSrc}
-                alt={t('profile','Profil')}
-                width="40" height="40"
-                className={`w-10 h-10 rounded-full border-2 object-cover bg-white transition-colors
-                  ${onAuth ? 'border-blue-300' : 'border-white/40'}`}
-                onError={handleImgError}
-                loading="lazy"
-                decoding="async"
-              />
-             
-            </button>
-
-            {/* Dropdown menu utilisateur - Style identique aux notifications */}
-            <div
-              className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 overflow-hidden opacity-0 invisible translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-50"
-              role="menu"
-              aria-label="Menu utilisateur"
-            >
-              {/* Header bleu identique aux notifications */}
-              <div className="px-4 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white">
-                <div className="flex items-center gap-3">
+            {isAuthenticated && !isMobile && (
+              <div className="relative group">
+                <button
+                  className="flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 rounded-lg"
+                  aria-haspopup="true"
+                  aria-expanded="false"
+                >
                   <img
                     src={avatarSrc}
-                    alt=""
-                    className="w-10 h-10 rounded-full border-2 border-white/30 object-cover bg-white"
+                    alt={t('profile','Profil')}
+                    width="40" height="40"
+                    className={`w-10 h-10 rounded-full border-2 object-cover bg-white transition-colors
+                      ${onAuth ? 'border-blue-300' : 'border-white/40'}`}
                     onError={handleImgError}
+                    loading="lazy"
+                    decoding="async"
                   />
-                  <div className="min-w-0">
-                    <div className="font-semibold truncate">
-                      {user?.name || user?.username || 'Utilisateur'}
+                </button>
+
+                {/* Dropdown menu utilisateur - Style identique aux notifications */}
+                <div
+                  className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 overflow-hidden opacity-0 invisible translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-50"
+                  role="menu"
+                  aria-label="Menu utilisateur"
+                >
+                  {/* Header bleu identique aux notifications */}
+                  <div className="px-4 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white">
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={avatarSrc}
+                        alt=""
+                        className="w-10 h-10 rounded-full border-2 border-white/30 object-cover bg-white"
+                        onError={handleImgError}
+                      />
+                      <div className="min-w-0">
+                        <div className="font-semibold truncate">
+                          {user?.name || user?.username || 'Utilisateur'}
+                        </div>
+                        <div className="text-sm text-white/80 truncate">
+                          {user?.email || ''}
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-sm text-white/80 truncate">
-                      {user?.email || ''}
-                    </div>
+                  </div>
+
+                  {/* Options du menu */}
+                  <div className="py-2">
+                    <NavLink
+                      to="/profile"
+                      className={({isActive}) =>
+                        `flex items-center px-4 py-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 transition-all ${
+                          isActive ? 'bg-blue-50 text-blue-700' : ''
+                        }`
+                      }
+                      end
+                    >
+                      <FontAwesomeIcon icon={faUserCircle} className="mr-3 text-blue-600 w-4" />
+                      <span className="flex-1">{t('profile','Profil')}</span>
+                    </NavLink>
+
+                    <NavLink
+                      to="/settings"
+                      className={({isActive}) =>
+                        `flex items-center px-4 py-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 transition-all ${
+                          isActive ? 'bg-blue-50 text-blue-700' : ''
+                        }`
+                      }
+                      end
+                    >
+                      <FontAwesomeIcon icon={faCog} className="mr-3 text-blue-600 w-4" />
+                      <span className="flex-1">{t('settings','Paramètres')}</span>
+                    </NavLink>
+                  </div>
+
+                  {/* Séparateur et déconnexion */}
+                  <div className="border-t border-gray-100">
+                    <button
+                      onClick={async () => {
+                        await dispatch(logoutUser(i18n.language));
+                        navigate('/auth');
+                      }}
+                      className="flex items-center gap-2 w-full px-4 py-3 text-gray-700 hover:text-red-600 hover:bg-red-50 transition-all"
+                    >
+                      <FontAwesomeIcon icon={faRightToBracket} className=" text-red-600 " />
+                      <span className="">{t('logout','Déconnexion')}</span>
+                    </button>
                   </div>
                 </div>
               </div>
+            )}
 
-              {/* Options du menu */}
-              <div className="py-2">
-                <NavLink
-                  to="/profile"
-                  className={({isActive}) =>
-                    `flex items-center px-4 py-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 transition-all ${
-                      isActive ? 'bg-blue-50 text-blue-700' : ''
-                    }`
-                  }
-                  end
-                >
-                  <FontAwesomeIcon icon={faUserCircle} className="mr-3 text-blue-600 w-4" />
-                  <span className="flex-1">{t('profile','Profil')}</span>
-                </NavLink>
-
-                <NavLink
-                  to="/settings"
-                  className={({isActive}) =>
-                    `flex items-center px-4 py-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 transition-all ${
-                      isActive ? 'bg-blue-50 text-blue-700' : ''
-                    }`
-                  }
-                  end
-                >
-                  <FontAwesomeIcon icon={faCog} className="mr-3 text-blue-600 w-4" />
-                  <span className="flex-1">{t('settings','Paramètres')}</span>
-                </NavLink>
-              </div>
-
-              {/* Séparateur et déconnexion */}
-              <div className="border-t border-gray-100">
-                <button
-                  onClick={async () => {
-                    await dispatch(logoutUser(i18n.language));
-                    navigate('/auth');
-                  }}
-                  className="flex items-center gap-2 w-full px-4 py-3 text-gray-700 hover:text-red-600 hover:bg-red-50 transition-all"
-                >
-                  <FontAwesomeIcon icon={faRightToBracket} className=" text-red-600 " />
-                  <span className="">{t('logout','Déconnexion')}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
             {/* Burger (mobile) */}
             {isMobile && (
               <button
@@ -781,6 +841,11 @@ const Navbar = () => {
             loadPending={loadPending}
             markAllRead={() => { if (userId) { setLastSeenNow(userId); setNewCount(0); } }}
             navigate={navigate}
+            /* NEW: unread helpers */
+            lastSeen={lastSeen}
+            getOpenedAt={getOpenedAt}
+            setOpenedNow={setOpenedNow}
+            isAfter={isAfter}
           />
         </Portal>
       )}
@@ -809,14 +874,15 @@ const Navbar = () => {
 function NotificationsDialog({
   t, onClose, newCount, pendingCount,
   news, pending, setNotifTab, notifTab,
-  loadNews, loadPending, markAllRead, navigate
+  loadNews, loadPending, markAllRead, navigate,
+  lastSeen, getOpenedAt, setOpenedNow, isAfter
 }) {
   useScrollLock(true);
   const closeBtnRef = useRef(null);
 
   return (
     <FocusTrap active={true} initialFocusRef={closeBtnRef}>
-      <div className="fixed inset-0 z_[1001]">
+      <div className="fixed inset-0 z-[1001]">
         <button
           className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"
           aria-label={t('common.close')}
@@ -831,7 +897,7 @@ function NotificationsDialog({
           <div className="px-4 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="font-semibold">{t('notifications','Notifications')}</span>
-              {newCount > 0 && <span className="text-xs bg_white/20 text-white px-2 py-0.5 rounded-full">{newCount}</span>}
+              {newCount > 0 && <span className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full">{newCount}</span>}
               {pendingCount > 0 && <span className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full">{pendingCount} {t('to_moderate','à modérer')}</span>}
             </div>
             <div className="flex items-center gap-2">
@@ -871,8 +937,26 @@ function NotificationsDialog({
           {/* List */}
           <div className="max-h-96 overflow-auto">
             {notifTab==='news'
-              ? <NewsList t={t} news={news} loadNews={loadNews} onClose={onClose} />
-              : <PendingList t={t} pending={pending} loadPending={loadPending} onClose={onClose} />
+              ? <NewsList
+                  t={t}
+                  news={news}
+                  loadNews={loadNews}
+                  onClose={onClose}
+                  lastSeen={lastSeen}
+                  getOpenedAt={getOpenedAt}
+                  setOpenedNow={setOpenedNow}
+                  isAfter={isAfter}
+                />
+              : <PendingList
+                  t={t}
+                  pending={pending}
+                  loadPending={loadPending}
+                  onClose={onClose}
+                  lastSeen={lastSeen}
+                  getOpenedAt={getOpenedAt}
+                  setOpenedNow={setOpenedNow}
+                  isAfter={isAfter}
+                />
             }
           </div>
         </div>
@@ -881,7 +965,7 @@ function NotificationsDialog({
   );
 }
 
-function NewsList({ t, news, loadNews, onClose }) {
+function NewsList({ t, news, loadNews, onClose, lastSeen, getOpenedAt, setOpenedNow, isAfter }) {
   return (
     <>
       {(news.loading && news.items.length===0) && (<><SkeletonRow/><SkeletonRow/><SkeletonRow/></>)}
@@ -893,22 +977,41 @@ function NewsList({ t, news, loadNews, onClose }) {
       {news.items.map((a)=> {
         const href = toFrontPath(buildActivityLink(a) || a.url || a.link) || '/settings';
         const isRel = String(href).startsWith('/');
+
+        const openedAt = getOpenedAt('activity', a.id);
+        const unreadBySeen = lastSeen ? isAfter(a.created_at, lastSeen) : false;
+        const isUnread = !openedAt && unreadBySeen;
+
         const Row = (
           <div className="flex items-start gap-3 p-4 hover:bg-gray-50 transition-colors">
-            <div className="flex-shrink-0 w-9 h-9 bg-blue-50 rounded-full flex items-center justify-center">
+            <div className="relative flex-shrink-0 w-9 h-9 bg-blue-50 rounded-full flex items-center justify-center">
               <FontAwesomeIcon icon={typeIcon(a.type)} className="text-blue-600" />
+              {isUnread && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-600 rounded-full" aria-hidden="true" />}
             </div>
             <div className="min-w-0">
-              <div className="text-sm text-gray-900 line-clamp-2">{a.title || t('notification','Notification')}</div>
-              {a.subtitle && <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{a.subtitle}</div>}
+              <div className={`text-sm text-gray-900 line-clamp-2 ${isUnread ? 'font-semibold' : 'font-normal'}`}>
+                {a.title || t('notification','Notification')}
+              </div>
+              {a.subtitle && (
+                <div className={`text-xs mt-0.5 line-clamp-2 ${isUnread ? 'text-gray-700' : 'text-gray-500'}`}>
+                  {a.subtitle}
+                </div>
+              )}
               <div className="text-xs text-gray-400 mt-1">{timeAgo(a.created_at, t)}</div>
             </div>
           </div>
         );
+
+        const markOpened = () => setOpenedNow('activity', a.id);
+
         return isRel ? (
-          <Link key={a.id} to={href} onClick={onClose}>{Row}</Link>
+          <Link key={a.id} to={href} onClick={() => { markOpened(); onClose(); }}>
+            {Row}
+          </Link>
         ) : (
-          <a key={a.id} href={href} onClick={onClose}>{Row}</a>
+          <a key={a.id} href={href} onClick={() => { markOpened(); onClose(); }}>
+            {Row}
+          </a>
         );
       })}
       <div className="p-3 border-t flex justify-center">
@@ -924,7 +1027,7 @@ function NewsList({ t, news, loadNews, onClose }) {
   );
 }
 
-function PendingList({ t, pending, loadPending, onClose }) {
+function PendingList({ t, pending, loadPending, onClose, lastSeen, getOpenedAt, setOpenedNow, isAfter }) {
   return (
     <>
       {(pending.loading && pending.items.length===0) && (<><SkeletonRow/><SkeletonRow/><SkeletonRow/></>)}
@@ -937,22 +1040,55 @@ function PendingList({ t, pending, loadPending, onClose }) {
         const hrefCandidate = buildPendingLink(pItem);
         const href = toFrontPath(hrefCandidate) || '/settings';
         const isRel = String(href).startsWith('/');
+
+        const openedAt = getOpenedAt('pending', pItem.id);
+        const unreadBySeen = lastSeen ? isAfter(pItem.created_at, lastSeen) : false;
+        const isUnread = !openedAt && unreadBySeen;
+
+        // Détails enrichis, avec fallbacks robustes
+        const commentObj   = pItem.comment_subject || pItem.subject || pItem.title || t('pending_item','Élément à modérer');
+        const articleTitle = pItem.article_title || pItem.article?.title || pItem.article_slug || '—';
+        const authorName   = pItem.author_name || pItem.user_name || pItem.guest_name || pItem.author || '—';
+        const excerpt      = pItem.comment_excerpt || pItem.excerpt || pItem.subtitle || '';
+
         const Row = (
           <div className="flex items-start gap-3 p-4 hover:bg-gray-50 transition-colors">
-            <div className="flex-shrink-0 w-9 h-9 bg-amber-50 rounded-full flex items-center justify-center">
+            <div className="relative flex-shrink-0 w-9 h-9 bg-amber-50 rounded-full flex items-center justify-center">
               <FontAwesomeIcon icon={faCommentDots} className="text-amber-600" />
+              {isUnread && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-600 rounded-full" aria-hidden="true" />}
             </div>
             <div className="min-w-0">
-              <div className="text-sm text-gray-900 line-clamp-2">{pItem.title || t('pending_item','Élément à modérer')}</div>
-              {pItem.subtitle && <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{pItem.subtitle}</div>}
+              <div className={`text-sm text-gray-900 line-clamp-2 ${isUnread ? 'font-semibold' : 'font-normal'}`}>
+                {commentObj}
+              </div>
+
+              <div className="mt-1 text-xs text-gray-600 flex flex-wrap gap-x-3 gap-y-1">
+                <span><span className="text-gray-400">{t('article','Article')}:</span> {articleTitle}</span>
+                <span>•</span>
+                <span><span className="text-gray-400">{t('author','Auteur')}:</span> {authorName}</span>
+              </div>
+
+              {excerpt && (
+                <div className={`text-xs mt-1 line-clamp-2 ${isUnread ? 'text-gray-700' : 'text-gray-500'}`}>
+                  « {excerpt} »
+                </div>
+              )}
+
               <div className="text-xs text-gray-400 mt-1">{timeAgo(pItem.created_at, t)}</div>
             </div>
           </div>
         );
+
+        const markOpened = () => setOpenedNow('pending', pItem.id);
+
         return isRel ? (
-          <Link key={pItem.id} to={href} onClick={onClose}>{Row}</Link>
+          <Link key={pItem.id} to={href} onClick={() => { markOpened(); onClose(); }}>
+            {Row}
+          </Link>
         ) : (
-          <a key={pItem.id} href={href} onClick={onClose}>{Row}</a>
+          <a key={pItem.id} href={href} onClick={() => { markOpened(); onClose(); }}>
+            {Row}
+          </a>
         );
       })}
       <div className="p-3 border-t flex justify-center">
@@ -1072,7 +1208,7 @@ function MobileMenuBottomSheetPortal({
                     <button
                       type="button"
                       onClick={() => toggle(`sec-${i}`)}
-                      className="w-full h-12 px-3 flex items-center justify_between bg-white"
+                      className="w-full h-12 px-3 flex items-center justify-between bg-white"
                       aria-expanded={openSection === `sec-${i}`}
                     >
                       <span className="text-sm font-medium text-slate-900">{link.label}</span>
