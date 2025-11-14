@@ -7,6 +7,7 @@ import {
   FaHeart, FaRegHeart, FaTag, FaLockOpen, FaLock,
   FaEllipsisV, FaExternalLinkAlt, FaCopy, FaLink,
 } from "react-icons/fa";
+import { FaComment, FaShareAlt, FaTimes } from "react-icons/fa";
 import SmartImage from "./SmartImage";
 import ShareButton from "../Visualiseur/share/ShareButton";
 import { cls } from "../shared/utils/format";
@@ -564,6 +565,37 @@ export default function GridCard({ item, routeBase, onOpen }) {
     document.addEventListener('click', onDocClick);
     return () => document.removeEventListener('click', onDocClick);
   }, []);
+function StatPill({ icon, value, tone = "slate", suffix = "" }) {
+  const toneMap = tone === "orange"
+    ? {
+        bg: "rgba(251,146,60,.12)",
+        border: "rgba(251,146,60,.09)",
+        icon: "#f59e0b",   // orange-500
+        text: "#7c2d12",   // orange-900-ish
+      }
+    : {
+        bg: "rgba(15,23,42,.02)",   // slate soft
+        border: "rgba(15,23,42,.09)",
+        icon: "#475569",            // slate-600
+        text: "#0f172a",            // slate-900
+      };
+
+  return (
+    <div
+      className="inline-flex items-center gap-2 rounded-xl px-3 py-1.5 select-none"
+      style={{ backgroundColor: toneMap.bg, border: `1px solid ${toneMap.border}` }}
+      role="group"
+    >
+      <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg"
+            style={{ color: toneMap.icon, backgroundColor: "rgba(255,255,255,.6)" }}>
+        {icon}
+      </span>
+      <span className="text-sm font-semibold" style={{ color: toneMap.text }}>
+        {value}{suffix}
+      </span>
+    </div>
+  );
+}
 
   return (
     <>
@@ -882,33 +914,43 @@ export default function GridCard({ item, routeBase, onOpen }) {
             </div>
           </div>
         </div>
+          {/* Stats — compact, valeurs visibles, icônes neutres (rating orange) */}
+          <div className="px-8 relative pt-3 pb-5  bottom-0 left-0 " style={{ borderColor: borderSoft, backgroundColor: rgba("#ffffff", 0.95) }}>
+            <div className="flex flex-row items-center  w-full justify-between">
+              {/* Vues (neutre) */}
+              <StatPill
+                icon={<FaEye size={14} />}
+                value={formattedViewCount}
+                tone="slate"
+              />
 
-        {/* Stats */}
-        <div className="grid grid-cols-4 gap-2 px-6 pt-3 mb-4">
-          <div className={cls("bg-gradient-to-br from-blue-50/70 to-indigo-50/70", smallStatBox)}>
-            <div className="text-blue-700 font-bold text-sm">{formattedViewCount}</div>
-            <div className="text-blue-600 text-xs">{t('gridcard.stats.views')}</div>
-          </div>
+              {/* Commentaires (neutre) */}
+              {item.comment_count !== undefined && (
+                <StatPill
+                  icon={<FaComment size={14} />}
+                  value={new Intl.NumberFormat(i18n.language, { notation: "compact", maximumFractionDigits: 1 }).format(item.comment_count || 0)}
+                  tone="slate"
+                />
+              )}
 
-          {item.comment_count !== undefined && (
-            <div className={cls("bg-gradient-to-br from-green-50/70 to-emerald-50/70", smallStatBox)}>
-              <div className="text-green-700 font-bold text-sm">{item.comment_count}</div>
-              <div className="text-green-600 text-xs">{t('gridcard.stats.comments')}</div>
+              {/* Partages (neutre) */}
+              {item.share_count !== undefined && (
+                <StatPill
+                  icon={<FaShareAlt size={14} />}
+                  value={new Intl.NumberFormat(i18n.language, { notation: "compact", maximumFractionDigits: 1 }).format(item.share_count || 0)}
+                  tone="slate"
+                />
+              )}
+
+              {/* Avis — toujours orange */}
+              <StatPill
+                icon={<FaStar size={14} />}
+                value={formattedRating}
+                suffix="/5"
+                tone="orange"
+              />
             </div>
-          )}
-
-          {item.share_count !== undefined && (
-            <div className={cls("bg-gradient-to-br from-purple-50/70 to-pink-50/70", smallStatBox)}>
-              <div className="text-purple-700 font-bold text-sm">{item.share_count}</div>
-              <div className="text-purple-600 text-xs">{t('gridcard.stats.shares')}</div>
-            </div>
-          )}
-
-          <div className={cls("bg-gradient-to-br from-amber-50/70 to-orange-50/70", smallStatBox)}>
-            <div className="text-amber-700 font-bold text-sm">{formattedRating}/5</div>
-            <div className="text-amber-600 text-xs">{item.rating_count || 0} {t('gridcard.stats.reviews')}</div>
           </div>
-        </div>
       </article>
 
       {/* ✅ Modal Password réutilisable */}

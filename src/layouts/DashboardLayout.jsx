@@ -72,13 +72,25 @@ const isAbsoluteUrl = (u) => /^https?:\/\//i.test(String(u || ''));
 const toFrontPath = (input) => {
   if (!input) return null;
   if (String(input).startsWith('/')) return input;
-  try {
-    const u = new URL(input);
-    return `${u.pathname}${u.search}${u.hash}`;
-  } catch {
-    return input;
-  }
+  try { const u = new URL(input); return `${u.pathname}${u.search}${u.hash}`; }
+  catch { return input; }
 };
+
+const withQuery = (href, params = {}) => {
+  if (!href) return null;
+  const m = String(href).match(/^([^?#]*)(\?[^#]*)?(#.*)?$/);
+  const base = m?.[1] ?? href;
+  const qs0  = (m?.[2] ?? '').replace(/^\?/, '');
+  const hash = m?.[3] ?? '';
+  const search = new URLSearchParams(qs0);
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) search.set(k, String(v));
+  });
+  const qs = search.toString();
+  return `${base}${qs ? `?${qs}` : ''}${hash}`;
+};
+
+
 
 const LS_KEY = (uid) => `act_seen_ts:${uid}`;
 const getLastSeenTs = (uid) => {
@@ -153,25 +165,32 @@ const buildActivityLink = (a) => {
   }
 };
 
-const buildPendingLink = (item) => {
-  const articleSlug =
-    item.article_slug || item.slug || item.article?.slug || null;
+const buildPendingLink= (item) => {
+  const articleSlug = item.article_slug || item.slug || item.article?.slug || null;
+  const commentId   = item.comment_id || item.id || null;
+  const status      = item.status || 'pending';
+  let href = item.url || item.link || null;
 
-  const commentId =
-    item.comment_id ||
-    (item.type && String(item.type).includes('comment') && item.id) ||
-    null;
-
-  if (item.url) return item.url;
-  if (item.link) return item.link;
-
-  if (articleSlug) {
-    return commentId
-      ? `/articles/${articleSlug}#comment-${commentId}`
-      : `/articles/${articleSlug}`;
+  if (!href) {
+    if (articleSlug) {
+      href = commentId
+        ? `/articles/${articleSlug}#comment-${commentId}`
+        : `/articles/${articleSlug}`;
+    } else {
+      href = '/settings';
+    }
   }
-  return '/settings';
+
+  href = withQuery(href, {
+    moderate: 1,
+    comment_id: commentId || undefined,
+    status
+  });
+
+  return href;
 };
+
+
 
 const timeAgo = (iso, t) => {
   if (!iso) return '';
@@ -380,9 +399,17 @@ const DashboardLayout = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
-  const API_BASE_STORAGE = import.meta.env.VITE_API_BASE_STORAGE;
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
-  const ENABLE_SSE = import.meta.env.VITE_NOTIF_SSE === '1';
+  
+// par CES lignes (mêmes noms que le Navbar)
+const API_BASE_STORAGE = import.meta.env.VITE_API_BASE_STORAGE;
+const API_BASE_URL     = import.meta.env.VITE_API_BASE_URL || '';
+const USE_SSE          = import.meta.env.VITE_USE_SSE === '1'; // aligné sur Navbar
+
+// endpoints de modération identiques à ceux du Navbar
+const MOD_COUNT_EP = import.meta.env.VITE_MOD_PENDING_COUNT_EP || '/moderation/pending-count';
+const MOD_LIST_EP  = import.meta.env.VITE_MOD_PENDING_LIST_EP  || '/moderation/pending';
+
+    
 
   const { isAuthenticated, user } = useSelector((s) => s.library?.auth || {});
   const userId = user?.id;
@@ -832,21 +859,15 @@ const DashboardLayout = () => {
     } catch {}
   }, [API_BASE_URL, isAuthenticated, userId]);
 
-  const recomputePendingCount = useCallback(async () => {
-    if (!isAuthenticated) {
-      setPendingCount(0);
-      return;
-    }
-    try {
-      const token = getTokenGuard();
-      const resp = await fetchJson(
-        `${API_BASE_URL}/moderation/pending-count`,
-        {},
-        token
-      );
-      setPendingCount(Number(resp?.pending || 0));
-    } catch {}
-  }, [API_BASE_URL, isAuthenticated]);
+ // count
+const recomputePendingCount = useCallback(async () => {
+  if (!isAuthenticated) { setPendingCount(0); return; }
+  try {
+    const token = getTokenGuard();
+    const resp = await fetchJson(`${API_BASE_URL}${MOD_COUNT_EP}`, {}, token);
+    setPendingCount(Number(resp?.pending || 0));
+  } catch {}
+}, [API_BASE_URL, isAuthenticated, MOD_COUNT_EP]);
 
   useEffect(() => {
     const tick = () => {
@@ -859,26 +880,24 @@ const DashboardLayout = () => {
   }, [recomputeNewCount, recomputePendingCount]);
 
   // Option : SSE pour les updates live (activer avec VITE_NOTIF_SSE=1)
-  useEffect(() => {
-    if (!ENABLE_SSE || !isAuthenticated) return;
-    let es;
-    try {
-      es = new EventSource(`${API_BASE_URL}/notifications/stream`, {
-        withCredentials: true,
-      });
-      es.onmessage = (e) => {
-        try {
-          const { newCount: n, pending: p } = JSON.parse(e.data || '{}');
-          if (typeof n === 'number') setNewCount(n);
-          if (typeof p === 'number') setPendingCount(p);
-        } catch {}
-      };
-      es.onerror = () => {
-        es?.close();
-      };
-    } catch {}
-    return () => es?.close();
-  }, [ENABLE_SSE, API_BASE_URL, isAuthenticated]);
+  // remplace le useEffect SSE :
+useEffect(() => {
+  if (!USE_SSE || !isAuthenticated) return;
+  let es;
+  try {
+    es = new EventSource(`${API_BASE_URL}/notifications/stream`, { withCredentials: true });
+    es.onmessage = (e) => {
+      try {
+        const { newCount: n, pending: p } = JSON.parse(e.data || '{}');
+        if (typeof n === 'number') setNewCount(Math.min(99, n));
+        if (typeof p === 'number') setPendingCount(Math.min(99, p));
+      } catch {}
+    };
+    es.onerror = () => { es?.close(); };
+  } catch {}
+  return () => es?.close();
+}, [USE_SSE, API_BASE_URL, isAuthenticated]);
+
 
   // Toggle + chargement au moment de l’ouverture
   const toggleNotifications = () => {
@@ -924,32 +943,24 @@ const DashboardLayout = () => {
   };
 
   const loadPending = async (page, replace = false) => {
-    if (!isAuthenticated) return;
-    const token = getTokenGuard();
-    setPending((s) => ({ ...s, loading: true, error: null }));
-    try {
-      const resp = await fetchJson(
-        `${API_BASE_URL}/moderation/pending`,
-        { per_page: 10, page },
-        token
-      );
-      const raw = Array.isArray(resp?.data) ? resp.data : [];
-      const items = raw.map((x) => ({ ...x }));
-      setPending({
-        items: replace ? items : [...(replace ? [] : pending.items), ...items],
-        page: resp?.meta?.current_page || page,
-        last: resp?.meta?.last_page || page,
-        loading: false,
-        error: null,
-      });
-    } catch (e) {
-      setPending((s) => ({
-        ...s,
-        loading: false,
-        error: e?.message || 'Load failed',
-      }));
-    }
-  };
+  if (!isAuthenticated) return;
+  const token = getTokenGuard();
+  setPending((s) => ({ ...s, loading: true, error: null }));
+  try {
+    const resp = await fetchJson(`${API_BASE_URL}${MOD_LIST_EP}`, { per_page: 10, page }, token);
+    const raw = Array.isArray(resp?.data) ? resp.data : [];
+    const items = raw.map((x) => ({ ...x }));
+    setPending({
+      items: replace ? items : [...(replace ? [] : pending.items), ...items],
+      page: resp?.meta?.current_page || page,
+      last: resp?.meta?.last_page || page,
+      loading: false,
+      error: null,
+    });
+  } catch (e) {
+    setPending((s) => ({ ...s, loading: false, error: e?.message || 'Load failed' }));
+  }
+};
 
   const markAllRead = () => {
     if (userId) {
@@ -1513,10 +1524,11 @@ const DashboardLayout = () => {
                               </span>
                             </div>
                           )}
-                          {pending.items.map((p) => {
+                        {pending.items.map((p) => {
                             const hrefCandidate = buildPendingLink(p);
                             const href = toFrontPath(hrefCandidate) || '/settings';
                             const isRel = String(href).startsWith('/');
+
                             const Row = (
                               <div className="flex items-start gap-3 p-4 hover:bg-gray-50 transition-colors duration-300 ease-[cubic-bezier(.22,1,.36,1)]">
                                 <div className="flex-shrink-0 w-9 h-9 bg-amber-50 rounded-full flex items-center justify-center">
@@ -1524,8 +1536,7 @@ const DashboardLayout = () => {
                                 </div>
                                 <div className="min-w-0">
                                   <div className="text-sm text-gray-900 line-clamp-2">
-                                    {p.title ||
-                                      t('pending_item', 'Élément à modérer')}
+                                    {p.title || t('pending_item','Élément à modérer')}
                                   </div>
                                   {p.subtitle && (
                                     <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">
@@ -1538,21 +1549,13 @@ const DashboardLayout = () => {
                                 </div>
                               </div>
                             );
+
                             return isRel ? (
-                              <Link
-                                key={p.id}
-                                to={href}
-                                onClick={() => setNotifOpen(false)}
-                              >
+                              <Link key={p.id || `${p.article_slug}-${p.comment_id}`} to={href} onClick={() => setNotifOpen(false)}>
                                 {Row}
                               </Link>
                             ) : (
-                              <a
-                                key={p.id}
-                                href={href}
-                                onClick={() => setNotifOpen(false)}
-                                rel="noopener noreferrer"
-                              >
+                              <a key={p.id || `${p.article_slug}-${p.comment_id}`} href={href} onClick={() => setNotifOpen(false)} rel="noopener noreferrer">
                                 {Row}
                               </a>
                             );

@@ -92,6 +92,32 @@ function Section({ title, icon: Icon, children, defaultOpen = true }) {
 }
 
 /* =========================================================
+   Droits (local au Sidebar)
+   ========================================================= */
+function hasRoleLike(me, re) {
+  const roles = (me?.roles || []).map((r) => String(r?.name ?? r).toLowerCase());
+  return roles.some((r) => re.test(r));
+}
+
+function canManageTagsOf(me) {
+  // Rôles forts (admin/modo/manager/owner)
+  if (hasRoleLike(me, /(owner|super-?admin|admin|manager|moderator)/i)) return true;
+
+  // Permissions explicites
+  const perms = (me?.permissions || []).map((p) =>
+    String(p?.name ?? p?.action ?? p).toLowerCase()
+  );
+
+  // Exemples de permissions acceptées (adapte selon ton backend)
+  const tests = [
+    /(tag|tags)\.(create|add|update|edit|delete|manage)/,
+    /(articles|media)\.(tag|tags)\.(add|attach|detach|update|edit|delete|manage)/,
+    /tags:manage/,
+  ];
+  return perms.some((n) => tests.some((re) => re.test(n)));
+}
+
+/* =========================================================
    Sidebar
    ========================================================= */
 export default function Sidebar({
@@ -113,10 +139,15 @@ export default function Sidebar({
   iconForType,
   iconBgForType,
   toAbsolute,
+  /* ➜ NOUVEAU : contexte utilisateur pour droits */
+  me = null,
 }) {
   const [query, setQuery] = React.useState("");
 
   const ref = React.useRef(null);
+
+  // Calculer localement si l'utilisateur peut gérer les tags
+  const canManageTags = React.useMemo(() => canManageTagsOf(me), [me]);
 
   // Fermer sur clic extérieur
   React.useEffect(() => {
@@ -214,7 +245,7 @@ export default function Sidebar({
       {/* Sidebar */}
       <aside
         ref={ref}
-        className="fixed top-20 left-0 z-50 w-[320px] sm:w-[360px] h-[calc(100vh-5rem)]
+        className="fixed top-20 left-0 z-50 w=[320px] sm:w-[360px] h-[calc(100vh-5rem)]
                    flex flex-col
                    bg-white/30 backdrop-blur-2xl
                    border-r border-white/40 ring-1 ring-white/40
@@ -316,11 +347,15 @@ export default function Sidebar({
           <Section title="Tags" icon={FaStar} defaultOpen={false}>
             {Array.isArray(tags) && tags.length > 0 ? (
               TagListComponent ? (
-                <TagListComponent tags={tags} onAddClick={onOpenTagManager} max={10} />
+                <TagListComponent
+                  tags={tags}
+                  onAddClick={canManageTags ? onOpenTagManager : undefined}
+                  max={10}
+                />
               ) : (
                 <p className="text-xs text-slate-500">Tags not provided</p>
               )
-            ) : (
+            ) : canManageTags ? (
               <button
                 onClick={onOpenTagManager}
                 className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold
@@ -329,6 +364,8 @@ export default function Sidebar({
               >
                 + Add tag
               </button>
+            ) : (
+              <p className="text-xs text-slate-500/80">No tags.</p>
             )}
           </Section>
 

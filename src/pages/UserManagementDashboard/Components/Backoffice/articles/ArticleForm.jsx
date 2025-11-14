@@ -362,16 +362,23 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
   );
 
   // Champs par onglet (pour dirty + save partiel)
-  const tabFields = {
-    content:     ['title','slug','excerpt','content','seo_data'],
-    settings:    ['status','visibility','password','published_at','scheduled_at','expires_at'],
-    author:      ['author_name','author_bio','author_id','author_avatar_file','author_avatar'],
-    taxonomy:    ['categories','tags'],
-    media:       ['featured_image_file','featured_image_alt','featured_image'],
-    analytics:   ['reading_time','word_count'],
-    management:  ['reviewed_by','reviewed_at','review_notes'],
-    preview:     []
-  };
+ // Champs par onglet (pour dirty + save partiel)
+const tabFields = {
+  content:     ['title','slug','excerpt','content','seo_data'],
+  settings:    [
+    'status','visibility','password',
+    'published_at','scheduled_at','expires_at',
+    // ▼▼▼ Ajout pour que le bouton "Save" réagisse aux toggles ▼▼▼
+    'is_featured','is_sticky','allow_comments','allow_sharing','allow_rating'
+  ],
+  author:      ['author_name','author_bio','author_id','author_avatar_file','author_avatar'],
+  taxonomy:    ['categories','tags'],
+  media:       ['featured_image_file','featured_image_alt','featured_image'],
+  analytics:   ['reading_time','word_count'],
+  management:  ['reviewed_by','reviewed_at','review_notes'],
+  preview:     []
+};
+
   const tabErrorCount = useMemo(() => {
     const out = {};
     for (const [tab, fields] of Object.entries(tabFields)) {
@@ -1155,7 +1162,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
       <main className="mx-auto max-w-screen-2xl px-6 lg:px-8 py-8 relative z-10">
         {/* CONTENT */}
         {activeTab === 'content' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-auto mb-24">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-24">
             <section className={`${card} p-8 space-y-6`}>
               <div className="space-y-3">
                 <label className={sectionTitle}>
@@ -1408,8 +1415,8 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
 
         {/* SETTINGS */}
         {activeTab === 'settings' && (
-          <div className="grid grid-cols-1 gap-6 h-screen mb-24 overflow-auto ">
-            <section className={`${card} p-8`}>
+          <div className="grid grid-cols-1 gap-6 overflow-auto ">
+            <section className={`${card} p-8 h-44`}>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-3">
                   <label className={sectionTitle}>Statut de publication</label>
@@ -1445,7 +1452,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
               </div>
             </section>
 
-            <section className={`${card} p-8`}>
+            <section className={`${card} h-60 p-8`}>
               <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-3">
                 <span className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 text-white shadow-lg">
                   <FiCalendar className="w-4 h-4" />
@@ -1495,7 +1502,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
               </div>
             </section>
 
-            <section className={`${card} p-6`}>
+            <section className={`${card} h-44 p-6`}>
               <h3 className="text-base font-semibold text-slate-900 mb-4">Options d'interaction</h3>
               <div className="flex flex-wrap gap-2">
                 {[
@@ -1548,7 +1555,7 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
 
         {/* AUTHOR — liste avatars + nom/bio */}
         {activeTab === 'author' && (
-          <div className="grid grid-cols-1 gap-6  mb-24 overflow-auto ">
+          <div className="grid grid-cols-1 gap-6  ">
             <section className={`${card} p-8`}>
               <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-3">
                 <span className="p-2 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-500 text-white shadow-lg">
@@ -1800,8 +1807,8 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
 
         {/* ANALYTICS */}
         {activeTab === 'analytics' && (
-          <div className="grid grid-cols-1 gap-6 ">
-            <section className={`${card} p-8`}>
+          <div className="grid grid-cols-1 gap-6 h-56 ">
+            <section className={`${card} p-8 h-60`}>
               <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-3">
                 <span className="p-2 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500 text-white shadow-lg">
                   <FiBarChart2 className="w-4 h-4" />

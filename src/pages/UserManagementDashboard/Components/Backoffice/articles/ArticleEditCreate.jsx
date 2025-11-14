@@ -37,7 +37,7 @@ const ArticleEditCreate = () => {
   };
 
   return (
-    <div className="h-screen w-full overflow-hidden bg-white">
+    <div className="h-screen w-full overflow-auto  bg-white">
       {/* Toaster (fixe) */}
       {toast && (
         <div className="fixed right-4 top-4 z-[10000]">
@@ -68,7 +68,7 @@ const ArticleEditCreate = () => {
       </header>
 
       {/* Zone de travail scrollable (économie d’espace) */}
-      <div ref={scrollRef} className="h-[calc(100vh-44px)] overflow-auto">
+      <div ref={scrollRef} className="h-[100%] "> 
         <div className="mx-auto max-w-screen-2xl px-3 py-3">
           <ArticleForm initial={initial} onSaved={onSaved} />
         </div>

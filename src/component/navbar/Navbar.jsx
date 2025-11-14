@@ -17,11 +17,15 @@ import { logoutUser } from '../../features/auth/authActions';
 import LanguageSwitcher from '../langue/LanguageSwitcher';
 import ArticleSearchBox from './ArticleSearchBox';
 
+/* 🔹 AJOUTS: même logique que Comments.jsx */
+import useMeFromLaravel from '../../hooks/useMeFromLaravel';
+import { computeRights } from '../../utils/access';
+
 /* ========================= Utils ========================= */
 const getTokenGuard = () => {
   try {
-    return (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('tokenGuard'))
-      || (typeof localStorage !== 'undefined' && localStorage.getItem('tokenGuard'))
+    return (typeof sessionStorage !== 'undefined' && (sessionStorage.getItem('tokenGuard') || sessionStorage.getItem('access_token')))
+      || (typeof localStorage !== 'undefined' && (localStorage.getItem('tokenGuard') || localStorage.getItem('access_token')))
       || null;
   } catch { return null; }
 };
@@ -278,8 +282,19 @@ const Navbar = () => {
   const API_BASE_URL     = import.meta.env.VITE_API_BASE_URL || '';
   const USE_SSE          = import.meta.env.VITE_USE_SSE === '1'; // PATCH: flag pour activer SSE
 
+  // Endpoints configurables pour la modération
+  const MOD_COUNT_EP = import.meta.env.VITE_MOD_PENDING_COUNT_EP || '/moderation/pending-count';
+  const MOD_LIST_EP  = import.meta.env.VITE_MOD_PENDING_LIST_EP  || '/moderation/pending';
+
   const { isAuthenticated, user } = useSelector((s) => s.library?.auth || {});
   const userId = user?.id;
+
+  /* 🔹 AJOUT: récup depuis Laravel + fusion */
+  const { me } = useMeFromLaravel();
+  const mergedUser        = { ...(user || {}), ...(me?.user || {}) };
+  const mergedRoles       = [ ...(user?.roles || []), ...(me?.roles || []) ];
+  const mergedPermissions = [ ...(user?.permissions || []), ...(me?.permissions || []) ];
+  const { isAdmin } = computeRights(mergedPermissions, mergedRoles, mergedUser);
 
   // Avatar
   const triedAuthFetchRef = useRef(false);
@@ -320,7 +335,15 @@ const Navbar = () => {
   const [newCount, setNewCount] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
 
-  const canModerate = !!user?.roles?.includes('moderator') || !!user?.permissions?.includes('moderate'); // déjà présent plus bas ; déplacé ici si besoin
+  // Utilitaire permissions
+  const toStrArr = (x) => Array.isArray(x) ? x.map(String) : [];
+  const hasSome = (arr, ...keys) => {
+    const s = new Set(toStrArr(arr));
+    return keys.some(k => s.has(k));
+  };
+  const canModerate =
+    hasSome(user?.roles, 'moderator','admin','superadmin','editor') ||
+    hasSome(user?.permissions, 'moderate','comments.moderate','comments:moderate','comment.moderate','moderation.view');
 
   const recomputeNewCount = useCallback(async () => {
     if (!isAuthenticated || !userId) { setNewCount(0); return; }
@@ -346,24 +369,25 @@ const Navbar = () => {
     } catch {}
   }, [API_BASE_URL, isAuthenticated, userId]);
 
-  // PATCH: ne touche pas aux routes de modération si non modérateur
+  // → Indépendant de canModerate (c'est le backend qui tranche)
   const recomputePendingCount = useCallback(async () => {
-    if (!isAuthenticated || !canModerate) { setPendingCount(0); return; }
+    if (!isAuthenticated) { setPendingCount(0); return; }
     try {
       const token = getTokenGuard();
-      const resp = await fetchJson(`${API_BASE_URL}/moderation/pending-count`, {}, token);
+      const resp = await fetchJson(`${API_BASE_URL}${MOD_COUNT_EP}`, {}, token);
       setPendingCount(Number(resp?.pending || 0));
-    } catch {}
-  }, [API_BASE_URL, isAuthenticated, canModerate]);
+    } catch (e) {
+      setPendingCount(0);
+    }
+  }, [API_BASE_URL, isAuthenticated, MOD_COUNT_EP]);
 
-  // PATCH: SSE désactivable pour éviter erreurs 500/ERR_ABORTED si backend non prêt
+  // PATCH: SSE désactivable
   useEffect(() => {
-    if (!USE_SSE) return;                    // ⬅️ rien n’est ouvert, donc pas d’erreur réseau
+    if (!USE_SSE) return;
     if (!isAuthenticated || !userId) return;
 
     let es;
     try {
-      // Option: n’ajoute pas le token en query si le backend n’en a pas besoin
       es = new EventSource(`${API_BASE_URL}/users/${userId}/activities/stream`);
       es.onmessage = (ev) => {
         try {
@@ -413,13 +437,13 @@ const Navbar = () => {
     }
   }, [location.pathname]);
 
-  // PATCH: ne charge “pending” que si autorisé
   const toggleNotifications = () => {
     setNotifOpen(prev => {
       const next = !prev;
       if (next) {
         loadNews(1, true);
-        if (canModerate) loadPending(1, true); // condition
+        // on essaie toujours; le backend répondra 401/403 si non autorisé
+        loadPending(1, true);
         if (userId) { setLastSeenNow(userId); setNewCount(0); }
       }
       return next;
@@ -445,13 +469,13 @@ const Navbar = () => {
     }
   };
 
-  // PATCH: garde-fou canModerate
+  // → On ne bloque pas par canModerate; on laisse le serveur dire 401/403
   const loadPending = async (page, replace = false) => {
-    if (!isAuthenticated || !canModerate) return;
+    if (!isAuthenticated) return;
     const token = getTokenGuard();
     setPending((s) => ({ ...s, loading: true, error: null }));
     try {
-      const resp = await fetchJson(`${API_BASE_URL}/moderation/pending`, { per_page: 10, page }, token);
+      const resp = await fetchJson(`${API_BASE_URL}${MOD_LIST_EP}`, { per_page: 10, page }, token);
       const raw = Array.isArray(resp?.data) ? resp.data : [];
       setPending({
         items: replace ? raw : [...(replace ? [] : pending.items), ...raw],
@@ -460,18 +484,18 @@ const Navbar = () => {
         loading: false,
         error: null
       });
-    } catch {
+    } catch (e) {
       setPending((s) => ({ ...s, loading: false, error: null }));
     }
   };
 
-  // PATCH: chargement lazy du tab “pending”
+  // Lazy load du tab “pending” sans dépendre de canModerate
   useEffect(() => {
     if (!notifOpen) return;
-    if (notifTab === 'pending' && canModerate) {
+    if (notifTab === 'pending') {
       if (pending.items.length === 0 && !pending.loading) loadPending(1, true);
     }
-  }, [notifOpen, notifTab, canModerate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [notifOpen, notifTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Scroll-aware navbar */
   const [isHidden, setIsHidden] = useState(false);
@@ -513,7 +537,6 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', onScroll);
   }, [location.pathname]);
 
-  // NOTE: canModerate est déjà défini plus haut
   const navLinks = [
     { label: t('home'), path: '/', submenu: null },
     { label: t('platform'), path: '/articles', submenu: [
@@ -549,7 +572,6 @@ const Navbar = () => {
   const translateClass = isHidden ? '-translate-y-full' : 'translate-y-0';
   const shadowClass = isCompact ? 'shadow-lg' : 'shadow-md';
 
-  // ---- lastSeen for unread logic
   const lastSeen = (isAuthenticated && userId) ? (getLastSeenTs(userId) || null) : null;
 
   return (
@@ -735,13 +757,13 @@ const Navbar = () => {
                   />
                 </button>
 
-                {/* Dropdown menu utilisateur - Style identique aux notifications */}
+                {/* Dropdown menu utilisateur */}
                 <div
                   className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 overflow-hidden opacity-0 invisible translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-50"
                   role="menu"
                   aria-label="Menu utilisateur"
                 >
-                  {/* Header bleu identique aux notifications */}
+                  {/* Header */}
                   <div className="px-4 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white">
                     <div className="flex items-center gap-3">
                       <img
@@ -764,7 +786,7 @@ const Navbar = () => {
                   {/* Options du menu */}
                   <div className="py-2">
                     <NavLink
-                      to="/profile"
+                      to="/settings"
                       className={({isActive}) =>
                         `flex items-center px-4 py-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 transition-all ${
                           isActive ? 'bg-blue-50 text-blue-700' : ''
@@ -776,21 +798,24 @@ const Navbar = () => {
                       <span className="flex-1">{t('profile','Profil')}</span>
                     </NavLink>
 
-                    <NavLink
-                      to="/settings"
-                      className={({isActive}) =>
-                        `flex items-center px-4 py-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 transition-all ${
-                          isActive ? 'bg-blue-50 text-blue-700' : ''
-                        }`
-                      }
-                      end
-                    >
-                      <FontAwesomeIcon icon={faCog} className="mr-3 text-blue-600 w-4" />
-                      <span className="flex-1">{t('settings','Paramètres')}</span>
-                    </NavLink>
+                    {/* 🔒 Afficher Paramètres (articlescontroler) uniquement si admin */}
+                    {isAdmin && (
+                      <NavLink
+                        to="/articlescontroler"
+                        className={({isActive}) =>
+                          `flex items-center px-4 py-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 transition-all ${
+                            isActive ? 'bg-blue-50 text-blue-700' : ''
+                          }`
+                        }
+                        end
+                      >
+                        <FontAwesomeIcon icon={faCog} className="mr-3 text-blue-600 w-4" />
+                        <span className="flex-1">{t('settings','Paramètres')}</span>
+                      </NavLink>
+                    )}
                   </div>
 
-                  {/* Séparateur et déconnexion */}
+                  {/* Déconnexion */}
                   <div className="border-t border-gray-100">
                     <button
                       onClick={async () => {
@@ -863,6 +888,8 @@ const Navbar = () => {
             goToLogin={goToLogin}
             navigate={navigate}
             onLogout={async () => { await dispatch(logoutUser(i18n.language)); setShowMobileMenu(false); navigate('/auth'); }}
+            /* 🔒 passe aussi isAdmin au sheet */
+            isAdmin={isAdmin}
           />
         </Portal>
       )}
@@ -892,7 +919,7 @@ function NotificationsDialog({
           role="dialog"
           aria-modal="true"
           aria-label={t('notifications','Notifications')}
-          className="absolute right-2 top-[72px] w-[26rem] max-w-[96vw] bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 overflow-hidden"
+          className="absolute right-2 top=[72px] top-[72px] w-[26rem] max-w-[96vw] bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 overflow-hidden"
         >
           <div className="px-4 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -1045,7 +1072,6 @@ function PendingList({ t, pending, loadPending, onClose, lastSeen, getOpenedAt, 
         const unreadBySeen = lastSeen ? isAfter(pItem.created_at, lastSeen) : false;
         const isUnread = !openedAt && unreadBySeen;
 
-        // Détails enrichis, avec fallbacks robustes
         const commentObj   = pItem.comment_subject || pItem.subject || pItem.title || t('pending_item','Élément à modérer');
         const articleTitle = pItem.article_title || pItem.article?.title || pItem.article_slug || '—';
         const authorName   = pItem.author_name || pItem.user_name || pItem.guest_name || pItem.author || '—';
@@ -1107,7 +1133,9 @@ function PendingList({ t, pending, loadPending, onClose, lastSeen, getOpenedAt, 
 /* ========================= Mobile Bottom Sheet ========================= */
 function MobileMenuBottomSheetPortal({
   onClose, isAuthenticated, user, avatarSrc, onAvatarError,
-  navLinks, goToLogin, navigate, onLogout
+  navLinks, goToLogin, navigate, onLogout,
+  /* 🔹 AJOUT: on reçoit isAdmin pour conditionner le bouton */
+  isAdmin = false
 }) {
   useScrollLock(true);
   const headerCloseRef = useRef(null);
@@ -1138,7 +1166,7 @@ function MobileMenuBottomSheetPortal({
 
   return (
     <FocusTrap active={true} initialFocusRef={headerCloseRef}>
-      {/* Backdrop au-dessus du nav (z-[1000]) */}
+      {/* Backdrop */}
       <div className="fixed inset-0 z-[1000]">
         <button
           type="button"
@@ -1148,7 +1176,7 @@ function MobileMenuBottomSheetPortal({
         />
       </div>
 
-      {/* Sheet (z-[1001]) */}
+      {/* Sheet */}
       <div
         ref={sheetRef}
         role="dialog"
@@ -1209,7 +1237,7 @@ function MobileMenuBottomSheetPortal({
                       type="button"
                       onClick={() => toggle(`sec-${i}`)}
                       className="w-full h-12 px-3 flex items-center justify-between bg-white"
-                      aria-expanded={openSection === `sec-${i}`}
+                      aria-expanded={(openSection === `sec-${i}`)}
                     >
                       <span className="text-sm font-medium text-slate-900">{link.label}</span>
                       <FontAwesomeIcon icon={faChevronDown} className={`transition-transform ${openSection===`sec-${i}`?'rotate-180':''}`} />
@@ -1290,14 +1318,18 @@ function MobileMenuBottomSheetPortal({
                     <FontAwesomeIcon icon={faUserCircle} className="w-4 text-blue-600" />
                     Profil
                   </NavLink>
-                  <NavLink
-                    to="/articlescontroler"
-                    onClick={onNavigate}
-                    className="px-3 py-2 rounded-md bg-white border border-slate-200 hover:bg-slate-100 inline-flex items-center gap-2 text-sm"
-                  >
-                    <FontAwesomeIcon icon={faCog} className="w-4 text-blue-600" />
-                    Paramètres
-                  </NavLink>
+
+                  {/* 🔒 Afficher Paramètres uniquement pour les admins */}
+                  {isAdmin && (
+                    <NavLink
+                      to="/articlescontroler"
+                      onClick={onNavigate}
+                      className="px-3 py-2 rounded-md bg-white border border-slate-200 hover:bg-slate-100 inline-flex items-center gap-2 text-sm"
+                    >
+                      <FontAwesomeIcon icon={faCog} className="w-4 text-blue-600" />
+                      Paramètres
+                    </NavLink>
+                  )}
                 </>
               ) : (
                 <>

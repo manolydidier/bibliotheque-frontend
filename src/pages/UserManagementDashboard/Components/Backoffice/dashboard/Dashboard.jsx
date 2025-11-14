@@ -1,5 +1,5 @@
 // src/pages/dashboard/Dashboard.jsx
-import React, { useState, useEffect, useCallback, useMemo, startTransition } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, startTransition, useRef } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import axios from 'axios';
 import {
@@ -13,6 +13,7 @@ import {
   CartesianGrid, XAxis, YAxis, Tooltip, LineChart, Line
 } from 'recharts';
 import { FiSearch, FiChevronUp, FiChevronDown } from 'react-icons/fi';
+
 /* =========================
    Axios & constantes
 ========================= */
@@ -140,24 +141,175 @@ const PageHeader = ({ title, subtitle, right, onRefresh }) => (
   </div>
 );
 
-const TabsBar = ({ active, onChange }) => (
-  <div className="flex gap-2 border-b border-gray-200 pb-px overflow-x-auto">
-    {TABS.map(t => (
-      <button
-        key={t.key}
-        onClick={() => onChange(t.key)}
-        className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
-          active === t.key
-            ? 'border-blue-600 text-blue-600'
-            : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
-        }`}
+/* ========= TabsBar DRAGGABLE (glassmorphism) ========= */
+const TabsBar = ({ active, onChange }) => {
+  const tabs = TABS;
+  const count = Math.max(1, tabs.length);
+  const activeIndex = Math.max(0, tabs.findIndex(t => t.key === active));
+
+  const containerRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+  const [dragIndexFloat, setDragIndexFloat] = useState(activeIndex);
+  const [segmentWidth, setSegmentWidth] = useState(0);
+  const [containerLeft, setContainerLeft] = useState(0);
+  const suppressClickRef = useRef(false);
+
+  const measure = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setContainerLeft(rect.left);
+    setSegmentWidth(rect.width / count);
+  }, [count]);
+
+  useEffect(() => {
+    measure();
+    const ro = 'ResizeObserver' in window ? new ResizeObserver(() => measure()) : null;
+    if (ro && containerRef.current) ro.observe(containerRef.current);
+    const onResize = () => measure();
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      if (ro && containerRef.current) ro.unobserve(containerRef.current);
+    };
+  }, [measure]);
+
+  useEffect(() => {
+    if (!dragging) setDragIndexFloat(activeIndex);
+  }, [activeIndex, dragging]);
+
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+  const xToFloatIndex = useCallback(
+    (clientX) => {
+      const rel = clientX - containerLeft;
+      const floatIdx = rel / Math.max(1, segmentWidth);
+      return clamp(floatIdx, 0, count - 1);
+    },
+    [containerLeft, segmentWidth, count]
+  );
+
+  const onPointerDownContainer = (e) => {
+    suppressClickRef.current = false;
+    const x = e.clientX ?? e.touches?.[0]?.clientX;
+    if (typeof x !== 'number') return;
+    setDragging(true);
+    setDragIndexFloat(xToFloatIndex(x));
+  };
+
+  useEffect(() => {
+    if (!dragging) return;
+
+    const onMove = (e) => {
+      if (e.cancelable) e.preventDefault?.();
+      const x = e.clientX ?? e.touches?.[0]?.clientX;
+      if (typeof x !== 'number') return;
+      setDragIndexFloat(xToFloatIndex(x));
+      suppressClickRef.current = true;
+    };
+
+    const onUp = () => {
+      const target = Math.round(clamp(dragIndexFloat, 0, count - 1));
+      const nextKey = tabs[target]?.key ?? tabs[0]?.key;
+      setDragging(false);
+      if (nextKey) onChange?.(nextKey);
+      setTimeout(() => (suppressClickRef.current = false), 0);
+    };
+
+    window.addEventListener('pointermove', onMove, { passive: false });
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
+    };
+  }, [dragging, dragIndexFloat, count, tabs, onChange, xToFloatIndex]);
+
+  const knobLeftPercent = useMemo(() => {
+    const idx = dragging ? dragIndexFloat : activeIndex;
+    return (idx * 100) / count;
+  }, [dragging, dragIndexFloat, activeIndex, count]);
+
+  const onOptionClick = (key) => {
+    if (suppressClickRef.current) return;
+    onChange?.(key);
+  };
+
+  const onKeyDown = (e) => {
+    if (e.key === 'ArrowRight') {
+      const next = Math.min(count - 1, activeIndex + 1);
+      const nk = tabs[next]?.key;
+      if (nk) onChange?.(nk);
+    } else if (e.key === 'ArrowLeft') {
+      const prev = Math.max(0, activeIndex - 1);
+      const pk = tabs[prev]?.key;
+      if (pk) onChange?.(pk);
+    }
+  };
+
+  return (
+    <div className="w-full overflow-x-auto">
+      <div
+        ref={containerRef}
+        onPointerDown={onPointerDownContainer}
+        onTouchStart={onPointerDownContainer}
+        onKeyDown={onKeyDown}
+        role="tablist"
+        aria-orientation="horizontal"
+        className="relative bg-white/80 backdrop-blur-md border border-white/50 rounded-xl p-1 inline-flex shadow-sm select-none"
+        style={{
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+        }}
       >
-        <span className="text-base">{t.icon}</span>
-        {t.label}
-      </button>
-    ))}
-  </div>
-);
+        {/* Knob */}
+        <div
+          className={`absolute top-1 bottom-1 rounded-lg ${
+            dragging ? 'cursor-grabbing' : 'cursor-grab'
+          } transition-all ease-out ring-1 ring-blue-800/40`}
+          style={{
+            width: `calc(100% / ${count} - 2px)`,
+            left: `calc(${knobLeftPercent}% + 1px)`,
+            background:
+              'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(59,130,246,0.05))',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            border: '1px solid rgba(59,130,246,0.20)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+            transitionDuration: dragging ? '0ms' : '300ms',
+          }}
+          aria-hidden="true"
+        />
+        {/* Options */}
+        <div className="relative z-10 flex">
+          {tabs.map((t) => {
+            const isActive = active === t.key;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                tabIndex={isActive ? 0 : -1}
+                onClick={() => onOptionClick(t.key)}
+                className={`text-sm px-5 py-2.5 font-medium transition-all duration-200 rounded whitespace-nowrap flex items-center justify-center gap-2 ${
+                  isActive ? 'text-blue-600 font-semibold' : 'text-gray-600 hover:text-gray-800'
+                }`}
+                style={{ width: `${100 / count}%` }}
+              >
+                {t.icon && <span className="text-base">{t.icon}</span>}
+                <span>{t.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+/* ========= /TabsBar ========= */
 
 const Section = ({ title, right, children, className = '' }) => (
   <section className={`rounded-xl bg-white border border-gray-200 ${className}`}>
@@ -266,8 +418,8 @@ const authorNameFrom = (a) => {
    Downloads: fallbacks
 ========================= */
 const DOWNLOAD_METRIC_CANDIDATES = ['downloads','file_downloads','media_downloads','article_media_downloads'];
-const DOWNLOAD_SERIES_ENDPOINTS = [    // ?metric=downloads
-  { url: '/stats/downloads/time-series', param: null }, // endpoint dédié
+const DOWNLOAD_SERIES_ENDPOINTS = [
+  { url: '/stats/downloads/time-series', param: null },
   { url: '/article-media/stats/time-series', param: null },
 ];
 
@@ -366,51 +518,48 @@ export default function Dashboard() {
   const [topAuthors, setTopAuthors] = useState([]);
   const [trending, setTrending] = useState([]);
 
+  // ===== FICHIERS: recherche, filtre, tri =====
+  const [filesQuery, setFilesQuery] = useState('');
+  const [filesSort, setFilesSort] = useState({ key: 'download_count', dir: 'desc' });
+  const [filesOnlyProtected, setFilesOnlyProtected] = useState(null);
 
- // ===== FICHIERS: recherche, filtre, tri =====
- const [filesQuery, setFilesQuery] = useState('');
- // key: 'download_count' | 'name' — dir: 'asc' | 'desc'
- const [filesSort, setFilesSort] = useState({ key: 'download_count', dir: 'desc' });
- // null = tous, true = protégés, false = publics
- const [filesOnlyProtected, setFilesOnlyProtected] = useState(null);
+  const toggleSort = (key) => {
+    setFilesSort((s) => {
+      if (s.key !== key) return { key, dir: key === 'name' ? 'asc' : 'desc' };
+      return { key, dir: s.dir === 'asc' ? 'desc' : 'asc' };
+    });
+  };
 
- const toggleSort = (key) => {
-   setFilesSort((s) => {
-     if (s.key !== key) return { key, dir: key === 'name' ? 'asc' : 'desc' };
-     return { key, dir: s.dir === 'asc' ? 'desc' : 'asc' };
-   });
- };
+  const visibleFiles = useMemo(() => {
+    let arr = Array.isArray(filesList) ? [...filesList] : [];
+    if (filesQuery) {
+      const q = filesQuery.toLowerCase();
+      arr = arr.filter(f => (f.name || '').toLowerCase().includes(q));
+    }
+    if (filesOnlyProtected !== null) {
+      arr = arr.filter(f => Boolean(f.protected) === filesOnlyProtected);
+    }
+    const { key, dir } = filesSort;
+    arr.sort((a, b) => {
+      if (key === 'name') {
+        const av = (a.name || '').toLowerCase();
+        const bv = (b.name || '').toLowerCase();
+        if (av < bv) return dir === 'asc' ? -1 : 1;
+        if (av > bv) return dir === 'asc' ? 1 : -1;
+        return 0;
+      } else {
+        const av = Number(a[key] || 0);
+        const bv = Number(b[key] || 0);
+        return dir === 'asc' ? av - bv : bv - av;
+      }
+    });
+    return arr;
+  }, [filesList, filesQuery, filesOnlyProtected, filesSort]);
 
- const visibleFiles = useMemo(() => {
-   let arr = Array.isArray(filesList) ? [...filesList] : [];
-  if (filesQuery) {
-     const q = filesQuery.toLowerCase();
-     arr = arr.filter(f => (f.name || '').toLowerCase().includes(q));
-   }
-   if (filesOnlyProtected !== null) {
-     arr = arr.filter(f => Boolean(f.protected) === filesOnlyProtected);
-   }
-   const { key, dir } = filesSort;
-   arr.sort((a, b) => {
-     if (key === 'name') {
-       const av = (a.name || '').toLowerCase();
-       const bv = (b.name || '').toLowerCase();
-       if (av < bv) return dir === 'asc' ? -1 : 1;
-       if (av > bv) return dir === 'asc' ? 1 : -1;
-       return 0;
-    } else {
-  const av = Number(a[key] || 0);
-       const bv = Number(b[key] || 0);
-       return dir === 'asc' ? av - bv : bv - av;
-     }
-   });
-   return arr;
- }, [filesList, filesQuery, filesOnlyProtected, filesSort]);
-
- const SortIcon = ({ active, dir }) => {
-  if (!active) return <span className="inline-block w-3" />;
-   return dir === 'asc' ? <FiChevronUp className="inline -mt-0.5" /> : <FiChevronDown className="inline -mt-0.5" />;
- };
+  const SortIcon = ({ active, dir }) => {
+    if (!active) return <span className="inline-block w-3" />;
+    return dir === 'asc' ? <FiChevronUp className="inline -mt-0.5" /> : <FiChevronDown className="inline -mt-0.5" />;
+  };
 
   /* ================= fetchers ================= */
   const normalizeList = (payload, fallbackPerPage = 24) => {
@@ -518,19 +667,16 @@ export default function Dashboard() {
   const mergeSeries = (a = [], b = []) =>
     a.map((r, i) => ({ day: r.day, count: Number(r.count || 0) + Number(b?.[i]?.count || 0) }));
 
-  // Remplace TOUT le corps de fetchTrending par ceci
-const fetchTrending = async (metric, days = 30, limit = 6) => {
-  const { data } = await axios.get('/stats/trending', { params: { metric, days, limit } });
-  const arr = Array.isArray(data?.data) ? data.data : [];
-  // Pas d'appel /articles/{id} ici !
-  return arr.map(it => ({
-    id: it.article_id,
-    title: it.title ?? `#${it.article_id}`,
-    slug: it.slug ?? String(it.article_id),
-    views: Number(it.count || 0),
-  }));
-};
-
+  const fetchTrending = async (metric, days = 30, limit = 6) => {
+    const { data } = await axios.get('/stats/trending', { params: { metric, days, limit } });
+    const arr = Array.isArray(data?.data) ? data.data : [];
+    return arr.map(it => ({
+      id: it.article_id,
+      title: it.title ?? `#${it.article_id}`,
+      slug: it.slug ?? String(it.article_id),
+      views: Number(it.count || 0),
+    }));
+  };
 
   const fetchRecentArticles = async () => {
     const { items } = await axios.get('/articles', {
@@ -577,14 +723,14 @@ const fetchTrending = async (metric, days = 30, limit = 6) => {
         const fileStatus = String(f.visibility ?? f.status ?? '').toLowerCase();
         const fileProtected =
           !!(f.is_protected ?? f.is_private ?? f.is_password_protected ?? f.protected ?? f.password ?? f.password_hash) ||
-          fileStatus.includes('private') || fileStatus.includes('protect'); // couvre "password_protected"
+          fileStatus.includes('private') || fileStatus.includes('protect');
 
         // ——— Vérifs côté ARTICLE parent ———
         const a = f.article || {};
         const artStatus = String(a.visibility ?? a.status ?? '').toLowerCase();
         const articleProtected =
           !!(a.is_protected ?? a.is_private ?? a.password) ||
-          artStatus.includes('private') || artStatus.includes('protect'); // couvre "password_protected"
+          artStatus.includes('private') || artStatus.includes('protect');
 
         const isProtected = fileProtected || articleProtected;
 
@@ -659,7 +805,6 @@ const fetchTrending = async (metric, days = 30, limit = 6) => {
       setCommentsDelta(pctDelta(sv(cSecond), sv(cFirst)));
       setSharesDelta(pctDelta(sv(s2.second), sv(s2.first)));
 
-      // Delta téléchargements avec fallback (peut rester null si pas dispo côté API)
       try {
         const d2 = await fetchDownloadsSeries2x(rangeDays);
         const sum = (rows) => rows.reduce((acc, r) => acc + Number(r.count ?? r.downloads ?? 0), 0);
@@ -697,7 +842,6 @@ const fetchTrending = async (metric, days = 30, limit = 6) => {
         }))
       );
 
-      // Fichiers (+ protégés)
       const files = await fetchAllFiles();
       setFilesList(files.list);
       setDownloadsTotal(files.total);
@@ -787,7 +931,7 @@ const fetchTrending = async (metric, days = 30, limit = 6) => {
   return (
     <div className="min-h-screen bg-gray-50 -m-4 p-6 space-y-6">
       <PageHeader
-        title="Tableau de bord"
+        title=""
         subtitle="Vue d'ensemble des performances"
         right={headerRight}
         onRefresh={loadData}
@@ -799,7 +943,7 @@ const fetchTrending = async (metric, days = 30, limit = 6) => {
 
       {/* ============ ONGLET: RESUME ============ */}
       {activeTab === 'resume' && (
-        <div className="space-y-6">
+        <div className="space-y-6  min-h-screen h-[380px] overflow-y-auto pb-72 ">
           {/* Audience */}
           <Section title="Audience" right={!loading && <span className="text-xs">vs période précédente</span>}>
             {loading ? (
@@ -1000,7 +1144,7 @@ const fetchTrending = async (metric, days = 30, limit = 6) => {
 
       {/* ============ ONGLET: AUDIENCE ============ */}
       {activeTab === 'audience' && (
-        <div className="space-y-6">
+        <div className="space-y-6  min-h-screen h-[380px] overflow-y-auto pb-72">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
             {loading ? (
               <>
@@ -1296,7 +1440,7 @@ const fetchTrending = async (metric, days = 30, limit = 6) => {
 
       {/* ============ ONGLET: CONTENU ============ */}
       {activeTab === 'contenu' && (
-        <div className="space-y-6">
+        <div className="space-y-6  min-h-screen h-[380px] overflow-y-auto pb-72">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
             {loading ? (
               <>
@@ -1517,7 +1661,7 @@ const fetchTrending = async (metric, days = 30, limit = 6) => {
 
       {/* ============ ONGLET: MODÉRATION ============ */}
       {activeTab === 'moderation' && (
-        <div className="space-y-6">
+        <div className="space-y-6  min-h-screen h-[380px] overflow-y-auto pb-72">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {loading ? (
               <>
@@ -1591,7 +1735,7 @@ const fetchTrending = async (metric, days = 30, limit = 6) => {
 
       {/* ============ ONGLET: FICHIERS ============ */}
       {activeTab === 'fichiers' && (
-        <div className="space-y-6">
+        <div className="space-y-6  min-h-screen h-[380px] overflow-y-auto pb-72">
           <Section 
               title="Fichiers les plus téléchargés" 
               right={
@@ -1687,7 +1831,7 @@ const fetchTrending = async (metric, days = 30, limit = 6) => {
                     </div>
                   </div>
 
-                  {/* Tableau lisible + zébrage + header sticky + barre de progression */}
+                  {/* Tableau lisible */}
                   <div className="max-h-[32rem] overflow-auto rounded-lg border border-gray-200">
                     <table className="min-w-full text-sm">
                       <thead className="sticky top-0 bg-white border-b border-gray-200 z-10">
@@ -1740,9 +1884,9 @@ const fetchTrending = async (metric, days = 30, limit = 6) => {
                                 <div className="flex items-center gap-3">
                                   <div className="flex-1 h-2 rounded-full bg-gray-100">
                                     <div
-                      className="h-2 rounded-full bg-blue-500"
-                      style={{ width: `${Math.min(100, share).toFixed(2)}%` }}
-                    />
+                                      className="h-2 rounded-full bg-blue-500"
+                                      style={{ width: `${Math.min(100, share).toFixed(2)}%` }}
+                                    />
                                   </div>
                                   <div className="w-16 text-right tabular-nums text-gray-600">
                                     {share.toFixed(1)}%

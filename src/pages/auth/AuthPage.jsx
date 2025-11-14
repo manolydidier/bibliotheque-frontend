@@ -10,9 +10,7 @@ import './auth.css';
 import LoadingComponent from '../../component/loading/LoadingComponent';
 import Toaster from '../../component/toast/Toaster';
 import { loginUser, registerUser, checkUnique, preVerifyEmail } from '../../features/auth/authActions';
-import { checkPasswordPolicy, challengeLoginCredentials } from '../../features/auth/authActions'; // ✅ NEW
-
-
+import { checkPasswordPolicy, challengeLoginCredentials } from '../../features/auth/authActions';
 
 import { startGoogleOAuth } from '../../features/auth/oauthActions';
 
@@ -161,7 +159,6 @@ const isLaravelUnique = (msg='') => /(already been taken|déjà.*pris|déjà.*ut
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /* === Password regex aligné backend === */
-// Unicode-aware: minuscules, majuscules, chiffres, et un non lettre/chiffre
 const PASSWORD_REGEX = /^(?=.*\p{Ll})(?=.*\p{Lu})(?=.*\p{Nd})(?=.*[^\p{L}\p{N}]).{8,}$/u;
 const PW_RULE_MSG_FR = "Le mot de passe doit comporter au moins 8 caractères, avec une minuscule, une majuscule, un chiffre et un caractère spécial.";
 
@@ -180,8 +177,16 @@ function getFixedContainingBlock(node) {
     }
     el = el.parentElement;
   }
-  return null; // sinon: viewport
+  return null;
 }
+
+/* ===== Helpers OTP persist/reopen ===== */
+const remainingSec = (expiryAt) => Math.max(0, Math.floor((expiryAt - Date.now()) / 1000));
+const fmtMMSS = (s) => {
+  const m = String(Math.floor(s / 60)).padStart(2, '0');
+  const sec = String(s % 60).padStart(2, '0');
+  return `${m}:${sec}`;
+};
 
 /** 
  * NEW: accepte une prop initialView = 'login' | 'register'.
@@ -231,7 +236,7 @@ const AuthPage = ({ initialView = 'login' }) => {
 
   // OTP modal & pending payloads
   const [otpOpen, setOtpOpen] = useState(false);
-  const [otpCtx, setOtpCtx] = useState({ email: '', ttl: 120, intent: 'login' });
+  const [otpCtx, setOtpCtx] = useState(null); // { email, ttl, intent, expiryAt }
   const [pendingLogin, setPendingLogin] = useState(null);
   const [pendingRegister, setPendingRegister] = useState(null);
 
@@ -255,6 +260,7 @@ const AuthPage = ({ initialView = 'login' }) => {
     } catch {}
   }, []);
 
+  // ✅ Suggestion username
   const progress = useMemo(()=>{
     if(isLoginActive){
       let c = 0;
@@ -323,13 +329,12 @@ const AuthPage = ({ initialView = 'login' }) => {
     else if(!emailRegex.test(formData.email)) ne.email=t('invalid_email');
 
     if(!formData.password.trim()) {
-    ne.password = t('password_required');
-  } else {
-    // ⚠️ On ne vérifie "fort" que pour l'inscription
-    if (!isLoginActive && !PASSWORD_REGEX.test(formData.password)) {
-      ne.password = PW_RULE_MSG_FR;
+      ne.password = t('password_required');
+    } else {
+      if (!isLoginActive && !PASSWORD_REGEX.test(formData.password)) {
+        ne.password = PW_RULE_MSG_FR;
+      }
     }
-  }
     if(!isLoginActive){
       if(!formData.username.trim()) ne.username=t('username_required');
       else if(formData.username.length<3) ne.username=t('username_too_short');
@@ -378,121 +383,147 @@ const AuthPage = ({ initialView = 'login' }) => {
     return ()=>{ ctrl.abort(); clearTimeout(tmr); };
   },[debouncedUsername,isLoginActive,langue,t]);
 
+  /* ===== Rehydrate OTP session on mount ===== */
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('otp_ctx');
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved?.expiryAt && Date.now() < saved.expiryAt) {
+        setOtpCtx({
+          email: saved.email,
+          ttl: saved.ttl || 120,
+          intent: saved.intent || 'login',
+          expiryAt: saved.expiryAt,
+        });
+        // on laisse l'utilisateur rouvrir manuellement via la puce
+      } else {
+        sessionStorage.removeItem('otp_ctx');
+      }
+    } catch {}
+  }, []);
+
   const handleSubmit = async (e)=>{
     e.preventDefault();
     setSubmitAttempted(true);
     if(!validateForm()) return;
 
-  if (isLoginActive) {
-  try {
-    setSubmitting(true);
+    /* ===== LOGIN ===== */
+    if (isLoginActive) {
+      try {
+        setSubmitting(true);
 
-    // ✅ 0) Vérifs minimales côté client (format email + présence password)
-    if (!formData.email.trim() || !emailRegex.test(formData.email)) {
-      const msg = t('invalid_email');
-      setErrors(p => ({ ...p, email: msg }));
-      setGlobalError(msg);
+        if (!formData.email.trim() || !emailRegex.test(formData.email)) {
+          const msg = t('invalid_email');
+          setErrors(p => ({ ...p, email: msg }));
+          setGlobalError(msg);
+          return;
+        }
+        if (!formData.password.trim()) {
+          const msg = t('password_required');
+          setErrors(p => ({ ...p, password: msg }));
+          setGlobalError(msg);
+          return;
+        }
+
+        await challengeLoginCredentials(formData.email, formData.password, langue);
+
+        const pre = await dispatch(preVerifyEmail(formData.email, langue, 'login'));
+        const ttl = Math.max(30, pre?.ttl || 120);
+        const expiryAt = Date.now() + ttl * 1000;
+
+        setPendingLogin({
+          email: formData.email,
+          password: formData.password,
+          rememberMe: formData.rememberMe,
+          langue
+        });
+
+        const ctx = { email: formData.email, ttl, intent: 'login', expiryAt };
+        setOtpCtx(ctx);
+        sessionStorage.setItem('otp_ctx', JSON.stringify({ email: ctx.email, intent: ctx.intent, expiryAt, ttl, langue }));
+
+        setOtpOpen(true);
+      } catch (e) {
+        if (e?.fieldErrors) {
+          setErrors(prev => ({
+            ...prev,
+            email: e.fieldErrors.email ? e.fieldErrors.email[0] : prev.email,
+            password: e.fieldErrors.password ? e.fieldErrors.password[0] : prev.password,
+            general: !e.fieldErrors.email && !e.fieldErrors.password ? (e.message || '') : prev.general,
+          }));
+          setGlobalError(e.message || '');
+        } else {
+          setGlobalError(e?.message || t('auth.unknown_error', 'Unknown error'));
+        }
+        return;
+      } finally {
+        setSubmitting(false);
+      }
+    }
+
+    /* ===== REGISTER ===== */
+    if (!isLoginActive) {
+      if (!PASSWORD_REGEX.test(formData.password)) {
+        setErrors(p => ({ ...p, password: PW_RULE_MSG_FR }));
+        setGlobalError(PW_RULE_MSG_FR);
+        return;
+      }
+      if (formData.password !== formData.confirmPassword) {
+        const msg = t('password_mismatch');
+        setErrors(p => ({ ...p, confirmPassword: msg }));
+        setGlobalError(msg);
+        return;
+      }
+      if (uniqueStatus.email === 'taken' || uniqueStatus.username === 'taken') return;
+
+      const pwSrv = await checkPasswordPolicy(formData.password, langue);
+      if (!pwSrv?.valid) {
+        const msg = PW_RULE_MSG_FR;
+        setErrors(p => ({ ...p, password: msg }));
+        setGlobalError(msg);
+        return;
+      }
+
+      setSubmitting(true);
+      try {
+        const pre = await dispatch(preVerifyEmail(formData.email, langue, 'register'));
+        const ttl = Math.max(30, pre?.ttl || 120);
+        const expiryAt = Date.now() + ttl * 1000;
+
+        setPendingRegister({
+          username: formData.username,
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          email: formData.email,
+          password: formData.password,
+          password_confirmation: formData.confirmPassword,
+          langue
+        });
+
+        const ctx = { email: formData.email, ttl, intent: 'register', expiryAt };
+        setOtpCtx(ctx);
+        sessionStorage.setItem('otp_ctx', JSON.stringify({ email: ctx.email, intent: ctx.intent, expiryAt, ttl, langue }));
+
+        setOtpOpen(true);
+      } finally {
+        setSubmitting(false);
+      }
       return;
     }
-    if (!formData.password.trim()) {
-      const msg = t('password_required');
-      setErrors(p => ({ ...p, password: msg }));
-      setGlobalError(msg);
-      return;
-    }
-
-    // ✅ 1) Challenge identifiants AVANT OTP (PAS de regex/strong policy ici)
-    await challengeLoginCredentials(formData.email, formData.password, langue);
-
-    // ✅ 2) Envoi OTP seulement si les identifiants sont bons
-    const pre = await dispatch(preVerifyEmail(formData.email, langue, 'login'));
-    setPendingLogin({
-      email: formData.email,
-      password: formData.password,
-      rememberMe: formData.rememberMe,
-      langue
-    });
-    setOtpCtx({ email: formData.email, ttl: Math.max(30, pre?.ttl || 120), intent: 'login' });
-    setOtpOpen(true);
-  } catch (e) {
-    // Mapping des erreurs serveur vers les champs
-    if (e?.fieldErrors) {
-      setErrors(prev => ({
-        ...prev,
-        email: e.fieldErrors.email ? e.fieldErrors.email[0] : prev.email,
-        password: e.fieldErrors.password ? e.fieldErrors.password[0] : prev.password,
-        general: !e.fieldErrors.email && !e.fieldErrors.password ? (e.message || '') : prev.general,
-      }));
-      setGlobalError(e.message || '');
-    } else {
-      setGlobalError(e?.message || t('auth.unknown_error', 'Unknown error'));
-    }
-    return;
-  } finally {
-    setSubmitting(false);
-  }
-}
-
-
-
-    // ===== REGISTER =====
-   // ===== REGISTER =====
-if (!isLoginActive) {
-  if (!PASSWORD_REGEX.test(formData.password)) {
-    setErrors(p => ({ ...p, password: PW_RULE_MSG_FR }));
-    setGlobalError(PW_RULE_MSG_FR);
-    return;
-  }
-  if (formData.password !== formData.confirmPassword) {
-    const msg = t('password_mismatch');
-    setErrors(p => ({ ...p, confirmPassword: msg }));
-    setGlobalError(msg);
-    return;
-  }
-  if (uniqueStatus.email === 'taken' || uniqueStatus.username === 'taken') return;
-
-  // ✅ en plus: policy côté serveur pour rester aligné avec le backend
-  const pwSrv = await checkPasswordPolicy(formData.password, langue);
-  if (!pwSrv?.valid) {
-    const msg = PW_RULE_MSG_FR;
-    setErrors(p => ({ ...p, password: msg }));
-    setGlobalError(msg);
-    return;
-  }
-
-  setSubmitting(true);
-  try {
-    const pre = await dispatch(preVerifyEmail(formData.email, langue, 'register'));
-    setPendingRegister({
-      username: formData.username,
-      first_name: formData.firstName,
-      last_name: formData.lastName,
-      email: formData.email,
-      password: formData.password,
-      password_confirmation: formData.confirmPassword,
-      langue
-    });
-    setOtpCtx({ email: formData.email, ttl: Math.max(30, pre?.ttl || 120), intent: 'register' });
-    setOtpOpen(true);
-  } finally {
-    setSubmitting(false);
-  }
-  return;
-}
   };
 
   const onOtpVerified = async () => {
     setOtpOpen(false);
     setSubmitting(true);
     try {
-      if (otpCtx.intent === 'login' && pendingLogin) {
+      if (otpCtx?.intent === 'login' && pendingLogin) {
         await dispatch(loginUser(pendingLogin));
         setPendingLogin(null);
-      } else if (otpCtx.intent === 'register' && pendingRegister) {
+      } else if (otpCtx?.intent === 'register' && pendingRegister) {
         const res = await dispatch(registerUser(pendingRegister));
         if (res?.error) {
           const apiErrors = res.payload?.errors || {};
-          // alimente les champs et le bandeau global
           setErrors(prev => ({
             ...prev,
             ...Object.fromEntries(
@@ -512,6 +543,9 @@ if (!isLoginActive) {
       }
     } finally {
       setSubmitting(false);
+      // ✅ Consommer et nettoyer la session OTP
+      sessionStorage.removeItem('otp_ctx');
+      setOtpCtx(null);
     }
   };
 
@@ -558,10 +592,8 @@ if (!isLoginActive) {
 
   /* ====== SCOPAGE DU FOND À AUTH-PAGE + SPOTLIGHT LIMITÉ ====== */
   useEffect(() => {
-    // activer le décor seulement ici
     document.body.classList.add('auth-scene');
 
-    // halo souris
     const onPointerMove = (e) => {
       const r = document.querySelector('.bg-spotlight');
       if (!r) return;
@@ -575,6 +607,9 @@ if (!isLoginActive) {
       document.body.classList.remove('auth-scene');
     };
   }, []);
+
+  // TTL restant pour le chip
+  const remaining = otpCtx?.expiryAt ? remainingSec(otpCtx.expiryAt) : 0;
 
   return (
     <>
@@ -593,25 +628,43 @@ if (!isLoginActive) {
       {/* OTP Modal */}
       <OtpModal
         open={otpOpen}
-        email={otpCtx.email}
+        email={otpCtx?.email}
         langue={langue}
-        intent={otpCtx.intent}
-        initialTtlSec={otpCtx.ttl}
+        intent={otpCtx?.intent}
+        initialTtlSec={otpCtx?.expiryAt ? remainingSec(otpCtx.expiryAt) : (otpCtx?.ttl || 120)}
         onVerified={onOtpVerified}
-        onClose={()=>setOtpOpen(false)}
+        onClose={()=>{
+          // On ne supprime pas le contexte, on masque juste le modal
+          setOtpOpen(false);
+        }}
       />
+
+      {/* Chip pour rouvrir l'OTP sans renvoyer si TTL > 0 */}
+      {otpCtx && !otpOpen && remaining > 0 && (
+        <button
+          className="otp-reopen-chip"
+          onClick={() => {
+            if (otpCtx?.expiryAt && remainingSec(otpCtx.expiryAt) > 0) {
+              setOtpOpen(true);
+            }
+          }}
+          title={langue==='fr' ? 'Reprendre la vérification sans renvoyer le code' : 'Reopen verification without resending the code'}
+        >
+          {langue==='fr' ? 'Entrer le code' : 'Enter code'} ({fmtMMSS(remaining)})
+        </button>
+      )}
 
       <div className="min-h-screen flex items-center justify-center p-4 bg-bleu-pale z-0">
         <div className="auth-container card flat" role="dialog" aria-modal="true" aria-labelledby="auth-title">
            {/* ✅ Bandeau global éphémère */}
-        <GlobalErrorBanner
-          key={errors?.general || ''}        // ✅ relance l’animation
-          message={errors?.general}
-          onClose={() => setErrors(e => ({ ...e, general: '' }))}
-          duration={dismissDelayMs}
-          prominent                            // ✅ style “en évidence”
-          focusOnShow                          // ✅ focus + scroll
-        />
+          <GlobalErrorBanner
+            key={errors?.general || ''}
+            message={errors?.general}
+            onClose={() => setErrors(e => ({ ...e, general: '' }))}
+            duration={dismissDelayMs}
+            prominent
+            focusOnShow
+          />
 
           <button
             onClick={toggleAuthMode}
@@ -947,7 +1000,7 @@ if (!isLoginActive) {
         </div>
       </div>
 
-      {/* Décors (une seule fois sur la page) */}
+      {/* Décors + style chip */}
       <div className="bg-grid" aria-hidden="true"></div>
       <div className="bg-blob b1" aria-hidden="true"></div>
       <div className="bg-blob b2" aria-hidden="true"></div>

@@ -53,6 +53,7 @@ import PasswordModal from "../components/PasswordModal";
 import { getStoredPassword, setStoredPassword } from "../utils/passwordGate";
 import { FiCalendar, FiClock, FiTag, FiSearch, FiFilter, FiChevronDown, FiChevronUp, FiGrid, FiList, FiX, FiStar } from "react-icons/fi";
 import SeoHead from "../../../services/SeoHead";
+import { buildArticleLikeArray, articleLikeFromMedia , resolveStartIndexFromMedia } from "../utils/filePreviewAdapters";
 
 /* === nouveaux imports de viewers === */
 import PdfPreview from "./FilePreview/PdfFilePreviewPro";
@@ -88,15 +89,9 @@ const firstCategory = (art) => {
 };
 
 // === Helpers URL (mêmes règles que GridCard) =========================
-
-// en haut de Visualiseur.jsx, proche des autres helpers
-// helpers (en haut de Visualiseur.jsx par ex.)
 const api = (path) => {
   const p = String(path).replace(/^\/+/, '');
-  // DEV: passe par le proxy Vite (même origine)
   if (import.meta.env.DEV) return `/api/${p}`;
-
-  // PROD: base URL depuis l'env
   const base = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
   const root = base.replace(/\/api\/?$/i, '/api');
   return `${root}/${p}`;
@@ -106,8 +101,6 @@ const api = (path) => {
 const DL_DEBUG = import.meta.env.DEV && (window?.__DL_DEBUG__ ?? true);
 const dbg = (...args) => { if (DL_DEBUG) console.log("%c[DL]", "color:#2563eb", ...args); };
 const dberr = (...args) => { if (DL_DEBUG) console.error("%c[DL]", "color:#dc2626", ...args); };
-
-
 
 function getOrCreateVuid() {
   try {
@@ -148,9 +141,6 @@ const toAbsolute = (u) => {
   return base ? `${base}/${fixed.replace(/^\/+/, '')}` : `/${fixed.replace(/^\/+/, '')}`;
 };
 
-
-
-
 const primaryMediaUrl = (art) => {
   if (!art) return null;
   const raw =
@@ -161,7 +151,6 @@ const primaryMediaUrl = (art) => {
   return raw ? toAbsolute(raw) : null;
 };
 
-// Image de fond "édition"
 const backgroundMediaUrl = (art) => {
   if (!art) return null;
   const cand =
@@ -178,7 +167,6 @@ const backgroundMediaUrl = (art) => {
   return raw ? toAbsolute(raw) : null;
 };
 
-// Avatar auteur
 const authorAvatarUrl = (art) => {
   const a = art?.author || null;
   const cand =
@@ -217,7 +205,7 @@ const inferTypeFromUrl = (url) => {
   if (/\.(png|jpe?g|gif|webp|svg|avif)$/.test(s)) return "image";
   if (/\.(mp4|webm|ogg|mov)$/i.test(s)) return "video";
   if (/\.(pptx?|ppsx?)$/.test(s)) return "ppt";
-  if (s.endsWith(".geojson") || s.endsWith(".json") || s.endsWith(".zip")) return "map"; // .zip shapefile
+  if (s.endsWith(".geojson") || s.endsWith(".json") || s.endsWith(".zip")) return "map";
   return "other";
 };
 
@@ -380,19 +368,72 @@ function hasPrivateAccess(me) {
 
 function computeRights(permissions = []) {
   const list = Array.isArray(permissions) ? permissions : [];
-  const isModerator = list.some(p =>
-    String(p?.resource ?? p?.name ?? p)
-      .toLowerCase()
-      .includes("comments") &&
-    /(moderateur|approver|approve|manage|admin|gerer)/i.test(String(p?.name ?? p))
+
+  const has = (test) => list.some(p => {
+    const name = String(p?.name ?? p?.action ?? "").toLowerCase();
+    const res  = String(p?.resource ?? p?.scope ?? "").toLowerCase();
+    return test({ name, res });
+  });
+
+  const isModerator = has(({ name, res }) =>
+    (res.includes("comments") && /(moderate|moderate_|approve|manage|admin|gerer|moderer)/i.test(name))
   );
-  const canDeleteAny =
-    isModerator ||
-    list.some(p =>
-      String(p?.resource ?? p?.name ?? p).toLowerCase().includes("comments") &&
-      /(supprimer|delete|remove)/i.test(String(p?.name ?? p))
-    );
-  return { isModerator, canDeleteAny };
+
+  const canDeleteAny = isModerator || has(({ name, res }) =>
+    res.includes("comments") && /(delete|remove|supprimer)/i.test(name)
+  );
+
+  const canEditArticle = has(({ name, res }) =>
+    res.includes("articles") && /(edit|update|write|manage|admin|modifier)/i.test(name)
+  );
+
+  const canPublishArticle = has(({ name, res }) =>
+    res.includes("articles") && /(publish|unpublish|publier|depublier|feature|sticky)/i.test(name)
+  );
+
+  const canFeature = has(({ name, res }) =>
+    res.includes("articles") && /(feature|sticky|pin)/i.test(name)
+  );
+
+  const canSeePrivate = has(({ name, res }) =>
+    (res.includes("articles") && /(view_private|read_private)/i.test(name)) ||
+    (res.includes("media")    && /(view_private|read_private)/i.test(name))
+  );
+
+  return { isModerator, canDeleteAny, canEditArticle, canPublishArticle, canFeature, canSeePrivate };
+}
+
+// Helpers rôles/permissions (purs)
+function hasRoleLike(me, re) {
+  const roles = (me?.roles || []).map(r => String(r?.name ?? r).toLowerCase());
+  return roles.some(r => re.test(r));
+}
+function hasPermLike(me, names=[]) {
+  const perms = (me?.permissions || []).map(p => String(p?.name ?? p).toLowerCase());
+  return names.some(n => perms.includes(String(n).toLowerCase()));
+}
+function canSeeBlocks(me) {
+  const isAdmin   = hasRoleLike(me, /(owner|super-?admin|admin|manager)/i);
+  const { isModerator } = computeRights(me?.permissions);
+  const canHistory = isAdmin || isModerator || hasPermLike(me, [
+    'articles.history.view','articles.view_history','history.view'
+  ]);
+  const canStats   = isAdmin || isModerator || hasPermLike(me, [
+    'analytics.view','articles.stats.view','stats.view'
+  ]);
+  const canSEO     = isAdmin || isModerator || hasPermLike(me, [
+    'seo.view','articles.seo.view'
+  ]);
+  const isPrivileged = isAdmin || isModerator;
+  return { canHistory, canStats, canSEO, isPrivileged };
+}
+
+// Pour les non-privilégiés : on épure l’historique (évite les infos internes)
+function publicHistoryOnly(list=[]) {
+  const ALLOWED = new Set([
+    'published','updated','title_changed','content_updated','tag_updated','category_updated'
+  ].map(s => s.toLowerCase()));
+  return list.filter(h => ALLOWED.has(String(h?.action || '').toLowerCase()));
 }
 
 /* ---------------- Visualiseur ---------------- */
@@ -413,6 +454,12 @@ export default function Visualiseur() {
 
   const { me, loading: meLoading, token } = useMeFromLaravel();
   const rights = useMemo(() => computeRights(me?.permissions), [me?.permissions]);
+
+  const canAdmin = useMemo(() => {
+    const roles = (me?.roles || []).map(r => String(r?.name ?? r).toLowerCase());
+    const isAdminRole = roles.some(r => /(admin|owner|super-?admin|manager)/.test(r));
+    return isAdminRole || rights.isModerator || rights.canEditArticle || rights.canPublishArticle || rights.canSeePrivate;
+  }, [me?.roles, rights]);
 
   const [article, setArticle] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -436,9 +483,7 @@ export default function Visualiseur() {
   const [ratingLoaded, setRatingLoaded] = useState(false);
   const previewRef = useRef(null);
 
-
-  
-  // ======= [PALETTE TOGGLE] État + logique =======
+  // ======= Palette =======
   const [cardColorEnabled, setCardColorEnabled] = useState(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.CARD_COLOR_ENABLED);
@@ -446,42 +491,39 @@ export default function Visualiseur() {
     } catch { return true; }
   });
 
-  // ✅ applique/retire la classe globale sur <html>
   const applyGlobalPalette = useCallback((enabled) => {
     document.documentElement.classList.toggle("cards-colored", !!enabled);
   }, []);
 
-  // ✅ synchronise l’état local avec la Toolbar via l’event
   useEffect(() => {
     const onPref = (e) => {
       const enabled = !!(e?.detail?.enabled);
-      setCardColorEnabled(enabled);        // reflète l’état (label/bouton local)
-      applyGlobalPalette(enabled);         // applique la classe globale
+      setCardColorEnabled(enabled);
+      applyGlobalPalette(enabled);
     };
     window.addEventListener("gridcard:colorpref", onPref);
     return () => window.removeEventListener("gridcard:colorpref", onPref);
   }, [applyGlobalPalette]);
 
-  // ✅ applique la classe au montage (si Visualiseur est la 1ère vue)
   useEffect(() => {
     applyGlobalPalette(cardColorEnabled);
   }, [cardColorEnabled, applyGlobalPalette]);
 
-  // (optionnel) si tu gardes le bouton local dans Visualiseur
   const toggleCardColor = useCallback(() => {
     const next = !cardColorEnabled;
     setCardColorEnabled(next);
     try { localStorage.setItem(STORAGE_KEYS.CARD_COLOR_ENABLED, JSON.stringify(next)); } catch {}
-    applyGlobalPalette(next); // applique tout de suite
-    // notifie les autres vues (Grid, Toolbar, etc.)
+    applyGlobalPalette(next);
     window.dispatchEvent(new CustomEvent("gridcard:colorpref", { detail: { enabled: next } }));
   }, [cardColorEnabled, applyGlobalPalette]);
 
-  // Aperçu rapide (modal indépendant des Tabs)
+  // Aperçu rapide
   const [qpOpen, setQpOpen] = useState(false);
   const [qpFile, setQpFile] = useState(null);
+  const [qpFiles, setQpFiles] = useState(null);
+  const [qpIndex, setQpIndex] = useState(0);
 
-  // État persistant pour l'ouverture/fermeture de la Sidebar
+  // Sidebar
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("visualiseur:sidebarOpen") || "true");
@@ -514,7 +556,6 @@ export default function Visualiseur() {
   }, []);
 
   /* ------- Actions ------- */
-  // Construit un "article-like" avec le média en tête (pour FilePreview)
   const buildArticleWith = useCallback((m) => {
     if (!article || !m) return article;
     return {
@@ -555,7 +596,6 @@ export default function Visualiseur() {
     const u = selectedFile?.fileUrl || primaryMediaUrl(article);
     if (!u) return;
 
-    // --- Ping download avec Bearer si on a un token, sinon beacon public
     try {
       const fileId =
         selectedFile?.id ??
@@ -579,14 +619,13 @@ export default function Visualiseur() {
           });
         } else if (navigator.sendBeacon) {
           const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-          navigator.sendBeacon(url, blob); // route doit être publique dans ce cas
+          navigator.sendBeacon(url, blob);
         }
       }
     } catch (e) {
       // no-op
     }
 
-    // --- Téléchargement
     const name = selectedFile?.filename || selectedFile?.original_filename || filenameFrom(u);
 
     if (sameOrigin(u)) {
@@ -600,12 +639,11 @@ export default function Visualiseur() {
       return;
     }
 
-    // Cross-origin (prod). Nécessite CORS côté backend si tu veux blob + Bearer.
     try {
       const res = await fetch(u, {
         method: 'GET',
         headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-        credentials: 'include', // selon ton besoin (JWT: pas obligatoire)
+        credentials: 'include',
       });
       if (!res.ok) throw new Error('fetch failed');
       const blob = await res.blob();
@@ -619,11 +657,10 @@ export default function Visualiseur() {
       a.remove();
       setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
     } catch {
-      window.open(u, '_blank', 'noopener'); // fallback
+      window.open(u, '_blank', 'noopener');
     }
   };
 
-  // Détermine le type à partir du mime OU de l'extension
   const typeFromMimeOrExt = (mime, url = "") => {
     const m = (mime || "").toLowerCase();
     const s = (url || "").toLowerCase();
@@ -794,7 +831,7 @@ export default function Visualiseur() {
 
   useEffect(() => {}, [article?.visibility]);
 
-  // Comptage de vues (anti-spam local léger)
+  // Comptage de vues
   useEffect(() => {
     if (!article?.id) return;
     const visibility = String(article.visibility || '').toLowerCase();
@@ -915,6 +952,25 @@ export default function Visualiseur() {
     articleId: article?.id ?? null
   }), [article]);
 
+  // ==== accès/onglets protégés (⚠️ DANS le composant) ====
+  const access = useMemo(() => canSeeBlocks(me), [me]);
+
+  const filteredHistory = useMemo(() => {
+    const list = Array.isArray(article?.history) ? article.history : [];
+    return access.isPrivileged ? list : publicHistoryOnly(list);
+  }, [article?.history, access.isPrivileged]);
+
+  const hasHistory = Array.isArray(filteredHistory) && filteredHistory.length > 0;
+
+  const tabs = [
+    t('visualiseur.tabs.preview'),
+    t('visualiseur.tabs.media'),
+    t('visualiseur.tabs.metadata'),
+    ...(access.canHistory && hasHistory ? [t('visualiseur.tabs.versions')] : []),
+    ...(access.canStats ? [t('visualiseur.tabs.statistics')] : []),
+    ...(access.canSEO ? [t('visualiseur.tabs.seo')] : []),
+  ];
+
   // ==== commentaires sous l’article ====
   const initialTopLevelApproved = React.useMemo(() => {
     if (Array.isArray(article?.approved_comments)) {
@@ -1021,16 +1077,6 @@ export default function Visualiseur() {
     );
   }
 
-  const hasHistory = Array.isArray(article.history) && article.history.length > 0;
-  const tabs = [
-    t('visualiseur.tabs.preview'),
-    t('visualiseur.tabs.media'),
-    t('visualiseur.tabs.metadata'),
-    ...(hasHistory ? [t('visualiseur.tabs.versions')] : []),
-    t('visualiseur.tabs.statistics'),
-    t('visualiseur.tabs.seo')
-  ];
-
   /* ---------- SEO ---------- */
   const SITE_URL =
     import.meta.env.VITE_SITE_URL ||
@@ -1078,16 +1124,14 @@ export default function Visualiseur() {
           </div>
         )}
 
-        {/* Bascule Sidebar — TOUJOURS visible */}
+        {/* Bascule Sidebar */}
         <div className="fixed left-3 top-4 sm:top-[85px] z-[70] group">
-          {/* Tooltip (affiché seulement quand fermée) */}
           <div className={`absolute left-12 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none ${sidebarOpen ? 'hidden' : 'block'}`}>
             <div className="bg-slate-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
               Ouvrir le menu
             </div>
           </div>
           
-          {/* Bouton */}
           <button
             type="button"
             onClick={toggleSidebar}
@@ -1125,13 +1169,14 @@ export default function Visualiseur() {
               iconForType={iconForType}
               iconBgForType={iconBgForType}
               toAbsolute={toAbsolute}
+               me={me}
             />
           )}
 
           {/* Main */}
           <div className="flex-1 flex flex-col w-full">
             <div className="bg-white/60 backdrop-blur-xl rounded-2xl shadow-xl border border-white/40 overflow-hidden">
-              {/* Toolbar STICKY (déjà sticky) */}
+              {/* Toolbar STICKY */}
               <div className={`sticky top-5 z-50 bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40`}>
                 <div className={`absolute inset-x-0 -top-px h-px ${ACCENT.hairline}`} />
                 <Toolbar
@@ -1144,7 +1189,7 @@ export default function Visualiseur() {
                 />
               </div>
 
-              {/* Grille : 1 col en mobile, + panneau Détails en >= lg */}
+              {/* Grille */}
               <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)] gap-4 lg:gap-6 xl:gap-8 pt-2">
                 {/* Main panel */}
                 <div className="min-w-0 border-r border-slate-200/30">
@@ -1162,30 +1207,35 @@ export default function Visualiseur() {
                             onDownload={downloadCurrent}
                           />
 
-                          {/* Commentaires SOUS l’article — mobile & tablettes uniquement */}
-                            {article?.allow_comments !== false && (
-                              <div className="mt-8 lg:hidden">
-                                <h3 className="text-xl font-medium text-slate-800 mb-4">
-                                  {t('visualiseur.comments.title') ?? 'Commentaires'}
-                                </h3>
-                                <Comments
-                                  key={article?.id}
-                                  articleId={article?.id}
-                                  initialComments={initialTopLevelApproved}
-                                  meOverride={me}
-                                  tokenOverride={token}
-                                  rightsOverride={rights}
-                                />
-                              </div>
-                            )}
-
+                          {/* Commentaires mobile */}
+                          {article?.allow_comments !== false && (
+                            <div className="mt-8 lg:hidden">
+                              <h3 className="text-xl font-medium text-slate-800 mb-4">
+                                {t('visualiseur.comments.title') ?? 'Commentaires'}
+                              </h3>
+                              <Comments
+                                key={article?.id}
+                                articleId={article?.id}
+                                initialComments={initialTopLevelApproved}
+                                meOverride={me}
+                                tokenOverride={token}
+                                rightsOverride={rights}
+                              />
+                            </div>
+                          )}
                         </>
                       )}
 
                       {activeTab === t('visualiseur.tabs.media') && (
                         <Medias
                           mediaList={mediaList}
-                          onPreview={(m) => { setQpFile(buildArticleWith(m)); setQpOpen(true); }}
+                          onPreview={(m) => {
+                            const arr = buildArticleLikeArray(mediaList, article);
+                            const idx = resolveStartIndexFromMedia(m, arr);
+                            setQpFiles(arr);
+                            setQpIndex(idx);
+                            setQpOpen(true);
+                          }}
                         />
                       )}
 
@@ -1193,16 +1243,22 @@ export default function Visualiseur() {
                         <Metadonnees article={article} currentType={currentType} currentTitle={currentTitle} />
                       )}
 
-                      {activeTab === t('visualiseur.tabs.versions') && hasHistory && <Versions history={article.history} />}
+                      {activeTab === t('visualiseur.tabs.versions') && access.canHistory && hasHistory && (
+                        <Versions history={filteredHistory} />
+                      )}
 
-                      {activeTab === t('visualiseur.tabs.statistics') && <StatsCharts article={article} />}
+                      {activeTab === t('visualiseur.tabs.statistics') && access.canStats && (
+                        <StatsCharts article={article} />
+                      )}
 
-                      {activeTab === t('visualiseur.tabs.seo') && <SeoPanel article={article} />}
+                      {activeTab === t('visualiseur.tabs.seo') && access.canSEO && (
+                        <SeoPanel article={article} />
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Right panel — masqué en mobile */}
+                {/* Right panel — desktop */}
                 <div className="hidden lg:block">
                   <DetailsPanel
                     article={article}
@@ -1219,7 +1275,7 @@ export default function Visualiseur() {
                     myRating={myRating}
                     ratingLoaded={ratingLoaded}
                   />
-                  {/* Commentaires — colonne de droite uniquement en desktop */}
+                  {/* Commentaires — colonne droite */}
                   {article?.allow_comments !== false && (
                     <div className="mt-6">
                       <h3 className="text-lg font-medium text-slate-800 mb-3">
@@ -1264,13 +1320,27 @@ export default function Visualiseur() {
                   {activeTab === t('visualiseur.tabs.media') && (
                     <Medias
                       mediaList={mediaList}
-                      onPreview={(m) => { setQpFile(buildArticleWith(m)); setQpOpen(true); }}
+                      onPreview={(m) => {
+                        const arr = buildArticleLikeArray(mediaList, article);
+                        const idx = resolveStartIndexFromMedia(m, arr);
+                        setQpFiles(arr);
+                        setQpIndex(idx);
+                        setQpOpen(true);
+                      }}
                     />
                   )}
                   {activeTab === t('visualiseur.tabs.metadata') && <Metadonnees article={article} currentType={currentType} currentTitle={currentTitle} />}
-                  {activeTab === t('visualiseur.tabs.versions') && <Versions history={article.history} />}
-                  {activeTab === t('visualiseur.tabs.statistics') && <StatsCharts article={article} />}
-                  {activeTab === t('visualiseur.tabs.seo') && <SeoPanel article={article} />}
+
+                  {/* ⚠️ protégés aussi en plein écran */}
+                  {activeTab === t('visualiseur.tabs.versions') && access.canHistory && hasHistory && (
+                    <Versions history={filteredHistory} />
+                  )}
+                  {activeTab === t('visualiseur.tabs.statistics') && access.canStats && (
+                    <StatsCharts article={article} />
+                  )}
+                  {activeTab === t('visualiseur.tabs.seo') && access.canSEO && (
+                    <SeoPanel article={article} />
+                  )}
                 </div>
               </div>
               <button
@@ -1285,11 +1355,35 @@ export default function Visualiseur() {
         )}
 
         {/* Modal d'aperçu rapide */}
-        {qpOpen && qpFile && (
-          <QuickPreviewModal
-            file={qpFile}
-            onClose={() => { setQpOpen(false); setQpFile(null); }}
-          />
+        {qpOpen && (
+          qpFiles?.length > 1 ? (
+            <QuickPreviewModal
+              key={`qp:${qpFiles.length}:${qpIndex}`}
+              files={qpFiles}
+              startIndex={qpIndex}
+              onClose={() => { setQpOpen(false); setQpFiles(null); }}
+              onOpenInNew={(al) => {
+                const u = al?.media?.[0]?.url;
+                if (u) window.open(u, "_blank", "noopener");
+              }}
+              onDownload={async (al) => {
+                const u = al?.media?.[0]?.url;
+                if (!u) return;
+                const a = document.createElement("a");
+                a.href = u;
+                a.download = (al?.original_filename || al?.filename || al?.title || "fichier");
+                document.body.appendChild(a); a.click(); a.remove();
+              }}
+              autoPlayMs={0}
+              onIndexChange={(i) => setQpIndex(i)}
+            />
+          ) : qpFiles?.length === 1 ? (
+            <QuickPreviewModal
+              key={`qp:single:${qpIndex}`}
+              file={qpFiles[0]}
+              onClose={() => { setQpOpen(false); setQpFiles(null); }}
+            />
+          ) : null
         )}
 
         {/* Tag Manager Modal */}
@@ -1377,7 +1471,6 @@ function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDown
     article?.meta?.is_editing === true;
 
   return (
-    // ⚠️ scroll global rétabli : plus de overflow-auto / max-h-screen ici
     <div className="space-y-8 lg:space-y-10 relative">
       {isEdit && bgUrl && (
         <div
@@ -1394,7 +1487,7 @@ function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDown
       )}
       <div className="relative">
         {!currentUrl ? (
-          <div className="text-center py-16 lg:py-20">
+          <div className="text-center py-2 lg:py-3">
             <div className="w-24 h-24 lg:w-28 lg:h-28 bg-gradient-to-br from-blue-100 to-blue-200 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl">
               <FaFile className="text-blue-600 text-4xl lg:text-5xl" />
             </div>
@@ -1435,7 +1528,6 @@ function Apercu({ article, currentUrl, currentType, currentTitle, onOpen, onDown
 function Medias({ mediaList, onPreview }) {
   const { t } = useTranslation();
   
-  // --- Lecture seule : état UI ---
   const [viewMode, setViewMode] = React.useState("grid");
   const [filtersOpen, setFiltersOpen] = React.useState(false);
   const [q, setQ] = React.useState("");
@@ -1444,7 +1536,6 @@ function Medias({ mediaList, onPreview }) {
   const [sortBy, setSortBy] = React.useState("date");
   const [sortDir, setSortDir] = React.useState("desc");
 
-  // --- Dérivés ---
   const activePills = React.useMemo(() => {
     const pills = [];
     if (q.trim())    pills.push({ id:"q", label:`${t('visualiseur.media.search')}: "${q.trim()}"`, clear: () => setQ("") });
@@ -1498,7 +1589,6 @@ function Medias({ mediaList, onPreview }) {
     );
   }
 
-  // --- Tuiles (grille) ---
   const Card = ({ m }) => (
     <div
       key={m.id ?? m.fileUrl}
@@ -1554,7 +1644,6 @@ function Medias({ mediaList, onPreview }) {
     </div>
   );
 
-  // --- Ligne (liste) ---
   const Row = ({ m }) => (
     <div
       key={m.id ?? m.fileUrl}

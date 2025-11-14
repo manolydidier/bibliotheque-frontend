@@ -1,9 +1,10 @@
+// App.jsx (ou src/App.jsx selon ton arborescence)
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { I18nextProvider } from 'react-i18next';
 import i18n from './i18n';
 
-import { Provider, useDispatch } from 'react-redux';
+import { Provider, useDispatch, useSelector } from 'react-redux';
 import { PersistGate } from 'redux-persist/integration/react';
 import { store, persistor } from './store/store';
 
@@ -26,14 +27,18 @@ import { RequireAuth, RequireGuest } from './routes/RouteGuards';
 
 import './App.css';
 import './index.css';
-import DebugAuth from './routes/DebugAuth';
-import MediaLibrary from './pages/media-library';
+
 import Configuration from './pages/UserManagementDashboard/Components/Backoffice/configuration/configuration';
 import ArticlesPage from './pages/media-library/ArticlesPage';
 import ArticlesIndex from './pages/UserManagementDashboard/Components/Backoffice/articles/ArticlesIndex';
 import ArticleEditCreate from './pages/UserManagementDashboard/Components/Backoffice/articles/ArticleEditCreate';
 import TrashedPage from './pages/UserManagementDashboard/Components/Backoffice/articles/TrashedPage';
 import Dashboard from './pages/UserManagementDashboard/Components/Backoffice/dashboard/Dashboard';
+import NotFoundPage from './component/NotFound/NotFoundPage';
+
+/* 🔹 AJOUTS: hook + helper pour rôles/permissions (mêmes que Comments.jsx) */
+import useMeFromLaravel from './hooks/useMeFromLaravel';
+import { computeRights } from './utils/access';
 
 function BootScreen() {
   return (
@@ -65,14 +70,32 @@ function AuthInitializer({ children }) {
       .finally(() => setBooted(true));
   }, [dispatch]);
 
-
   // Exemple (dans App.jsx ou RootLayout.jsx)
-useEffect(() => {
-  document.body.classList.add('desktop-scene');
-  return () => document.body.classList.remove('desktop-scene');
-}, []);
+  useEffect(() => {
+    document.body.classList.add('desktop-scene');
+    return () => document.body.classList.remove('desktop-scene');
+  }, []);
 
   if (!booted) return <BootScreen />;
+  return children;
+}
+
+/* 🔒 AdminRoute: bloque l'accès si pas admin (fusion Redux + Laravel) */
+function AdminRoute({ children }) {
+  const location = useLocation();
+  const { isAuthenticated, user } = useSelector((s) => s.library?.auth || {});
+  const { me } = useMeFromLaravel();
+
+  const mergedUser        = { ...(user || {}), ...(me?.user || {}) };
+  const mergedRoles       = [ ...(user?.roles || []), ...(me?.roles || []) ];
+  const mergedPermissions = [ ...(user?.permissions || []), ...(me?.permissions || []) ];
+  const { isAdmin } = computeRights(mergedPermissions, mergedRoles, mergedUser);
+
+  if (!isAuthenticated) {
+    const next = encodeURIComponent(location.pathname + location.search + location.hash);
+    return <Navigate to={`/auth?view=login&next=${next}`} replace />;
+  }
+  if (!isAdmin) return <Navigate to="/settings" replace />;
   return children;
 }
 
@@ -119,31 +142,49 @@ export default function App() {
                 {/* Routes protégées avec DashboardLayout */}
                 <Route element={<RequireAuth redirectTo="/auth" />}>
                   <Route element={<DashboardLayout />}>
-                   
                     <Route path="/visualiseur/:articleslug" element={<Visualiseur />} />
                     <Route path="/configuration" element={<Configuration />} />
                     <Route path="/dashboard" element={<Dashboard  />} />
 
-
-                    <Route path="/articlescontroler" element={<ArticlesIndex />} />
-                    <Route path="/articles/new" element={<ArticleEditCreate />} />
-                    <Route path="/articles/:id/edit" element={<ArticleEditCreate />} />
-                    <Route path="/articles/trashed" element={<TrashedPage />} />
+                    {/* 🔒 Admin-only */}
+                    <Route
+                      path="/articlescontroler"
+                      element={
+                        <AdminRoute>
+                          <ArticlesIndex />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="/articles/new"
+                      element={
+                        <AdminRoute>
+                          <ArticleEditCreate />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="/articles/:id/edit"
+                      element={
+                        <AdminRoute>
+                          <ArticleEditCreate />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="/articles/trashed"
+                      element={
+                        <AdminRoute>
+                          <TrashedPage />
+                        </AdminRoute>
+                      }
+                    />
                   </Route>
                 </Route>
 
                 {/* 404 */}
-                <Route
-                  path="*"
-                  element={
-                    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-                      <div className="bg-white p-8 rounded-lg shadow-md">
-                        <h1 className="text-3xl font-bold text-red-600 mb-4">404 - Page introuvable</h1>
-                        <p className="text-gray-600">La page que vous recherchez n'existe pas.</p>
-                      </div>
-                    </div>
-                  }
-                />
+                <Route path="*" element={<NotFoundPage />} />
+
               </Routes>
             </Router>
             {/* <DebugAuth/> */}

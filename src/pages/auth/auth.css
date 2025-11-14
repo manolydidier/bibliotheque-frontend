@@ -885,3 +885,18 @@ input:-webkit-autofill{
   from { transform: scaleX(1); }
   to   { transform: scaleX(0); }
 }
+.otp-reopen-chip {
+          position: fixed;
+          right: 16px;
+          bottom: 16px;
+          background: rgba(29,78,216,.94);
+          color: #fff;
+          border: none;
+          border-radius: 9999px;
+          padding: 10px 14px;
+          box-shadow: 0 10px 30px rgba(2,6,23,.25);
+          font-weight: 600;
+          cursor: pointer;
+          z-index: 60;
+        }
+        .otp-reopen-chip:hover { filter: brightness(1.05); }

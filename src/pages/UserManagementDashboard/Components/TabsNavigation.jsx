@@ -19,24 +19,24 @@ import { useTranslation } from 'react-i18next';
 // Map clé → icône FontAwesome
 const ICONS = {
   // anciens noms (compat)
-  user: faUser,
-  users: faUsers,
-  key: faKey,
-  'user-tag': faUserTag,
-  history: faHistory,
-  edit: faEdit,
+  user:        faUser,
+  users:       faUsers,
+  key:         faKey,
+  'user-tag':  faUserTag,
+  history:     faHistory,
+  edit:        faEdit,
 
   // nouveaux noms spécifiques
-  'user-circle': faUserCircle,
-  'user-pen': faUserPen,
-  'user-shield': faUserShield,
+  'user-circle':       faUserCircle,
+  'user-pen':          faUserPen,
+  'user-shield':       faUserShield,
   'clock-rotate-left': faClockRotateLeft,
-  'list-ul': faListUl,
+  'list-ul':           faListUl,
 };
 
 const TabsNavigation = ({ tabs, activeTab, setActiveTab }) => {
   const { t } = useTranslation();
-  const activeIndex = tabs.findIndex(tab => tab.id === activeTab);
+  const activeIndex = Math.max(0, tabs.findIndex(tab => tab.id === activeTab));
 
   return (
     <div className="mb-6">
@@ -50,7 +50,7 @@ const TabsNavigation = ({ tabs, activeTab, setActiveTab }) => {
       >
         {/* Knob glass */}
         <div
-          className="absolute top-2 bottom-2 rounded-lg transition-all duration-300 ease-out"
+          className="absolute top-2 bottom-2 rounded-lg transition-all duration-300 ease-out pointer-events-none"
           style={{
             width: `calc(100% / ${tabs.length} - 16px)`,
             left: `calc(${activeIndex * (100 / tabs.length)}% + 8px)`,
@@ -72,9 +72,7 @@ const TabsNavigation = ({ tabs, activeTab, setActiveTab }) => {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`text-sm px-6 py-3 font-medium transition-all duration-200 rounded-lg whitespace-nowrap flex items-center justify-center ${
-                  isActive
-                    ? "text-blue-600 font-semibold"
-                    : "text-gray-600 hover:text-gray-800"
+                  isActive ? "text-blue-600 font-semibold" : "text-gray-600 hover:text-gray-800"
                 }`}
                 style={{
                   width: `${100 / tabs.length}%`,

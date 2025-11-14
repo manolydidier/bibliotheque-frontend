@@ -136,12 +136,8 @@ const OtpModal = ({
     }
   };
 
-  const showToastThenDialog = (
-    toastMessage,
-    dialogT,
-    dialogTxt = "",
-    onDone
-  ) => {
+  /** Utilisé UNIQUEMENT pour le succès de vérification (où on veut fermer la modale). */
+  const showToastThenDialog = (toastMessage, dialogT, dialogTxt = "", onDone) => {
     setToastMsg(toastMessage);
     setToastOpen(true);
     clearTimeout(toastTimer.current);
@@ -153,7 +149,7 @@ const OtpModal = ({
       setDialogOpen(true);
     }, 1200);
 
-    // auto-close modal après ~2.2s
+    // auto-close modal après ~2.2s (succès de vérification uniquement)
     clearTimeout(autoCloseTimer.current);
     autoCloseTimer.current = setTimeout(() => {
       setDialogOpen(false);
@@ -166,8 +162,8 @@ const OtpModal = ({
     if (code.length !== 6) return;
     setSubmitting(true);
     try {
-      // ✅ Correction: on passe markOnRegister quand intent === 'register'
-      const res = await dispatch(verifyEmailCode(email, code, langue, intent === 'register'));
+      // ✅ markOnRegister si intent === 'register'
+      const res = await dispatch(verifyEmailCode(email, code, langue, intent === "register"));
       if (res?.verified) {
         showToastThenDialog(
           langue === "fr" ? "Vérification réussie" : "Verification success",
@@ -183,29 +179,34 @@ const OtpModal = ({
     }
   };
 
+  /** 
+   * ✅ Correctif principal : RESEND = toast non bloquant + reset TTL, 
+   *   **sans** success dialog et **sans** fermeture auto de la modale.
+   */
   const handleResend = async () => {
-    if (left > 0) return;
+    if (left > 0 || resending) return;
     setResending(true);
     try {
       const data = await dispatch(preVerifyEmail(email, langue, intent));
       reset(Math.max(30, data?.ttl || 120));
-      showToastThenDialog(
-        langue === "fr" ? "Code renvoyé" : "Code resent",
-        langue === "fr" ? "Nouveau code envoyé" : "New code sent",
-        langue === "fr"
-          ? "Vérifiez votre boîte e-mail."
-          : "Please check your inbox."
-      );
-    } catch (e) {
-      // Optionnel: message lisible avec un éventuel retry_in côté backend
-      const msg = e?.response?.data?.message;
-      const retry = e?.response?.data?.retry_in;
-      setToastMsg(retry ? `${msg} (${retry}s)` : (msg || (langue==='fr'?'Échec de renvoi.':'Resend failed.')));
+
+      // Affichage discret (toast) et on garde la modale ouverte
+      setToastMsg(langue === "fr" ? "Nouveau code envoyé. Vérifie ta boîte mail." : "New code sent. Please check your inbox.");
       setToastOpen(true);
       clearTimeout(toastTimer.current);
       toastTimer.current = setTimeout(() => {
         setToastOpen(false);
-        setToastMsg('');
+        setToastMsg("");
+      }, 1800);
+    } catch (e) {
+      const msg = e?.response?.data?.message;
+      const retry = e?.response?.data?.retry_in;
+      setToastMsg(retry ? `${msg} (${retry}s)` : (msg || (langue === "fr" ? "Échec de renvoi." : "Resend failed.")));
+      setToastOpen(true);
+      clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => {
+        setToastOpen(false);
+        setToastMsg("");
       }, 2200);
     } finally {
       setResending(false);

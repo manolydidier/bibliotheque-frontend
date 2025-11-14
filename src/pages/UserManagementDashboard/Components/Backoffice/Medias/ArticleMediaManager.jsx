@@ -140,19 +140,26 @@ const isAudioMime = (mt = "") => /^audio\//i.test(mt);
 const isPdfMime   = (mt = "") => /^application\/pdf$/i.test(mt);
 const looksLikeImagePath = (u = "") => /\.(png|jpe?g|webp|gif|avif|bmp|svg)$/i.test(u || "");
 
+/* =========================================================
+   ❗️Thumb logic révisé : JAMAIS de thumb pour non-images
+   ========================================================= */
 const mediaHref = (m) => toAbsoluteMedia(m?.path ?? m?.url ?? "");
+
+/**
+ * Retourne une miniature uniquement si c'est une image.
+ */
 const mediaThumb = (m) => {
-  const mt = m?.mime_type || m?.mime || "";
+  const mt = (m?.mime_type || m?.mime || "").toLowerCase();
+  if (!isImageMime(mt)) return null;
   const rawThumb = m?.thumbnail_path ?? m?.thumbnail_url ?? "";
   const rawFull  = m?.path ?? m?.url ?? "";
-  if (rawThumb) return toAbsoluteMedia(rawThumb);
+  if (rawThumb && looksLikeImagePath(rawThumb)) return toAbsoluteMedia(rawThumb);
   if (looksLikeImagePath(rawFull)) return toAbsoluteMedia(rawFull);
-  if (isImageMime(mt) && rawFull) return toAbsoluteMedia(rawFull);
   return null;
 };
 
 /* =========================================================
-   Helpers "type" (icônes & étiquettes) — Feather uniquement
+   Helpers "type" (icônes & étiquettes)
    ========================================================= */
 const getExt = (m) => {
   const n = (m?.name || "").toLowerCase();
@@ -179,19 +186,10 @@ const mediaKind = (m) => {
 };
 
 const kindMeta = (kind) => {
-  // Feather only: on évite tout import "bs"
   const icons = {
-    image: FiImage,
-    video: FiVideo,
-    audio: FiMusic,
-    pdf: FiFileText,
-    word: FiFileText,
-    excel: FiFileText,
-    ppt: FiFileText,
-    csv: FiFileText,
-    zip: FiArchive,
-    text: FiFileText,
-    file: FiFile,
+    image: FiImage, video: FiVideo, audio: FiMusic, pdf: FiFileText,
+    word: FiFileText, excel: FiFileText, ppt: FiFileText, csv: FiFileText,
+    zip: FiArchive, text: FiFileText, file: FiFile,
   };
   const labels = {
     image: "Image", video: "Vidéo", audio: "Audio", pdf: "PDF",
@@ -233,17 +231,13 @@ const COVERS_BASE =
   '/covers';
 
 const COVER_BY_EXT = {
-  // images
   png: 'image.png', jpg: 'image.png', jpeg: 'image.png', webp: 'image.png', gif: 'image.png', svg: 'image.png', bmp: 'image.png', avif: 'image.png',
-  // vidéo
   mp4: 'video.png', webm: 'video.png', ogg: 'video.png', mov: 'video.png', m4v: 'video.png', avi: 'video.png', mkv: 'video.png',
-  // audio
   mp3: 'audio.png', wav: 'audio.png', m4a: 'audio.png', aac: 'audio.png', flac: 'audio.png',
-  // documents
   pdf: 'pdf.png',
-  doc: 'word.png', docx: 'word.png', rtf: 'word.png',
-  xls: 'excel.png', xlsx: 'excel.png',
-  ppt: 'ppt.png', pptx: 'ppt.png',
+  doc: 'office-word.png', docx: 'office-word.png', rtf: 'office-word.png',
+  xls: 'office-excel.png', xlsx: 'office-excel.png',
+  ppt: 'office-powerpoint.png', pptx: 'office-powerpoint.png',
   csv: 'csv.png',
   txt: 'text.png', md: 'text.png',
   zip: 'zip.png', rar: 'zip.png', '7z': 'zip.png'
@@ -254,28 +248,41 @@ const COVER_BY_KIND = {
   video: 'video.png',
   audio: 'audio.png',
   pdf: 'pdf.png',
-  word: 'word.png',
-  excel: 'excel.png',
-  ppt: 'ppt.png',
+  word: 'office-word.png',
+  excel: 'office-excel.png',
+  ppt: 'office-powerpoint.png',
   csv: 'csv.png',
   zip: 'zip.png',
   text: 'text.png',
   file: 'file.png',
 };
 
+function coverSrc(file) {
+  const url = `${COVERS_BASE}/${file}`;
+  return url;
+}
+
 const coverForMedia = (m) => {
   const ext = getExt(m);
-  if (ext && COVER_BY_EXT[ext]) return `${COVERS_BASE}/${COVER_BY_EXT[ext]}`;
+  if (ext && COVER_BY_EXT[ext]) return coverSrc(COVER_BY_EXT[ext]);
   const kind = mediaKind(m);
-  if (COVER_BY_KIND[kind]) return `${COVERS_BASE}/${COVER_BY_KIND[kind]}`;
-  return `${COVERS_BASE}/file.png`;
+  if (COVER_BY_KIND[kind]) return coverSrc(COVER_BY_KIND[kind]);
+  return coverSrc('file.png');
 };
 
 const onImgErrorToCover = (m) => (e) => {
   const el = e?.currentTarget;
   if (!el) return;
-  el.onerror = null; // évite boucle
-  el.src = coverForMedia(m);
+  el.onerror = null;
+  const k = mediaKind(m);
+  const mapOfficeFallback = {
+    word: 'word.png',
+    excel: 'excel.png',
+    ppt: 'ppt.png',
+  };
+  const wanted = coverForMedia(m);
+  const final = wanted.includes('office-') ? `${COVERS_BASE}/${mapOfficeFallback[k] || 'file.png'}` : wanted;
+  el.src = final;
 };
 
 /* =========================================================
@@ -412,8 +419,14 @@ const ViewerModal = ({ open, media, onClose }) => {
     }
     if (isPdfMime(mt)) return <iframe src={src} title={name || "PDF"} className="w-full h-[78vh] rounded-xl bg-white" />;
     return (
-      <div className="w-full h-[50vh] rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-slate-600">
-        Aucun aperçu disponible pour ce type. Utilisez “Ouvrir” ou “Télécharger”.
+      <div className="w-full h-[50vh] rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 flex flex-col items-center justify-center text-slate-600">
+        <img
+          src={coverForMedia(media)}
+          alt="icône fichier"
+          className="w-24 h-24 mb-3"
+          onError={onImgErrorToCover(media)}
+        />
+        <div className="text-sm font-semibold">Aucun aperçu disponible pour ce type. Utilisez “Ouvrir” ou “Télécharger”.</div>
       </div>
     );
   })();
@@ -489,26 +502,31 @@ const ConfirmDialog = ({ open, title, message, onConfirm, onCancel, danger = fal
     </ModalPortal>
   );
 };
-
 /* =========================================================
-   Modal Upload
+   Modal Upload — multi-fichiers + switch Parallèle/File d’attente
    ========================================================= */
 const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState("");
-  const [name, setName] = useState("");
-  const [alt, setAlt] = useState("");
-  const [caption, setCaption] = useState("");
-  const [isFeatured, setIsFeatured] = useState(false);
+  const [files, setFiles] = useState([]);              // <— plusieurs fichiers
+  const [previews, setPreviews] = useState([]);        // [{url, type, name, size}]
+  const [names, setNames] = useState([]);              // noms par fichier
+  const [alts, setAlts] = useState([]);                // alt fr par fichier
+  const [captions, setCaptions] = useState([]);        // légende fr par fichier
+  const [isFeatured, setIsFeatured] = useState(false); // option commune
   const [submitting, setSubmitting] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [overallProgress, setOverallProgress] = useState(0); // 0-100 global
+  const [perFileProgress, setPerFileProgress] = useState([]); // 0-100 par index
   const [err, setErr] = useState("");
 
+  // ⚡️ Nouveau : switch de stratégie d’envoi
+  const [uploadParallel, setUploadParallel] = useState(true); // true = Parallèle, false = File d'attente
+
   const dropRef = useRef(null);
+
   const revokeIfBlob = (url) => {
     try { if (url && typeof url === "string" && url.startsWith("blob:")) URL.revokeObjectURL(url); } catch {}
   };
 
+  // Gestion scroll body
   useEffect(() => {
     if (!open) return;
     const html = document.documentElement;
@@ -517,14 +535,15 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
     return () => { html.style.overflowY = prev; };
   }, [open]);
 
+  // DnD
   useEffect(() => {
     const el = dropRef.current;
     if (!el) return;
     const prevent = (e) => { e.preventDefault(); e.stopPropagation(); };
     const drop = (e) => {
       prevent(e);
-      const f = e.dataTransfer?.files?.[0];
-      if (f) onPick(f);
+      const list = Array.from(e.dataTransfer?.files || []);
+      if (list.length) onPickMany(list);
     };
     ["dragenter","dragover","dragleave","drop"].forEach((evt) => el.addEventListener(evt, prevent));
     el.addEventListener("drop", drop);
@@ -534,54 +553,128 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
     };
   }, []);
 
+  // Reset à la fermeture
   useEffect(() => {
     if (!open) {
-      revokeIfBlob(preview);
-      setFile(null); setPreview(""); setName(""); setAlt(""); setCaption("");
-      setIsFeatured(false); setSubmitting(false); setProgress(0); setErr("");
+      previews.forEach(p => revokeIfBlob(p?.url));
+      setFiles([]); setPreviews([]); setNames([]); setAlts([]); setCaptions([]);
+      setIsFeatured(false); setSubmitting(false);
+      setOverallProgress(0); setPerFileProgress([]); setErr("");
+      setUploadParallel(true);
     }
   }, [open]);
 
-  useEffect(() => () => revokeIfBlob(preview), [preview]);
+  useEffect(() => () => previews.forEach(p => revokeIfBlob(p?.url)), [previews]);
 
-  const onPick = (f) => {
-    const maxSize = 100 * 1024 * 1024;
-    if (f.size > maxSize) {
-      setErr(`Fichier trop volumineux (${fmtBytes(f.size)}). Maximum: 100 MB`);
+  const onPickMany = (list) => {
+    const maxSize = 100 * 1024 * 1024; // 100 MB/file
+    const rejected = list.filter(f => f.size > maxSize);
+    if (rejected.length) {
+      setErr(`Fichier trop volumineux (>${fmtBytes(maxSize)}): ${rejected.map(f=>f.name).join(", ")}`);
       return;
     }
-    setFile(f);
+    const nextFiles = [...files, ...list];
+    setFiles(nextFiles);
+    // Préviews
+    const addPreviews = list.map((f) => ({
+      url: URL.createObjectURL(f),
+      type: f.type || "",
+      name: f.name,
+      size: f.size
+    }));
+    setPreviews((prev) => [...prev, ...addPreviews]);
+    // Champs texte initiaux
+    setNames((prev) => [...prev, ...list.map(f => f.name.replace(/\.[^.]+$/, ""))]);
+    setAlts((prev) => [...prev, ...list.map(() => "")]);
+    setCaptions((prev) => [...prev, ...list.map(() => "")]);
+    // Progress par fichier
+    setPerFileProgress((prev) => [...prev, ...list.map(() => 0)]);
     setErr("");
-    try { setName((v) => v || f.name.replace(/\.[^.]+$/, "")); } catch {}
-    setPreview((old) => { revokeIfBlob(old); return URL.createObjectURL(f); });
+  };
+
+  const onInputFiles = (e) => {
+    const list = Array.from(e.target.files || []);
+    if (list.length) onPickMany(list);
+  };
+
+  const removeAt = (idx) => {
+    const p = previews[idx]; revokeIfBlob(p?.url);
+    setFiles((arr) => arr.filter((_,i)=>i!==idx));
+    setPreviews((arr) => arr.filter((_,i)=>i!==idx));
+    setNames((arr) => arr.filter((_,i)=>i!==idx));
+    setAlts((arr) => arr.filter((_,i)=>i!==idx));
+    setCaptions((arr) => arr.filter((_,i)=>i!==idx));
+    setPerFileProgress((arr) => arr.filter((_,i)=>i!==idx));
+  };
+
+  const uploadOne = async (file, idx) => {
+    const fd = new FormData();
+    fd.append("file", file, file.name);
+    fd.append("article_id", String(articleId));
+    fd.append("name", names[idx] || file.name);
+    const alt = alts[idx]; if (alt) fd.append("alt_text[fr]", alt);
+    const cap = captions[idx]; if (cap) fd.append("caption[fr]", cap);
+    fd.append("is_featured", isFeatured ? "1" : "0");
+
+    let lastLoaded = 0, lastTotal = file.size || 1;
+    const onProg = (pe) => {
+      const loaded = pe.loaded ?? lastLoaded;
+      const total = pe.total ?? lastTotal;
+      setPerFileProgress((prev) => {
+        const copy = [...prev];
+        copy[idx] = Math.min(100, Math.round((loaded * 100) / total));
+        return copy;
+      });
+      // progress global = moyenne pondérée (simple moyenne ici)
+      setOverallProgress((_) => {
+        const arr = (prev => prev)([]); // dummy pour lisibilité
+        const local = (perFileProgress => perFileProgress)([]); // no-op
+        // on recalcule depuis state le plus frais via callback:
+        return setPerFileProgress((current) => {
+          const avg = current.length
+            ? Math.round(current.reduce((a,b)=>a+b,0) / current.length)
+            : 0;
+          // retourner la même valeur, mais on est dans un setState imbriqué,
+          // on ne veut pas changer perFileProgress ici; du coup on “triche” :
+          // on met à jour overall en dehors :
+          setOverallProgress(avg);
+          return current;
+        }), 0;
+      });
+      lastLoaded = loaded; lastTotal = total;
+    };
+
+    const res = await http.upload(fd, onProg);
+    const payload = res?.data?.data || res?.data;
+    // notifier le parent pour rafraîchir
+    onUploaded?.(payload);
   };
 
   const submit = async () => {
     setErr("");
-    if (!file) { setErr("Choisissez un fichier."); return; }
+    if (!files.length) { setErr("Ajoutez au moins un fichier."); return; }
     try {
       setSubmitting(true);
-      setProgress(0);
-      const fd = new FormData();
-      fd.append("file", file, file.name);
-      fd.append("article_id", String(articleId));
-      fd.append("name", name || file.name);
-      if (alt) fd.append("alt_text[fr]", alt);
-      if (caption) fd.append("caption[fr]", caption);
-      fd.append("is_featured", isFeatured ? "1" : "0");
-      const res = await http.upload(fd, (pe) => {
-        const denom = (pe.total || pe.loaded || 1);
-        const pct = Math.round((pe.loaded * 100) / denom);
-        setProgress(pct);
-      });
-      onUploaded?.(res?.data?.data || res?.data);
+      setOverallProgress(0);
+      setPerFileProgress((arr) => arr.map(() => 0));
+
+      if (uploadParallel) {
+        // Envois simultanés
+        await Promise.all(files.map((f, i) => uploadOne(f, i)));
+      } else {
+        // Envois séquentiels (file d'attente)
+        for (let i = 0; i < files.length; i++) {
+          await uploadOne(files[i], i);
+        }
+      }
       onClose?.();
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || "Erreur lors du téléchargement";
+      const msg = e?.response?.data?.message || e?.message || "Erreur lors du téléversement";
       setErr(msg);
     } finally {
       setSubmitting(false);
-      setProgress(0);
+      setOverallProgress(0);
+      setPerFileProgress((arr) => arr.map(() => 0));
     }
   };
 
@@ -591,9 +684,9 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
     <ModalPortal>
       <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4" aria-modal="true" role="dialog">
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={!submitting ? onClose : undefined} />
-        <div className="relative z-[100001] w-full max-w-2xl rounded-3xl bg-white border border-slate-200 shadow-2xl p-6 space-y-4">
+        <div className="relative z-[100001] w-full max-w-3xl rounded-3xl bg-white border border-slate-200 shadow-2xl p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-slate-900">Ajouter un média</h3>
+            <h3 className="text-lg font-bold text-slate-900">Ajouter des médias</h3>
             <button
               onClick={onClose}
               disabled={submitting}
@@ -603,88 +696,144 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
             </button>
           </div>
 
+          {/* Switch stratégie */}
+          <div className="flex items-center justify-between rounded-2xl border-2 border-slate-200 p-3">
+            <div className="text-sm font-semibold text-slate-700">
+              Mode d’envoi : <span className="text-slate-900">{uploadParallel ? "Parallèle (plus rapide)" : "File d’attente (plus fiable)"}</span>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <span className="text-xs text-slate-600">File d’attente</span>
+              <input
+                type="checkbox"
+                className="sr-only"
+                checked={uploadParallel}
+                onChange={(e) => setUploadParallel(e.target.checked)}
+                disabled={submitting}
+              />
+              <span className={`relative inline-flex h-6 w-11 items-center rounded-full ${uploadParallel ? "bg-blue-600" : "bg-slate-300"}`}>
+                <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${uploadParallel ? "translate-x-5" : "translate-x-0"}`} />
+              </span>
+              <span className="text-xs text-slate-600">Parallèle</span>
+            </label>
+          </div>
+
+          {/* Zone de dépôt */}
           <div ref={dropRef} className="rounded-2xl border-2 border-dashed border-slate-300 p-6 bg-slate-50/60 text-center">
-            {preview ? (
-              (() => {
-                const mt = file?.type || "";
-                if (isImageMime(mt)) return <img src={preview} alt="Preview" className="mx-auto max-h-64 rounded-xl" onError={(e)=>{ e.currentTarget.src = `${COVERS_BASE}/image.png`; }} />;
-                if (isVideoMime(mt)) return <video src={preview} controls className="mx-auto max-h-64 rounded-xl" />;
-                if (isPdfMime(mt)) return <iframe src={preview} title="Aperçu PDF" className="mx-auto w-full h-64 rounded-xl bg-white" />;
-                if (isAudioMime(mt)) {
-                  return (
-                    <div className="mx-auto max-w-xl rounded-xl bg-slate-50 border border-slate-200 p-3">
-                      <audio src={preview} controls className="w-full" />
-                    </div>
-                  );
-                }
-                return (
-                  <div className="text-slate-600">
-                    <FiFile className="w-8 h-8 mx-auto mb-3" />
-                    <div className="font-semibold">Aucun aperçu visuel</div>
-                    <a
-                      href={preview}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-semibold mt-2"
-                    >
-                      Ouvrir
-                    </a>
-                  </div>
-                );
-              })()
-            ) : (
+            {!files.length ? (
               <div className="text-slate-600">
                 <FiUpload className="w-8 h-8 mx-auto mb-3" />
-                <div className="font-semibold">Déposez un fichier ici</div>
-                <div className="text-xs mt-1 text-slate-500">Max: 100 MB</div>
+                <div className="font-semibold">Déposez des fichiers ici</div>
+                <div className="text-xs mt-1 text-slate-500">Max: 100 MB par fichier</div>
+              </div>
+            ) : (
+              <div className="text-left">
+                <div className="text-sm font-semibold text-slate-700 mb-2">
+                  {files.length} fichier{files.length>1?'s':''} sélectionné{files.length>1?'s':''}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-72 overflow-auto pr-1">
+                  {files.map((f, idx) => {
+                    const prev = previews[idx];
+                    const mt = prev?.type || "";
+                    const ext = (f.name.split('.').pop() || "").toLowerCase();
+                    const cover = COVER_BY_EXT[ext] ? coverSrc(COVER_BY_EXT[ext]) : `${COVERS_BASE}/file.png`;
+                    const imgLike = isImageMime(mt);
+                    return (
+                      <div key={idx} className="rounded-xl border border-slate-200 bg-white p-3 flex gap-3">
+                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-100 flex items-center justify-center">
+                          {imgLike ? (
+                            <img
+                              src={prev?.url}
+                              alt={f.name}
+                              className="w-full h-full object-cover"
+                              onError={(e)=>{ e.currentTarget.onerror=null; e.currentTarget.src = `${COVERS_BASE}/image.png`; }}
+                            />
+                          ) : (
+                            <img
+                              src={cover}
+                              alt="icône fichier"
+                              className="w-12 h-12"
+                              onError={(e)=>{ e.currentTarget.onerror=null; e.currentTarget.src = `${COVERS_BASE}/file.png`; }}
+                            />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold text-slate-800 truncate">{f.name}</div>
+                          <div className="text-[11px] text-slate-500 mb-2">{fmtBytes(f.size)}</div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <input
+                              value={names[idx] || ""}
+                              onChange={(e)=> setNames(arr => { const c=[...arr]; c[idx]=e.target.value; return c; })}
+                              className="w-full px-3 py-1.5 rounded-lg border-2 border-slate-200 text-sm"
+                              placeholder="Nom interne"
+                              disabled={submitting}
+                            />
+                            <input
+                              value={alts[idx] || ""}
+                              onChange={(e)=> setAlts(arr => { const c=[...arr]; c[idx]=e.target.value; return c; })}
+                              className="w-full px-3 py-1.5 rounded-lg border-2 border-slate-200 text-sm"
+                              placeholder="Texte alternatif (FR)"
+                              disabled={submitting}
+                            />
+                            <input
+                              value={captions[idx] || ""}
+                              onChange={(e)=> setCaptions(arr => { const c=[...arr]; c[idx]=e.target.value; return c; })}
+                              className="w-full px-3 py-1.5 rounded-lg border-2 border-slate-200 text-sm sm:col-span-2"
+                              placeholder="Légende (FR)"
+                              disabled={submitting}
+                            />
+                          </div>
+                          {/* Progress individuel */}
+                          {submitting && (
+                            <div className="mt-2">
+                              <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                <div className="h-full bg-blue-600 transition-all duration-300" style={{ width: `${perFileProgress[idx] || 0}%` }} />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => removeAt(idx)}
+                          disabled={submitting}
+                          className="self-start w-8 h-8 rounded-lg border-2 border-slate-200 text-slate-700 hover:bg-slate-50"
+                          title="Retirer"
+                        >
+                          <FiX className="m-auto" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
             <div className="mt-3">
               <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold cursor-pointer">
                 <FiUpload />
-                Choisir un fichier
+                Choisir des fichiers
                 <input
                   type="file"
+                  multiple
                   accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.zip,.txt,.md,.rtf"
                   className="sr-only"
                   disabled={submitting}
-                  onChange={(e) => e.target.files?.[0] && onPick(e.target.files[0])}
+                  onChange={onInputFiles}
                 />
               </label>
             </div>
           </div>
 
+          {/* Options communes */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="md:col-span-2 space-y-2">
-              <label className="text-sm font-semibold text-slate-700">Nom</label>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                disabled={submitting}
-                className="w-full px-4 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 disabled:bg-slate-50"
-                placeholder="Nom interne"
-              />
-              <label className="text-sm font-semibold text-slate-700">Texte alternatif (FR)</label>
-              <input
-                value={alt}
-                onChange={(e) => setAlt(e.target.value)}
-                disabled={submitting}
-                className="w-full px-4 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 disabled:bg-slate-50"
-              />
-              <label className="text-sm font-semibold text-slate-700">Légende (FR)</label>
-              <input
-                value={caption}
-                onChange={(e) => setCaption(e.target.value)}
-                disabled={submitting}
-                className="w-full px-4 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 disabled:bg-slate-50"
-              />
+            <div className="md:col-span-2 text-sm text-slate-600">
+              Astuce : utilisez le mode <span className="font-semibold">Parallèle</span> pour gagner du temps (connexion stable), et
+              la <span className="font-semibold">File d’attente</span> si votre connexion est fragile ou si le serveur impose un
+              débit limité.
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-700">Options</label>
               <label className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl border-2 border-slate-200 bg-white cursor-pointer text-sm">
                 <span className="flex items-center gap-2">
                   <FiStar className="text-amber-500" />
-                  Vedette
+                  Mettre en vedette
                 </span>
                 <input
                   type="checkbox"
@@ -697,26 +846,18 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
                   <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${isFeatured ? "translate-x-4" : "translate-x-0"}`} />
                 </span>
               </label>
-              {file && (
-                <div className="text-xs text-slate-600 mt-2 p-2 bg-slate-50 rounded-lg">
-                  <div className="font-semibold">{file.name}</div>
-                  <div className="text-slate-500 mt-1">{fmtBytes(file.size)}</div>
-                </div>
-              )}
             </div>
           </div>
 
-          {submitting && progress > 0 && (
+          {/* Progress global */}
+          {submitting && (
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-600">Téléversement en cours...</span>
-                <span className="font-semibold text-blue-600">{progress}%</span>
+                <span className="font-semibold text-blue-600">{overallProgress}%</span>
               </div>
               <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-blue-600 transition-all duration-300"
-                  style={{ width: `${progress}%` }}
-                />
+                <div className="h-full bg-blue-600 transition-all duration-300" style={{ width: `${overallProgress}%` }} />
               </div>
             </div>
           )}
@@ -725,6 +866,7 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
             <FiAlertTriangle className="w-4 h-4" />
             {err}
           </p>}
+
           <div className="flex items-center justify-end gap-2 pt-2">
             <button
               onClick={onClose}
@@ -735,12 +877,12 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
             </button>
             <button
               onClick={submit}
-              disabled={submitting || !file}
+              disabled={submitting || files.length === 0}
               className={`px-4 py-2 rounded-xl text-white font-semibold shadow ${
-                submitting || !file ? "bg-slate-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
+                submitting || files.length === 0 ? "bg-slate-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
               }`}
             >
-              {submitting ? `Envoi... ${progress}%` : "Téléverser"}
+              {submitting ? `Envoi... ${overallProgress}%` : `Téléverser ${files.length ? `(${files.length})` : ""}`}
             </button>
           </div>
         </div>
@@ -1063,7 +1205,13 @@ const ArticleMediaManager = ({ articleId }) => {
     );
   }, [items, search]);
 
-  const onUploaded = () => { showToast("Média téléversé ✅"); setRefreshKey((k) => k + 1); };
+  // 🔁 adapté pour recevoir un tableau lors d'upload multiple
+  const onUploaded = (res) => {
+    const count = Array.isArray(res) ? res.length : 1;
+    showToast(`${count} média${count>1?'s':''} téléversé${count>1?'s':''} ✅`);
+    setRefreshKey((k) => k + 1);
+  };
+
   const askEdit = (m) => {
     setConfirmDialog({
       open: true,
@@ -1444,19 +1592,12 @@ const ArticleMediaManager = ({ articleId }) => {
     return (
       <div key={m.id} className={`rounded-2xl border ${isSelected(m.id) ? "border-blue-400 ring-2 ring-blue-200" : "border-slate-200"} bg-white p-4 flex flex-col`}>
         <div className="relative rounded-xl overflow-hidden bg-slate-100 border mb-3 aspect-square flex items-center justify-center">
-          {thumb ? (
-            <img
-              src={thumb}
-              alt={m.alt_text?.fr || m.alt_text?.[0] || m.name || "aperçu"}
-              className="w-full h-full object-cover"
-              onError={onImgErrorToCover(m)}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center text-slate-600 p-4 text-center">
-              {React.createElement(kindMeta(kind).Icon, { className: "w-10 h-10 opacity-80 mb-2" })}
-              <span className="text-xs font-medium">{m.name?.split('.').slice(0, -1).join('.') || "(sans nom)"}</span>
-            </div>
-          )}
+          <img
+            src={thumb}
+            alt={m.alt_text?.fr || m.alt_text?.[0] || m.name || "aperçu"}
+            className="w-full h-full object-cover object-center"
+            onError={onImgErrorToCover(m)}
+          />
           <button
             onClick={() => openViewer(m)}
             className="absolute inset-0 bg-black/20 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center"
@@ -1550,16 +1691,12 @@ const ArticleMediaManager = ({ articleId }) => {
           title="Aperçu"
           onClick={() => openViewer(m)}
         >
-          {thumb ? (
-            <img
-              src={thumb}
-              alt={m.name || "aperçu"}
-              className="w-full h-full object-cover"
-              onError={onImgErrorToCover(m)}
-            />
-          ) : (
-            React.createElement(kindMeta(kind).Icon, { className: "w-6 h-6 text-slate-500" })
-          )}
+          <img
+            src={thumb}
+            alt={m.name || "aperçu"}
+            className="w-full h-full object-cover"
+            onError={onImgErrorToCover(m)}
+          />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -1695,7 +1832,7 @@ const ArticleMediaManager = ({ articleId }) => {
       )}
       {/* Modaux */}
       <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onUploaded={onUploaded} articleId={articleId} />
-      <EditModal open={editOpen} media={current} onClose={() => setEditOpen(false)} onSaved={onSaved} />
+      <EditModal open={editOpen} media={current} onClose={() => setEditOpen(false)} onSaved={() => onSaved()} />
       <ViewerModal open={viewerOpen} media={viewerMedia} onClose={() => setViewerOpen(false)} />
       <ConfirmDialog
         open={confirmDialog.open}

@@ -515,7 +515,7 @@ i18n
     
     "preview": {
       "noMedia": "No media",
-      "addMedia": "Add media to the article or open the « Media » tab to explore available files",
+      "addMedia": "No media is currently available. Please refer to the content below.",
       "articleContent": "Article content",
       "highResolution": "View in high resolution",
       "download": "Download",
@@ -1032,6 +1032,73 @@ i18n
 // Aliases / typos used in code
 "sumary": "Summary",     // alias if code uses 'sumary'
 "playdoier": "Advocacy"  // keep key; better label than 'Playdoier'
+,
+
+  "home": "Home",
+  "platform": "Platform",
+  "genre": "Genre",
+  "about": "About",
+
+  "summary": "Summary",
+  "video": "Video",
+  "audio": "Audio",
+  "podcast": "Podcast",
+
+  "search": "Search",
+  "profile": "Profile",
+  "settings": "Settings",
+  "notifications": "Notifications",
+  "logout": "Logout",
+
+  "login": "Login",
+  "signup": "Sign Up",
+  "email": "Email address",
+  "password": "Password",
+
+  "user_management": "User Management",
+  "roles": "Roles",
+  "permissions": "Permissions",
+
+  "language": "Language",
+  "loading": "Loading..."
+,
+// EN
+notfound: {
+  book: {
+    title: "404 — Book not found",
+    subtitle: {
+      before: "We searched the shelves. The path ",
+      after: " doesn't lead to any book."
+    }
+  },
+  default: {
+    title: "404 — Page not found",
+    subtitle: {
+      before: "We looked everywhere. The path ",
+      after: " doesn’t seem to exist."
+    }
+  },
+  actions: {
+    back: "Go back",
+    home: "Home",
+    search: "Search a book"
+  },
+  tips: 'Tip: press <code>B</code> to go back, <code>H</code> for home.'
+}
+,
+// EN
+notfound: {
+  actions: {
+    back: "Go back",
+    home: "Home",
+    browseArticles: "Browse articles",
+    playGame: "Play mini-game",
+    closeGame: "Close mini-game"
+  },
+  game: {
+    help: "Use arrow keys (or WASD) to move the magnifying glass and catch the book. +1 point on each catch."
+  }
+}
 ,
               "role_permissions_management": "Role Permissions Management",
             "manage_role_permissions_description": "Manage associations between roles and permissions",
@@ -1680,7 +1747,7 @@ i18n
     
     "preview": {
       "noMedia": "Aucun média",
-      "addMedia": "Ajoutez un média à l'article ou ouvrez l'onglet « Médias » pour explorer les fichiers disponibles",
+      "addMedia": "Aucun média n’est disponible pour l’instant. Veuillez consulter le contenu ci-dessous.",
       "articleContent": "Contenu de l'article",
       "highResolution": "Voir en haute résolution",
       "download": "Télécharger",
@@ -1850,6 +1917,72 @@ i18n
   }
 ,
 
+  "home": "Accueil",
+  "platform": "Plateforme",
+  "genre": "Genre",
+  "about": "À propos",
+
+  "summary": "Résumé",
+  "video": "Vidéo",
+  "audio": "Audio",
+  "podcast": "Podcast",
+
+  "search": "Rechercher",
+  "profile": "Profil",
+  "settings": "Paramètres",
+  "notifications": "Notifications",
+  "logout": "Déconnexion",
+
+  "login": "Connexion",
+  "signup": "Inscription",
+  "email": "Adresse email",
+  "password": "Mot de passe",
+
+  "user_management": "Gestion des Utilisateurs",
+  "roles": "Rôles",
+  "permissions": "Permissions",
+
+  "language": "Langue",
+  "loading": "Chargement en cours..."
+,
+// FR
+notfound: {
+  book: {
+    title: "404 — Livre introuvable",
+    subtitle: {
+      before: "Nous avons fouillé les étagères. Le chemin ",
+      after: " ne mène à aucun livre."
+    }
+  },
+  default: {
+    title: "404 — Page introuvable",
+    subtitle: {
+      before: "Nous avons cherché partout. Le chemin ",
+      after: " n'existe pas."
+    }
+  },
+  actions: {
+    back: "Revenir",
+    home: "Accueil",
+    search: "Rechercher un livre"
+  },
+  tips: 'Astuce : appuyez sur <code>B</code> pour revenir, <code>H</code> pour l’accueil.'
+}
+,
+// FR
+notfound: {
+  actions: {
+    back: "Revenir",
+    home: "Accueil",
+    browseArticles: "Parcourir les articles",
+    playGame: "Jouer au mini-jeu",
+    closeGame: "Fermer le mini-jeu"
+  },
+  game: {
+    help: "Utilisez les flèches (ou WASD) pour bouger la loupe et attraper le livre. +1 point à chaque capture."
+  }
+}
+,
   "listtable": {
     "headers": {
       "image": "Image",
