@@ -108,6 +108,7 @@ const ICON_MAP = {
   "fa-lightbulb": faLightbulb, "fa-microchip": faMicrochip, "fa-cloud": faCloud,
   "fa-gift": faGift,
 };
+
 function hexToRgb(hex) {
   if (!hex) return { r: 100, g: 116, b: 139 }; // slate-500 fallback
   const m = hex.trim().replace('#','');
@@ -135,6 +136,7 @@ function deriveCategoryMeta(article, t) {
   const iconKey = cat?.icon || "fa-folder";
   return { name, color, iconKey };
 }
+
 function getCategoryFromTitle(title, t) {
   const titleLower = (title || '').toLowerCase();
   if (titleLower.includes('intelligence artificielle') || titleLower.includes('ia')) return t('listtable.categories.ai');
@@ -279,8 +281,12 @@ export default function ListTable({ rows, sort, setSort, routeBase }) {
     <div ref={containerRef} className="rounded-xl border bg-white shadow-sm overflow-hidden">
       {/* Toolbar colonne */}
       <div className="flex items-center justify-between px-3 py-2 border-b bg-slate-50">
-        <div className="text-xs text-slate-100/10"> 
-          {t('listtable.responsive.width')}: <span className="font-medium">{Math.round(containerWidth)}px</span> — {mode === "auto" ? (t('listtable.columns.auto') || "Auto (by width)") : (t('listtable.columns.custom') || "Custom selection")}
+        <div className="text-xs text-slate-500">
+          {t('listtable.responsive.width')}:{" "}
+          <span className="font-medium">{Math.round(containerWidth)}px</span>{" "}
+          — {mode === "auto"
+            ? (t('listtable.columns.auto') || "Auto (by width)")
+            : (t('listtable.columns.custom') || "Custom selection")}
         </div>
         <div className="relative">
           <button
@@ -294,14 +300,27 @@ export default function ListTable({ rows, sort, setSort, routeBase }) {
               <div className="p-2 border-b">
                 <div className="flex gap-2">
                   <button
-                    className={cls("flex-1 h-8 rounded-md text-sm border", mode === "auto" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-700 border-slate-200")}
+                    className={cls(
+                      "flex-1 h-8 rounded-md text-sm border",
+                      mode === "auto"
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-slate-700 border-slate-200"
+                    )}
                     onClick={resetToAuto}
                   >
                     {t('listtable.columns.auto')}
                   </button>
                   <button
-                    className={cls("flex-1 h-8 rounded-md text-sm border", mode === "custom" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-700 border-slate-200")}
-                    onClick={() => { setMode("custom"); try { localStorage.setItem(MODE_STORAGE, "custom"); } catch {} }}
+                    className={cls(
+                      "flex-1 h-8 rounded-md text-sm border",
+                      mode === "custom"
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-slate-700 border-slate-200"
+                    )}
+                    onClick={() => {
+                      setMode("custom");
+                      try { localStorage.setItem(MODE_STORAGE, "custom"); } catch {}
+                    }}
                   >
                     {t('listtable.columns.custom')}
                   </button>
@@ -309,10 +328,13 @@ export default function ListTable({ rows, sort, setSort, routeBase }) {
               </div>
               <div className="max-h-64 overflow-auto p-2 space-y-1">
                 {COLS.map((c) => (
-                  <label key={c.key} className={cls(
-                    "flex items-center justify-between gap-2 px-2 py-1 rounded hover:bg-slate-50 text-sm",
-                    MANDATORY_COLS.has(c.key) ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
-                  )}>
+                  <label
+                    key={c.key}
+                    className={cls(
+                      "flex items-center justify-between gap-2 px-2 py-1 rounded hover:bg-slate-50 text-sm",
+                      MANDATORY_COLS.has(c.key) ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+                    )}
+                  >
                     <span className="capitalize">{t(`listtable.headers.${c.key}`) || c.key}</span>
                     <input
                       type="checkbox"
@@ -389,8 +411,12 @@ export default function ListTable({ rows, sort, setSort, routeBase }) {
                   key={article.id}
                   className="transition-colors duration-200 group"
                   style={{ background: `linear-gradient(180deg, ${rowBgBase} 0%, rgba(255,255,255,0.96) 65%)` }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = `linear-gradient(180deg, ${rowBgHover} 0%, rgba(255,255,255,0.98) 65%)`; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = `linear-gradient(180deg, ${rowBgBase} 0%, rgba(255,255,255,0.96) 65%)`; }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = `linear-gradient(180deg, ${rowBgHover} 0%, rgba(255,255,255,0.98) 65%)`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = `linear-gradient(180deg, ${rowBgBase} 0%, rgba(255,255,255,0.96) 65%)`;
+                  }}
                 >
                   {isVisible("image") && (
                     <td className="px-3 py-4">
@@ -414,7 +440,12 @@ export default function ListTable({ rows, sort, setSort, routeBase }) {
                   {isVisible("title") && (
                     <td className="px-3 py-4">
                       <div className="flex items-center gap-2">
-                        {!read && <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" title={t('listtable.status.unread')} />}
+                        {!read && (
+                          <span
+                            className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"
+                            title={t('listtable.status.unread')}
+                          />
+                        )}
                         <div className="min-w-0 flex-1">
                           <Link
                             to={to}
@@ -471,9 +502,16 @@ export default function ListTable({ rows, sort, setSort, routeBase }) {
                       >
                         <span
                           className="inline-flex items-center justify-center w-5 h-5 rounded-md mr-1.5"
-                          style={{ backgroundColor: rgba(tone, 0.18), border: `1px solid ${rgba(tone, 0.28)}` }}
+                          style={{
+                            backgroundColor: rgba(tone, 0.18),
+                            border: `1px solid ${rgba(tone, 0.28)}`
+                          }}
                         >
-                          <FontAwesomeIcon icon={FA_ICON} className="text-[11px]" style={{ color: tone }} />
+                          <FontAwesomeIcon
+                            icon={FA_ICON}
+                            className="text-[11px]"
+                            style={{ color: tone }}
+                          />
                         </span>
                         {categoryName}
                       </span>
@@ -495,12 +533,14 @@ export default function ListTable({ rows, sort, setSort, routeBase }) {
                   {isVisible("views") && (
                     <td className="px-3 py-4 text-sm">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                          <FaEye className="text-blue-600" size={12} />
+                        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
+                          <FaEye className="text-slate-600" size={12} />
                         </div>
                         <div>
-                          <div className="font-bold text-blue-700">{formattedViewCount}</div>
-                          <div className="text-xs text-slate-500">{t('listtable.stats.views')}</div>
+                          <div className="font-bold text-slate-800">{formattedViewCount}</div>
+                          <div className="text-xs text-slate-500">
+                            {t('listtable.stats.views')}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -509,11 +549,13 @@ export default function ListTable({ rows, sort, setSort, routeBase }) {
                   {isVisible("rating") && (
                     <td className="px-3 py-4 text-sm">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
-                          <FaThumbsUp className="text-amber-600" size={12} />
+                        <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center">
+                          <FaThumbsUp className="text-orange-600" size={12} />
                         </div>
                         <div>
-                          <div className="font-bold text-amber-700">{formattedRating}/5</div>
+                          <div className="font-bold text-orange-700">
+                            {formattedRating}/5
+                          </div>
                           <div className="text-xs text-slate-500">
                             {article.rating_count || 0} {t('listtable.stats.reviews')}
                           </div>
@@ -526,17 +568,21 @@ export default function ListTable({ rows, sort, setSort, routeBase }) {
                     <td className="px-3 py-4 text-sm">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className={cls(
-                            "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
-                            article.status === 'published'
-                              ? 'bg-green-100 text-green-800'
+                          <span
+                            className={cls(
+                              "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
+                              article.status === 'published'
+                                ? 'bg-green-100 text-green-800'
+                                : article.status === 'draft'
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : 'bg-slate-100 text-slate-800'
+                            )}
+                          >
+                            {article.status === 'published'
+                              ? `✅ ${t('listtable.status.published')}`
                               : article.status === 'draft'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : 'bg-gray-100 text-gray-800'
-                          )}>
-                            {article.status === 'published' ? `✅ ${t('listtable.status.published')}` :
-                             article.status === 'draft' ? `📝 ${t('listtable.status.draft')}` :
-                             `📄 ${article.status}`}
+                              ? `📝 ${t('listtable.status.draft')}`
+                              : `📄 ${article.status}`}
                           </span>
                         </div>
                         <div className="flex flex-wrap gap-1">
@@ -552,13 +598,17 @@ export default function ListTable({ rows, sort, setSort, routeBase }) {
                           )}
                           {article.visibility !== 'public' && (
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-orange-100 text-orange-700">
-                              {isPrivate(article.visibility) ? <FaLock size={10} /> : <FaLockOpen size={10} />}{' '}
+                              {isPrivate(article.visibility)
+                                ? <FaLock size={10} />
+                                : <FaLockOpen size={10} />
+                              }{" "}
                               {visLabel}
                             </span>
                           )}
                         </div>
                         <div className="text-xs text-slate-500">
-                          {t('listtable.date.created')} {new Date(article.created_at).toLocaleDateString(i18n.language)}
+                          {t('listtable.date.created')}{" "}
+                          {new Date(article.created_at).toLocaleDateString(i18n.language)}
                         </div>
                       </div>
                     </td>
@@ -571,11 +621,16 @@ export default function ListTable({ rows, sort, setSort, routeBase }) {
                         <button
                           className={cls(
                             "p-2 rounded-lg border transition-all duration-200 hover:scale-105",
-                            fav ? 'text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100'
-                                : 'text-slate-400 bg-white border-slate-200 hover:text-amber-500 hover:border-amber-300'
+                            fav
+                              ? 'text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100'
+                              : 'text-slate-400 bg-white border-slate-200 hover:text-amber-500 hover:border-amber-300'
                           )}
                           onClick={() => toggleFav(article.id)}
-                          title={fav ? t('listtable.actions.removeFavorite') : t('listtable.actions.addFavorite')}
+                          title={
+                            fav
+                              ? t('listtable.actions.removeFavorite')
+                              : t('listtable.actions.addFavorite')
+                          }
                         >
                           {fav ? <FaStar size={14} /> : <FaRegStar size={14} />}
                         </button>
@@ -583,7 +638,7 @@ export default function ListTable({ rows, sort, setSort, routeBase }) {
                         {/* Ouvrir */}
                         <Link
                           to={to}
-                          className="p-2 rounded-lg border text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100 hover:scale-105 transition-all duration-200 inline-flex items-center justify-center"
+                          className="p-2 rounded-lg border text-slate-700 bg-slate-50 border-slate-200 hover:bg-slate-100 hover:scale-105 transition-all duration-200 inline-flex items-center justify-center"
                           onClick={() => markRead(article.id)}
                           title={t('listtable.actions.read')}
                         >
@@ -616,8 +671,12 @@ export default function ListTable({ rows, sort, setSort, routeBase }) {
       {rows.length === 0 && (
         <div className="text-center py-12 text-slate-500">
           <div className="text-6xl mb-4">📝</div>
-          <div className="text-lg font-medium mb-2">{t('listtable.empty.title')}</div>
-          <div className="text-sm">{t('listtable.empty.subtitle')}</div>
+          <div className="text-lg font-medium mb-2">
+            {t('listtable.empty.title')}
+          </div>
+          <div className="text-sm">
+            {t('listtable.empty.subtitle')}
+          </div>
         </div>
       )}
     </div>

@@ -4,7 +4,7 @@
 // - Fournit fetchArticlesWithFilters au composant ArticleLibrary
 // - Normalise toujours "filters" pour éviter toute erreur
 // ------------------------------
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import ArticleLibrary from "../media-library/index"; // adapte ce chemin si besoin
 import axios from "axios";
 
@@ -88,7 +88,7 @@ function ArticlesPage() {
         setLoading(true);
         const res = await axiosInstance.get("/articles");
         console.log(res);
-        
+
         const payload = res?.data || {};
         const list = payload.data || payload || [];
         if (!Array.isArray(list)) throw new Error("Format de réponse invalide");
@@ -104,73 +104,76 @@ function ArticlesPage() {
   }, [axiosInstance]);
 
   // Requête “serveur” avec filtres/tri/facettes — robuste
-  const fetchArticlesWithFilters = async ({ page, perPage, search, filters, sort }) => {
-    try {
-      const f = toSafeFilters(filters); // ← NE PEUT PLUS ÊTRE undefined
+  const fetchArticlesWithFilters = useCallback(
+    async ({ page, perPage, search, filters, sort }) => {
+      try {
+        const f = toSafeFilters(filters); // ← NE PEUT PLUS ÊTRE undefined
 
-      // Construit les paramètres selon ton contrôleur Laravel
-      const params = new URLSearchParams({
-        page: String(page),
-        per_page: String(perPage),
-        include_facets: "1",
-        facet_fields: "categories,tags,authors",
-      });
+        // Construit les paramètres selon ton contrôleur Laravel
+        const params = new URLSearchParams({
+          page: String(page),
+          per_page: String(perPage),
+          include_facets: "1",
+          facet_fields: "categories,tags,authors",
+        });
 
-      if (search && String(search).trim() !== "") {
-        params.set("search", String(search).trim());
+        if (search && String(search).trim() !== "") {
+          params.set("search", String(search).trim());
+        }
+
+        // Catégories : autorise mélange IDs / noms
+        if (f.categories.length) {
+          const { ids: catIds, names: catNames } = splitIdsAndNames(f.categories);
+          if (catIds.length) params.append("category_ids", catIds.join(","));
+          if (catNames.length) params.append("categories", catNames.join(","));
+        }
+
+        // Tags : autorise mélange IDs / noms
+        if (f.tags.length) {
+          const { ids: tagIds, names: tagNames } = splitIdsAndNames(f.tags);
+          if (tagIds.length) params.append("tag_ids", tagIds.join(","));
+          if (tagNames.length) params.append("tags", tagNames.join(","));
+        }
+
+        // Auteurs : le contrôleur accepte surtout des IDs (author_id / author_ids)
+        if (f.authors.length) {
+          const { ids: authorIds } = splitIdsAndNames(f.authors);
+          if (authorIds.length) params.append("author_ids", authorIds.join(","));
+          // (si tu veux supporter des noms côté back, il faudra adapter le contrôleur)
+        }
+
+        // Flags & bornes
+        if (f.featuredOnly) params.append("featured", "1");
+        if (f.stickyOnly)  params.append("sticky", "1");
+        if (f.dateFrom)    params.append("date_from", f.dateFrom);
+        if (f.dateTo)      params.append("date_to", f.dateTo);
+        if (f.ratingMin > 0) params.append("rating_min", String(f.ratingMin));
+        if (f.ratingMax < 5) params.append("rating_max", String(f.ratingMax));
+
+        // Tri multi-colonnes
+        if (Array.isArray(sort) && sort.length) {
+          params.append(
+            "sort",
+            sort.map((s) => `${s.key},${s.dir}`).join(";")
+          );
+        }
+
+        const res = await axiosInstance.get(`/articles?${params.toString()}`);
+        const payload = res?.data || {};
+
+        // format attendu: { data: [...], meta: { total, facets } } ou { data: [...], total, facets }
+        return {
+          data: payload.data || [],
+          total: payload.meta?.total ?? payload.total ?? 0,
+          facets: payload.meta?.facets ?? payload.facets ?? null,
+        };
+      } catch (err) {
+        console.error("Erreur lors du filtrage:", err);
+        return { data: [], total: 0, facets: null };
       }
-
-      // Catégories : autorise mélange IDs / noms
-      if (f.categories.length) {
-        const { ids: catIds, names: catNames } = splitIdsAndNames(f.categories);
-        if (catIds.length) params.append("category_ids", catIds.join(","));
-        if (catNames.length) params.append("categories", catNames.join(","));
-      }
-
-      // Tags : autorise mélange IDs / noms
-      if (f.tags.length) {
-        const { ids: tagIds, names: tagNames } = splitIdsAndNames(f.tags);
-        if (tagIds.length) params.append("tag_ids", tagIds.join(","));
-        if (tagNames.length) params.append("tags", tagNames.join(","));
-      }
-
-      // Auteurs : le contrôleur accepte surtout des IDs (author_id / author_ids)
-      if (f.authors.length) {
-        const { ids: authorIds } = splitIdsAndNames(f.authors);
-        if (authorIds.length) params.append("author_ids", authorIds.join(","));
-        // (si tu veux supporter des noms côté back, il faudra adapter le contrôleur)
-      }
-
-      // Flags & bornes
-      if (f.featuredOnly) params.append("featured", "1");
-      if (f.stickyOnly)  params.append("sticky", "1");
-      if (f.dateFrom)    params.append("date_from", f.dateFrom);
-      if (f.dateTo)      params.append("date_to", f.dateTo);
-      if (f.ratingMin > 0) params.append("rating_min", String(f.ratingMin));
-      if (f.ratingMax < 5) params.append("rating_max", String(f.ratingMax));
-
-      // Tri multi-colonnes
-      if (Array.isArray(sort) && sort.length) {
-        params.append(
-          "sort",
-          sort.map((s) => `${s.key},${s.dir}`).join(";")
-        );
-      }
-
-      const res = await axiosInstance.get(`/articles?${params.toString()}`);
-      const payload = res?.data || {};
-
-      // format attendu: { data: [...], meta: { total, facets } } ou { data: [...], total, facets }
-      return {
-        data: payload.data || [],
-        total: payload.meta?.total ?? payload.total ?? 0,
-        facets: payload.meta?.facets ?? payload.facets ?? null,
-      };
-    } catch (err) {
-      console.error("Erreur lors du filtrage:", err);
-      return { data: [], total: 0, facets: null };
-    }
-  };
+    },
+    [axiosInstance]
+  );
 
   if (loading) {
     return (
@@ -208,7 +211,7 @@ function ArticlesPage() {
         fetchArticles={fetchArticlesWithFilters}
         routeBase="/articles"
         initialView="grid"
-        defaultLoadMode="pagination"
+        defaultLoadMode="pagination"  // tu peux mettre "infinite" si tu veux le mode infini par défaut
         perPageOptions={[12, 24, 48, 96]}
       />
     </div>

@@ -225,6 +225,10 @@ export default function GridCard({ item, routeBase, onOpen }) {
   const [isHovered, setIsHovered] = useState(false);
   const [liked, setLiked] = useState(false);
 
+  // ✅ NOUVEAU : état pour l’animation d’apparition
+  const motionless = prefersReducedMotion();
+  const [visible, setVisible] = useState(motionless); // si réductions d’animation activées → déjà visible
+
   // counts
   const [likesCount, setLikesCount] = useState(item.likes_count ?? 0);
   const [favoritesCount, setFavoritesCount] = useState(item.favorites_count ?? 0);
@@ -315,14 +319,19 @@ export default function GridCard({ item, routeBase, onOpen }) {
 
   const visLabel = useMemo(() => humanizeVisibility(item.visibility, t), [item.visibility, t]);
 
-  const motionless = prefersReducedMotion();
   const hoverCls   = motionless ? "" : "hover:-translate-y-2 hover:scale-[1.01]";
+
+  // ✅ NOUVEAU : classes d’apparition (fade + translate)
+  const appearCls = motionless
+    ? ""
+    : (visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4");
 
   const cardClass = cls(
     "group relative rounded-3xl border",
     "shadow-sm overflow-hidden transition-all duration-500",
     "w-full max-w-none min-w-[400px]",
     hoverCls,
+    appearCls,          // <-- ajout de l’animation d’apparition
     borderColorClass
   );
 
@@ -459,7 +468,9 @@ export default function GridCard({ item, routeBase, onOpen }) {
     onOpenCard();
   }, [item.slug, item.id, onOpenCard]);
 
+  // ✅ MODIFIÉ : impressionRef déclenche aussi l’apparition
   const impressionRef = useImpression(() => {
+    setVisible(true); // → déclenche l’animation
     window.dispatchEvent(new CustomEvent("gridcard:seen", { detail: { id: item.id } }));
   });
 
@@ -565,37 +576,38 @@ export default function GridCard({ item, routeBase, onOpen }) {
     document.addEventListener('click', onDocClick);
     return () => document.removeEventListener('click', onDocClick);
   }, []);
-function StatPill({ icon, value, tone = "slate", suffix = "" }) {
-  const toneMap = tone === "orange"
-    ? {
-        bg: "rgba(251,146,60,.12)",
-        border: "rgba(251,146,60,.09)",
-        icon: "#f59e0b",   // orange-500
-        text: "#7c2d12",   // orange-900-ish
-      }
-    : {
-        bg: "rgba(15,23,42,.02)",   // slate soft
-        border: "rgba(15,23,42,.09)",
-        icon: "#475569",            // slate-600
-        text: "#0f172a",            // slate-900
-      };
 
-  return (
-    <div
-      className="inline-flex items-center gap-2 rounded-xl px-3 py-1.5 select-none"
-      style={{ backgroundColor: toneMap.bg, border: `1px solid ${toneMap.border}` }}
-      role="group"
-    >
-      <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg"
-            style={{ color: toneMap.icon, backgroundColor: "rgba(255,255,255,.6)" }}>
-        {icon}
-      </span>
-      <span className="text-sm font-semibold" style={{ color: toneMap.text }}>
-        {value}{suffix}
-      </span>
-    </div>
-  );
-}
+  function StatPill({ icon, value, tone = "slate", suffix = "" }) {
+    const toneMap = tone === "orange"
+      ? {
+          bg: "rgba(251,146,60,.12)",
+          border: "rgba(251,146,60,.0)",
+          icon: "#f59e0b",   // orange-500
+          text: "#7c2d12",   // orange-900-ish
+        }
+      : {
+          bg: "rgba(15,23,42,.02)",   // slate soft
+          border: "rgba(15,23,42,.0)",
+          icon: "#475569",            // slate-600
+          text: "#0f172a",            // slate-900
+        };
+
+    return (
+      <div
+        className="inline-flex items-center gap-2 rounded-xl px-3 py-1.5 select-none"
+        style={{ backgroundColor: toneMap.bg, border: `1px solid ${toneMap.border}` }}
+        role="group"
+      >
+        <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg"
+              style={{ color: toneMap.icon, backgroundColor: "rgba(255,255,255,.6)" }}>
+          {icon}
+        </span>
+        <span className="text-sm font-semibold" style={{ color: toneMap.text }}>
+          {value}{suffix}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -914,43 +926,43 @@ function StatPill({ icon, value, tone = "slate", suffix = "" }) {
             </div>
           </div>
         </div>
-          {/* Stats — compact, valeurs visibles, icônes neutres (rating orange) */}
-          <div className="px-8 relative pt-3 pb-5  bottom-0 left-0 " style={{ borderColor: borderSoft, backgroundColor: rgba("#ffffff", 0.95) }}>
-            <div className="flex flex-row items-center  w-full justify-between">
-              {/* Vues (neutre) */}
+        {/* Stats — compact, valeurs visibles, icônes neutres (rating orange) */}
+        <div className="px-8 relative pt-3 pb-5  bottom-0 left-0 " style={{ borderColor: borderSoft, backgroundColor: rgba("#ffffff", 0.95) }}>
+          <div className="flex flex-row items-center  w-full justify-between">
+            {/* Vues (neutre) */}
+            <StatPill
+              icon={<FaEye size={14} />}
+              value={formattedViewCount}
+              tone="slate"
+            />
+
+            {/* Commentaires (neutre) */}
+            {item.comment_count !== undefined && (
               <StatPill
-                icon={<FaEye size={14} />}
-                value={formattedViewCount}
+                icon={<FaComment size={14} />}
+                value={new Intl.NumberFormat(i18n.language, { notation: "compact", maximumFractionDigits: 1 }).format(item.comment_count || 0)}
                 tone="slate"
               />
+            )}
 
-              {/* Commentaires (neutre) */}
-              {item.comment_count !== undefined && (
-                <StatPill
-                  icon={<FaComment size={14} />}
-                  value={new Intl.NumberFormat(i18n.language, { notation: "compact", maximumFractionDigits: 1 }).format(item.comment_count || 0)}
-                  tone="slate"
-                />
-              )}
-
-              {/* Partages (neutre) */}
-              {item.share_count !== undefined && (
-                <StatPill
-                  icon={<FaShareAlt size={14} />}
-                  value={new Intl.NumberFormat(i18n.language, { notation: "compact", maximumFractionDigits: 1 }).format(item.share_count || 0)}
-                  tone="slate"
-                />
-              )}
-
-              {/* Avis — toujours orange */}
+            {/* Partages (neutre) */}
+            {item.share_count !== undefined && (
               <StatPill
-                icon={<FaStar size={14} />}
-                value={formattedRating}
-                suffix="/5"
-                tone="orange"
+                icon={<FaShareAlt size={14} />}
+                value={new Intl.NumberFormat(i18n.language, { notation: "compact", maximumFractionDigits: 1 }).format(item.share_count || 0)}
+                tone="slate"
               />
-            </div>
+            )}
+
+            {/* Avis — toujours orange */}
+            <StatPill
+              icon={<FaStar size={14} />}
+              value={formattedRating}
+              suffix="/5"
+              tone="orange"
+            />
           </div>
+        </div>
       </article>
 
       {/* ✅ Modal Password réutilisable */}

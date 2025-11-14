@@ -236,142 +236,166 @@ export default function ArticleLibrary({
   }, [rows]);
 
   // --- Loading (serveur si fetchArticles) ---
+  // Effet dédié AU MODE SERVEUR (fetchArticles fourni)
   useEffect(() => {
+    if (!fetchArticles) return;
     let cancelled = false;
+
     async function load() {
       setLoading(true);
       try {
         const safe = toSafeFilters(filters); // ← garanti propre
-        if (fetchArticles) {
-          const { data, total: tot, facets } = await fetchArticles({
-            page, perPage, search: debouncedSearch, filters: safe, sort,
-          });
-          if (cancelled) return;
-          setRows(data ?? []);
-          setTotal(tot ?? 0);
-          if (facets) {
-            setFacetAuthors(facets.authors || null);
-            setFacetCategories(facets.categories || null);
-            setFacetTags(facets.tags || null);
-          }
-        } else {
-          // Mode client (fallback)
-          const src = Array.isArray(articles) ? articles : [];
-          const { tokens, q } = parseSearch(debouncedSearch);
+        const { data, total: tot, facets } = await fetchArticles({
+          page,
+          perPage,
+          search: debouncedSearch,
+          filters: safe,
+          sort,
+        });
+        if (cancelled) return;
+        setRows(data ?? []);
+        setTotal(tot ?? 0);
+        if (facets) {
+          setFacetAuthors(facets.authors || null);
+          setFacetCategories(facets.categories || null);
+          setFacetTags(facets.tags || null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
 
-          let filtered = src.filter((r) => {
-            if (!q) return true;
-            const s = q.toLowerCase();
-            const categoryFallback = getCategoryFromTitle(r?.title).toLowerCase();
-            return (
-              (r?.title || "").toLowerCase().includes(s) ||
-              (r?.excerpt || "").toLowerCase().includes(s) ||
-              (r?.content || "").toLowerCase().includes(s) ||
-              categoryFallback.includes(s)
-            );
-          });
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [page, perPage, debouncedSearch, filters, sort, fetchArticles]);
 
-          tokens.forEach((t) => {
-            const key = (t?.k || "").toLowerCase();
-            const val = String(t?.v ?? "").toLowerCase();
-            if (key === "author") {
-              filtered = filtered.filter((r) => {
-                const candidates = articleAuthorCandidates(r);
-                return candidates.some(c => String(c).toLowerCase().includes(val));
-              });
-            } else if (key === "author_id") {
-              filtered = filtered.filter((r) => {
-                const candidates = articleAuthorCandidates(r);
-                return candidates.some(c => String(c).toLowerCase() === val);
-              });
-            } else if (key === "category") {
-              filtered = filtered.filter((r) => {
-                const names = articleCategoryCandidates(r).map(x => String(x).toLowerCase());
-                return names.includes(val) || getCategoryFromTitle(r?.title).toLowerCase() === val;
-              });
-            } else if (key === "tag") {
-              filtered = filtered.filter((r) =>
-                (r?.tags || []).some((tg) => String(tg?.name || tg?.id || "").toLowerCase() === val)
-              );
-            } else if (key === "before") {
-              filtered = filtered.filter((r) => new Date(r?.published_at) <= new Date(t.v));
-            } else if (key === "after") {
-              filtered = filtered.filter((r) => new Date(r?.published_at) >= new Date(t.v));
-            } else if (key === "rating") {
-              const op = t?.op === ">" ? ">" : "<";
-              filtered = filtered.filter((r) => {
-                const rating = parseFloat(r?.rating_average) || 0;
-                return op === ">" ? rating > parseFloat(t.v) : rating < parseFloat(t.v);
-              });
-            } else if (key === "featured") filtered = filtered.filter((r) => !!r?.is_featured);
-            else if (key === "sticky")   filtered = filtered.filter((r) => !!r?.is_sticky);
-          });
+  // Effet dédié AU MODE CLIENT (fallback sur "articles")
+  useEffect(() => {
+    if (fetchArticles) return; // si on est en mode serveur, on ne fait rien ici
+    let cancelled = false;
 
-          // Filtres UI (safe)
-          const safe = toSafeFilters(filters);
+    function load() {
+      setLoading(true);
+      try {
+        const src = Array.isArray(articles) ? articles : [];
+        const { tokens, q } = parseSearch(debouncedSearch);
 
-          if (safe.categories?.length) {
-            filtered = filtered.filter((r) => {
-              const namesOrIds = articleCategoryCandidates(r).map(x => String(x));
-              // match if any safe category equals any candidate (id or name)
-              return safe.categories.some(sc => namesOrIds.includes(String(sc)));
-            });
-          }
-          if (safe.tags?.length) {
-            filtered = filtered.filter((r) =>
-              (r?.tags || []).some((tg) => {
-                const candidates = [tg?.id, tg?.name].filter(Boolean).map(String);
-                return safe.tags.some(st => candidates.includes(String(st)));
-              })
-            );
-          }
-          if (safe.authors?.length) {
+        let filtered = src.filter((r) => {
+          if (!q) return true;
+          const s = q.toLowerCase();
+          const categoryFallback = getCategoryFromTitle(r?.title).toLowerCase();
+          return (
+            (r?.title || "").toLowerCase().includes(s) ||
+            (r?.excerpt || "").toLowerCase().includes(s) ||
+            (r?.content || "").toLowerCase().includes(s) ||
+            categoryFallback.includes(s)
+          );
+        });
+
+        tokens.forEach((t) => {
+          const key = (t?.k || "").toLowerCase();
+          const val = String(t?.v ?? "").toLowerCase();
+          if (key === "author") {
             filtered = filtered.filter((r) => {
               const candidates = articleAuthorCandidates(r);
-              return safe.authors.some(sa => candidates.includes(String(sa)));
+              return candidates.some(c => String(c).toLowerCase().includes(val));
             });
-          }
-          if (safe.featuredOnly) filtered = filtered.filter((r) => !!r?.is_featured);
-          if (safe.stickyOnly)   filtered = filtered.filter((r) => !!r?.is_sticky);
-          if (safe.unreadOnly)   filtered = filtered.filter((r) => !isRead(r?.id));
-          if (safe.dateFrom)     filtered = filtered.filter((r) => new Date(r?.published_at) >= new Date(safe.dateFrom));
-          if (safe.dateTo)       filtered = filtered.filter((r) => new Date(r?.published_at) <= new Date(safe.dateTo));
-          if (safe.ratingMin > 0) filtered = filtered.filter((r) => (parseFloat(r?.rating_average) || 0) >= safe.ratingMin);
-          if (safe.ratingMax < 5) filtered = filtered.filter((r) => (parseFloat(r?.rating_average) || 0) <= safe.ratingMax);
+          } else if (key === "author_id") {
+            filtered = filtered.filter((r) => {
+              const candidates = articleAuthorCandidates(r);
+              return candidates.some(c => String(c).toLowerCase() === val);
+            });
+          } else if (key === "category") {
+            filtered = filtered.filter((r) => {
+              const names = articleCategoryCandidates(r).map(x => String(x).toLowerCase());
+              return names.includes(val) || getCategoryFromTitle(r?.title).toLowerCase() === val;
+            });
+          } else if (key === "tag") {
+            filtered = filtered.filter((r) =>
+              (r?.tags || []).some((tg) => String(tg?.name || tg?.id || "").toLowerCase() === val)
+            );
+          } else if (key === "before") {
+            filtered = filtered.filter((r) => new Date(r?.published_at) <= new Date(t.v));
+          } else if (key === "after") {
+            filtered = filtered.filter((r) => new Date(r?.published_at) >= new Date(t.v));
+          } else if (key === "rating") {
+            const op = t?.op === ">" ? ">" : "<";
+            filtered = filtered.filter((r) => {
+              const rating = parseFloat(r?.rating_average) || 0;
+              return op === ">" ? rating > parseFloat(t.v) : rating < parseFloat(t.v);
+            });
+          } else if (key === "featured") filtered = filtered.filter((r) => !!r?.is_featured);
+          else if (key === "sticky")   filtered = filtered.filter((r) => !!r?.is_sticky);
+        });
 
-          if (sort?.length) {
-            filtered.sort((a, b) => {
-              for (const { key, dir } of sort) {
-                let va = a?.[key], vb = b?.[key];
-                if (key === "author") {
-                  va = a?.author_id ?? a?.author?.id;
-                  vb = b?.author_id ?? b?.author?.id;
-                }
-                if (key === "category") {
-                  va = getCategoryFromTitle(a?.title);
-                  vb = getCategoryFromTitle(b?.title);
-                }
-                if (key === "rating_average") {
-                  va = parseFloat(a?.rating_average) || 0;
-                  vb = parseFloat(b?.rating_average) || 0;
-                }
-                if (["published_at","created_at","updated_at"].includes(key)) {
-                  va = va ? new Date(va).getTime() : null;
-                  vb = vb ? new Date(vb).getTime() : null;
-                }
-                if (va == null && vb == null) continue;
-                if (va == null) return dir === "asc" ? -1 : 1;
-                if (vb == null) return dir === "asc" ? 1 : -1;
-                if (va < vb) return dir === "asc" ? -1 : 1;
-                if (va > vb) return dir === "asc" ?  1 : -1;
+        // Filtres UI (safe)
+        const safe = toSafeFilters(filters);
+
+        if (safe.categories?.length) {
+          filtered = filtered.filter((r) => {
+            const namesOrIds = articleCategoryCandidates(r).map(x => String(x));
+            // match if any safe category equals any candidate (id or name)
+            return safe.categories.some(sc => namesOrIds.includes(String(sc)));
+          });
+        }
+        if (safe.tags?.length) {
+          filtered = filtered.filter((r) =>
+            (r?.tags || []).some((tg) => {
+              const candidates = [tg?.id, tg?.name].filter(Boolean).map(String);
+              return safe.tags.some(st => candidates.includes(String(st)));
+            })
+          );
+        }
+        if (safe.authors?.length) {
+          filtered = filtered.filter((r) => {
+            const candidates = articleAuthorCandidates(r);
+            return safe.authors.some(sa => candidates.includes(String(sa)));
+          });
+        }
+        if (safe.featuredOnly) filtered = filtered.filter((r) => !!r?.is_featured);
+        if (safe.stickyOnly)   filtered = filtered.filter((r) => !!r?.is_sticky);
+        if (safe.unreadOnly)   filtered = filtered.filter((r) => !isRead(r?.id));
+        if (safe.dateFrom)     filtered = filtered.filter((r) => new Date(r?.published_at) >= new Date(safe.dateFrom));
+        if (safe.dateTo)       filtered = filtered.filter((r) => new Date(r?.published_at) <= new Date(safe.dateTo));
+        if (safe.ratingMin > 0) filtered = filtered.filter((r) => (parseFloat(r?.rating_average) || 0) >= safe.ratingMin);
+        if (safe.ratingMax < 5) filtered = filtered.filter((r) => (parseFloat(r?.rating_average) || 0) <= safe.ratingMax);
+
+        if (sort?.length) {
+          filtered.sort((a, b) => {
+            for (const { key, dir } of sort) {
+              let va = a?.[key], vb = b?.[key];
+              if (key === "author") {
+                va = a?.author_id ?? a?.author?.id;
+                vb = b?.author_id ?? b?.author?.id;
               }
-              return 0;
-            });
-          }
+              if (key === "category") {
+                va = getCategoryFromTitle(a?.title);
+                vb = getCategoryFromTitle(b?.title);
+              }
+              if (key === "rating_average") {
+                va = parseFloat(a?.rating_average) || 0;
+                vb = parseFloat(b?.rating_average) || 0;
+              }
+              if (["published_at","created_at","updated_at"].includes(key)) {
+                va = va ? new Date(va).getTime() : null;
+                vb = vb ? new Date(vb).getTime() : null;
+              }
+              if (va == null && vb == null) continue;
+              if (va == null) return dir === "asc" ? -1 : 1;
+              if (vb == null) return dir === "asc" ? 1 : -1;
+              if (va < vb) return dir === "asc" ? -1 : 1;
+              if (va > vb) return dir === "asc" ?  1 : -1;
+            }
+            return 0;
+          });
+        }
 
-          const tot = filtered.length;
-          const start = (page - 1) * perPage;
-          const data  = filtered.slice(start, start + perPage);
+        const tot = filtered.length;
+        const start = (page - 1) * perPage;
+        const data  = filtered.slice(start, start + perPage);
+        if (!cancelled) {
           setRows(data);
           setTotal(tot);
         }
@@ -379,9 +403,11 @@ export default function ArticleLibrary({
         if (!cancelled) setLoading(false);
       }
     }
+
     load();
-    return () => { cancelled = true; };
-    // dependencies intentionally include filters (object) - but we control updates via applyFilters + shallow equality
+    return () => {
+      cancelled = true;
+    };
   }, [page, perPage, debouncedSearch, filters, sort, articles, fetchArticles]);
 
   // Persist prefs (view, perPage, filters, loadMode)
@@ -399,7 +425,10 @@ export default function ArticleLibrary({
   // Infinite scroll
   const sentinelRef = useRef(null);
   const [infiniteRows, setInfiniteRows] = useState([]);
-  useEffect(() => { if (loadMode === "infinite") setInfiniteRows([]); }, [debouncedSearch, filters, sort, perPage, loadMode]);
+  useEffect(() => {
+    if (loadMode === "infinite") setInfiniteRows([]);
+  }, [debouncedSearch, filters, sort, perPage, loadMode]);
+
   useEffect(() => {
     if (loadMode !== "infinite") return;
     setInfiniteRows((prev) => {
@@ -407,6 +436,7 @@ export default function ArticleLibrary({
       return [...prev, ...rows.filter((x) => !ids.has(x.id))];
     });
   }, [rows, loadMode]);
+
   useEffect(() => {
     if (loadMode !== "infinite") return;
     const el = sentinelRef.current;

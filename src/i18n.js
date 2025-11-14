@@ -407,7 +407,8 @@ i18n
 "Share": "Share",
 "Oops, something went wrong.": "Oops, something went wrong.",
 "Unknown error.": "Unknown error.",
-
+"infinite": "Infinite",
+"paginated": "Paginated",
 
   "visualiseur": {
     "title": "Viewer",
@@ -1944,6 +1945,10 @@ notfound: {
 
   "language": "Langue",
   "loading": "Chargement en cours..."
+,
+"infinite":"Infinie",
+"paginated":"Paginée",
+"none":"aucune"
 ,
 // FR
 notfound: {
