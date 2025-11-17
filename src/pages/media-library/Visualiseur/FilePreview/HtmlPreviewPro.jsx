@@ -16,7 +16,7 @@ function getOriginalHref(u) {
 export default function HtmlPreviewPro({ src, title = "Aperçu HTML" }) {
   const [html, setHtml] = useState("");
   const [err, setErr] = useState("");
-  const [trusted, setTrusted] = useState(false); // <- mode Confiance (scripts autorisés)
+  const [trusted, setTrusted] = useState(true); // <- mode Confiance (scripts autorisés)
 
   useEffect(() => {
     let cancelled = false;

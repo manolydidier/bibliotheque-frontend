@@ -7,7 +7,7 @@ import {
   FaHeart, FaRegHeart, FaTag, FaLockOpen, FaLock,
   FaEllipsisV, FaExternalLinkAlt, FaCopy, FaLink,
 } from "react-icons/fa";
-import { FaComment, FaShareAlt, FaTimes } from "react-icons/fa";
+import { FaComment, FaShareAlt } from "react-icons/fa";
 import SmartImage from "./SmartImage";
 import ShareButton from "../Visualiseur/share/ShareButton";
 import { cls } from "../shared/utils/format";
@@ -276,7 +276,6 @@ export default function GridCard({ item, routeBase, onOpen }) {
   const borderSoft = rgba(effectiveTone, 0.30);
   const topBar = rgba(effectiveTone, 0.25);
   const mediaTint = rgba(effectiveTone, 0.10);
-  const iconBadgeBg = rgba(effectiveTone, 0.12);
   const textOnTone = readableTextColor(effectiveTone);
 
   // Fallback classes
@@ -331,12 +330,12 @@ export default function GridCard({ item, routeBase, onOpen }) {
     "shadow-sm overflow-hidden transition-all duration-500",
     "w-full max-w-none min-w-[400px]",
     hoverCls,
-    appearCls,          // <-- ajout de l’animation d’apparition
+    appearCls,
     borderColorClass
   );
 
   const overlayBtnClass = cls(
-    "p-5 bg-white/95 hover:bg-white text-slate-700 rounded-2xl shadow-xl",
+    "p-5 rounded-2xl shadow-xl",
     "transition-all duration-300 transform hover:scale-110"
   );
 
@@ -643,12 +642,18 @@ export default function GridCard({ item, routeBase, onOpen }) {
                 className="transition-all duration-500 group-hover:scale-[1.03] group-hover:brightness-[1.03] group-hover:saturate-[1.03]"
               />
 
-              {/* Overlay clair */}
+              {/* Overlay liquid glass blanc */}
               <div
                 className={cls(
-                  "absolute inset-0 bg-white/55 backdrop-blur-sm flex items-center justify-center gap-6 transition-all duration-300",
+                  "absolute inset-0 flex items-center justify-center gap-6 transition-all duration-300",
+                  "backdrop-blur-xl",
                   canHover() ? (isHovered ? "opacity-100" : "opacity-0 pointer-events-none") : "opacity-100"
                 )}
+                style={{
+                  background: "radial-gradient(circle at 10% 0%, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.38) 55%)",
+                  borderTop: "1px solid rgba(255,255,255,0.35)",
+                  borderBottom: "1px solid rgba(255,255,255,0.25)",
+                }}
                 aria-hidden={canHover() ? !isHovered : false}
               >
                 {/* Lire */}
@@ -656,18 +661,32 @@ export default function GridCard({ item, routeBase, onOpen }) {
                   to={to}
                   onMouseEnter={prefetchDetail}
                   onClick={handleRead}
-                  className={cls(overlayBtnClass, "hover:text-blue-600")}
+                  className={overlayBtnClass}
                   title={t('gridcard.actions.read')}
+                  aria-label={t('gridcard.actions.read')}
+                  style={{
+                    background: "rgba(255,255,255,0.32)",
+                    border: "1px solid rgba(255,255,255,0.65)",
+                    boxShadow: "0 18px 45px rgba(15,23,42,0.25)",
+                    color: "rgba(15,23,42,0.9)",
+                  }}
                 >
                   <FaEye size={22} />
                 </Link>
 
-                {/* 🔒 Bouton mot de passe */}
+                {/* 🔒 Bouton mot de passe (glass) */}
                 {isPwdProtected(item.visibility) && (
                   <button
-                    className={cls(overlayBtnClass, "hover:text-rose-600")}
+                    className={overlayBtnClass}
                     onClick={openPwdManually}
                     title={t('gridcard.actions.enterPassword')}
+                    aria-label={t('gridcard.actions.enterPassword')}
+                    style={{
+                      background: "rgba(255,255,255,0.26)",
+                      border: "1px solid rgba(148,163,184,0.6)",
+                      boxShadow: "0 18px 45px rgba(15,23,42,0.22)",
+                      color: "rgba(15,23,42,0.92)",
+                    }}
                   >
                     <FaLock size={20} />
                   </button>
@@ -678,30 +697,49 @@ export default function GridCard({ item, routeBase, onOpen }) {
             <div className="text-slate-400 transition-all duration-300 transform group-hover:scale-110 relative text-6xl">📝</div>
           )}
 
-          {/* Pastille icône */}
+          {/* Pastille icône — liquid glass */}
           <div
             className="absolute bottom-3 right-3 z-20 w-10 h-10 rounded-xl flex items-center justify-center shadow"
-            style={{ backgroundColor: iconBadgeBg, border: `1px solid ${rgba(effectiveTone, .18)}` }}
+            style={{
+              background: "rgba(255,255,255,0.32)",
+              backdropFilter: "blur(14px)",
+              WebkitBackdropFilter: "blur(14px)",
+              border: `1px solid rgba(226,232,240,0.9)`,
+              boxShadow: "0 16px 40px rgba(15,23,42,0.25)",
+            }}
             title={iconKey}
           >
             <FontAwesomeIcon icon={FA_ICON} className="text-xl" style={{ color: effectiveTone }} />
           </div>
 
-          {/* Badge Visibilité */}
+          {/* Badge Visibilité (glass, texte gardé) */}
           {item.visibility && item.visibility !== "public" && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-white/95 border border-slate-200/70 text-slate-800 shadow">
-                {isPrivate(item.visibility) ? <FaLock /> : <FaLockOpen />}
+              <span
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-md"
+                style={{
+                  background: "linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.55))",
+                  backdropFilter: "blur(14px)",
+                  WebkitBackdropFilter: "blur(14px)",
+                  border: "1px solid rgba(226,232,240,0.9)",
+                  color: "rgba(15,23,42,0.85)",
+                }}
+              >
+                {isPrivate(item.visibility) ? (
+                  <FaLock size={12} />
+                ) : (
+                  <FaLockOpen size={12} style={{ color: "#0ea5e9" }} />
+                )}
                 {humanizeVisibility(item.visibility, t)}
               </span>
             </div>
           )}
 
-          {/* Buttons top right: share + menu */}
+          {/* Buttons top right: share + menu (glass) */}
           <div className="absolute top-4 right-4 z-20 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
             <ShareButton
               variant="icon"
-              className="p-2 rounded-xl bg-white/95 text-slate-700 shadow hover:scale-105 transition-transform"
+              className="p-2 rounded-xl text-slate-700 hover:scale-105 transition-transform"
               title={item.title}
               excerpt={item.excerpt}
               url={shareUrl}
@@ -710,6 +748,13 @@ export default function GridCard({ item, routeBase, onOpen }) {
               emailEndpoint="/share/email"
               defaultWhatsNumber="33612345678"
               global={false}
+              style={{
+                background: "rgba(255,255,255,0.26)",
+                backdropFilter: "blur(14px)",
+                WebkitBackdropFilter: "blur(14px)",
+                border: "1px solid rgba(226,232,240,0.9)",
+                boxShadow: "0 14px 35px rgba(15,23,42,0.22)",
+              }}
             />
 
             <div className="relative" ref={menuButtonRef}>
@@ -721,8 +766,15 @@ export default function GridCard({ item, routeBase, onOpen }) {
                   setMenuIndex(0);
                   setMenuOpen(v => !v);
                 }}
-                className="p-2 rounded-xl bg-white/95 text-slate-700 shadow hover:scale-105 transition-transform"
+                className="p-2 rounded-xl text-slate-700 hover:scale-105 transition-transform"
                 title={t('gridcard.actions.more')}
+                style={{
+                  background: "rgba(255,255,255,0.26)",
+                  backdropFilter: "blur(14px)",
+                  WebkitBackdropFilter: "blur(14px)",
+                  border: "1px solid rgba(226,232,240,0.9)",
+                  boxShadow: "0 14px 35px rgba(15,23,42,0.22)",
+                }}
               >
                 <FaEllipsisV size={16} />
               </button>
@@ -740,21 +792,29 @@ export default function GridCard({ item, routeBase, onOpen }) {
                   className={[
                     "absolute right-0 mt-2 z-30",
                     "origin-top-right select-none",
-                    "min-w-52 rounded-2xl border border-slate-200/60",
-                    "bg-white/90 backdrop-blur-xl",
-                    "shadow-[0_12px_40px_-12px_rgba(2,6,23,0.18)]",
-                    "ring-1 ring-white/50",
+                    "min-w-52 rounded-2xl border border-slate-200/0",
+                    "backdrop-blur-xl",
+                    "shadow-[0_18px_50px_-12px_rgba(15,23,42,0.45)]",
+                    "ring-1 ring-white/40",
                     "data-[state=open]:animate-[fadeIn_.18s_ease-out]",
                     "data-[state=open]:scale-100 scale-95",
                     "overflow-hidden"
                   ].join(" ")}
                   data-state="open"
-                  style={{ willChange: "transform, opacity" }}
+                  style={{
+                    willChange: "transform, opacity",
+                    background: "linear-gradient(145deg, rgba(255,255,255,0.86), rgba(248,250,252,0.78))",
+                    border: "1px solid rgba(226,232,240,0.95)",
+                  }}
                 >
-                  {/* caret */}
+                  {/* caret glass */}
                   <div
-                    className="absolute -top-2 right-6 w-3 h-3 rotate-45 bg-white/90 border border-slate-200/60 border-b-0 border-r-0"
+                    className="absolute -top-2 right-6 w-3 h-3 rotate-45 border-b-0 border-r-0"
                     aria-hidden
+                    style={{
+                      background: "rgba(255,255,255,0.9)",
+                      border: "1px solid rgba(226,232,240,0.95)",
+                    }}
                   />
                   {/* titre subtil */}
                   <div className="px-3.5 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-slate-500/80">
@@ -766,7 +826,6 @@ export default function GridCard({ item, routeBase, onOpen }) {
                     {menuModel.map((m) => {
                       if (m.type === "sep") return <div key={m.id} className="my-1 h-px bg-slate-100/80" />;
                       const Icon = m.icon;
-                      // calcul d'index pour focus-style
                       const idxAmongActions = menuModel.filter(x => !x.type).findIndex(x => x.id === m.id);
                       const focused = (menuIndex === idxAmongActions);
                       return (
@@ -781,7 +840,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
                             "text-[13px] font-medium",
                             "text-slate-700",
                             "transition-colors",
-                            "hover:bg-slate-50/80 focus:bg-slate-50/90",
+                            "hover:bg-slate-50/70 focus:bg-slate-50/90",
                             "outline-none",
                             focused ? "ring-2 ring-blue-200/70" : ""
                           ].join(" ")}
@@ -804,7 +863,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
             </div>
           </div>
 
-          {/* Coins : favoris / like */}
+          {/* Coins : favoris / like — glass */}
           <div className="absolute top-4 left-4 flex gap-2 z-20">
             <button
               aria-label={fav ? t('gridcard.actions.removeFavorite') : t('gridcard.actions.addFavorite')}
@@ -812,20 +871,22 @@ export default function GridCard({ item, routeBase, onOpen }) {
               onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onToggleFav(e)}
               onClick={onToggleFav}
               className={cls(
-                "p-3 rounded-xl transition-all duration-300 shadow backdrop-blur-md transform hover:scale-105 flex items-center gap-2",
-                fav
-                  ? "text-amber-500 bg-amber-50/90 hover:bg-amber-100/90"
-                  : "text-slate-500 bg-white/90 hover:bg-white hover:text-amber-500"
+                "p-3 rounded-xl transition-all duration-300 backdrop-blur-md transform hover:scale-105 flex items-center gap-2",
+                fav ? "text-amber-500" : "text-slate-500 hover:text-amber-500"
               )}
               title={fav ? t('gridcard.actions.removeFavorite') : t('gridcard.actions.addFavorite')}
               data-testid="btn-fav"
+              style={{
+                background: "rgba(255,255,255,0.26)",
+                border: fav
+                  ? "1px solid rgba(251,191,36,0.85)"
+                  : "1px solid rgba(226,232,240,0.9)",
+                boxShadow: "0 16px 40px rgba(15,23,42,0.25)",
+              }}
             >
               {fav ? <FaStar size={18} /> : <FaRegStar size={18} />}
               <span className="text-xs font-semibold select-none">{favoritesCount ?? 0}</span>
             </button>
-            {/* Like (optionnel, laissé en commentaire)
-            <button ...>...</button>
-            */}
           </div>
         </div>
 
@@ -902,7 +963,7 @@ export default function GridCard({ item, routeBase, onOpen }) {
                   </div>
                 </div>
 
-                {/* Visibilité */}
+                {/* Visibilité (panneau meta) */}
                 {item.visibility && item.visibility !== "public" && (
                   <div
                     className="flex items-center gap-2 rounded-lg px-3 py-2"
@@ -927,8 +988,8 @@ export default function GridCard({ item, routeBase, onOpen }) {
           </div>
         </div>
         {/* Stats — compact, valeurs visibles, icônes neutres (rating orange) */}
-        <div className="px-8 relative pt-3 pb-5  bottom-0 left-0 " style={{ borderColor: borderSoft, backgroundColor: rgba("#ffffff", 0.95) }}>
-          <div className="flex flex-row items-center  w-full justify-between">
+        <div className="px-8 relative pt-3 pb-5 bottom-0 left-0" style={{ borderColor: borderSoft, backgroundColor: rgba("#ffffff", 0.95) }}>
+          <div className="flex flex-row items-center w-full justify-between">
             {/* Vues (neutre) */}
             <StatPill
               icon={<FaEye size={14} />}

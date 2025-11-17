@@ -17,7 +17,7 @@ import {
 import { cls } from "../shared/utils/format";
 import "./FiltersPanel.css";
 import api from "../../../services/api";
-
+import { createPortal } from "react-dom";
 // -------------------------------------------
 // Constants & defaults
 // -------------------------------------------
@@ -396,7 +396,7 @@ const Pill = ({ label, icon, open, onToggle, disabled = false, badge, theme = TH
     aria-expanded={open}
     className={cls(
       "h-10 px-3 rounded-xl border inline-flex items-center gap-2 whitespace-nowrap relative",
-      "bg-white border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-all",
+      "bg-slate-50/80 backdrop-blur-md border-slate-200 hover:border-blue-300 hover:bg-blue-50/80 transition-all",
       "disabled:opacity-50 disabled:cursor-not-allowed",
       "focus:outline-none",
       theme.primaryRing,
@@ -452,7 +452,7 @@ const InputWithIcon = ({ icon, onChange, label, ...props }) => (
       className={cls(
         "w-full h-10 pl-9 pr-3 rounded-lg border border-slate-200",
         "focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300",
-        "transition-all placeholder:text-slate-400"
+        "transition-all placeholder:text-slate-400 bg-white/90"
       )}
       aria-label={label}
     />
@@ -586,6 +586,9 @@ export default function FiltersPanel({
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showSearchHistory, setShowSearchHistory] = useState(false);
   const [isHistoryPinned, setIsHistoryPinned] = useState(false);
+
+  // drag & drop mode (page / infinite) pour que ce soit plus "vivant"
+  const [dragMode, setDragMode] = useState(null);
 
   // ✅ Tablet utilise le modal mobile aussi
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 1024px)").matches);
@@ -804,373 +807,389 @@ export default function FiltersPanel({
 
   // --- UI ---
   return (
-    <div className="bg-white/20 border-b border-slate-200/20 sticky top-0 z-40 backdrop:blur-sm">
-      {/* Header */}
-    <div className="px-4 md:px-6 py-3">
-  <div className="flex items-center justify-between gap-4">
-    {/* Search */}
     <div
-      ref={searchWrapperRef}
       className={cls(
-        "relative flex-1 min-w-[220px] max-w-[640px] transition-all duration-200 z-[70]",
-        // ⬇️ Glass plus visible sur fond blanc
-        "rounded-2xl border border-slate-200/70 bg-slate-50/80 backdrop-blur-xl",
-        isSearchFocused
-          ? "scale-[1.01] shadow-[0_12px_35px_rgba(15,23,42,0.22)]"
-          : "scale-[1] shadow-[0_4px_18px_rgba(15,23,42,0.12)]"
+        "sticky top-0 z-40 border-b border-slate-200/60",
+        "bg-slate-50/70 backdrop-blur-md supports-[backdrop-filter]:bg-slate-50/60"
       )}
     >
-      <input
-        type="search"
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-        onFocus={() => { setIsSearchFocused(true); setShowSearchHistory(true); }}
-        onBlur={() => { setIsSearchFocused(false); if (!isHistoryPinned) setShowSearchHistory(false); }}
-        placeholder={isMobile ? t('filters.search.placeholder') : ""}
-        className={cls(
-          "w-full pl-10 pr-20 h-10 rounded-2xl border-0 bg-transparent text-slate-900",
-          "placeholder:text-slate-400",
-          "transition-[box-shadow,border-color,transform] duration-200",
-          "focus:outline-none",
-          theme.primaryRing,
-          isSearchFocused
-            ? "shadow-[inset_0_0_0_1px_rgba(59,130,246,.35)]"
-            : "shadow-none"
-        )}
-        aria-label={t('filters.search.ariaLabel')}
-        autoComplete="off"
-      />
-
-      {!isMobile && !searchQuery.length && (
-        <div className="pointer-events-none absolute left-10 right-20 top-1/2 -translate-y-1/2 text-slate-500 text-[13px] select-none">
-          <span className="inline-flex items-center gap-2">
-            <span className="whitespace-nowrap">
-              {animatedHintText}
-              {!prefersReduced && (
-                <span className="ml-0.5 inline-block w-[1px] h-[1.2em] align-middle bg-slate-400 animate-caret-blink" />
-              )}
-            </span>
-            <span className="hidden md:inline text-[11px] px-2 py-0.5 rounded-full bg-slate-50/90 border border-slate-200/80 backdrop-blur-sm">
-              {t('filters.search.tip')}
-            </span>
-          </span>
-        </div>
-      )}
-
-      <FaSearch
-        className={cls(
-          "absolute left-3 top-1/2 -translate-y-1/2 transition-all duration-200",
-          isSearchFocused ? `${theme.accentIcon} translate-x-[1px] scale-110` : "text-slate-400 translate-x-0 scale-100"
-        )}
-        aria-hidden="true"
-      />
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-        <button
-          type="button"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => { setIsHistoryPinned((p) => !p); setShowSearchHistory((p) => !p); }}
-          title={isHistoryPinned ? t('filters.search.hideHistory') : t('filters.search.showHistory')}
-          className={cls(
-            "h-8 w-8 rounded-xl border inline-flex items-center justify-center transition-all duration-200",
-            "active:scale-95 focus:outline-none",
-            theme.primaryRing,
-            isHistoryPinned
-              ? "bg-slate-50/95 text-slate-900 border-slate-200/90 shadow-sm"
-              : "bg-slate-50/60 text-slate-600 border-slate-200/80 hover:bg-slate-50/90 hover:text-slate-800"
-          )}
-          aria-pressed={isHistoryPinned}
-        >
-          <FaHistory />
-        </button>
-
-        {searchQuery && (
-          <button
-            type="button"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setSearchQuery("")}
+      {/* Header */}
+      <div className="px-4 md:px-6 py-3">
+        <div className="flex items-center justify-between gap-4">
+          {/* Search */}
+          <div
+            ref={searchWrapperRef}
             className={cls(
-              "h-8 w-8 rounded-xl border inline-flex items-center justify-center transition-all duration-200 active:scale-95 focus:outline-none",
-              theme.primaryRing,
-              "bg-slate-50/60 text-slate-600 border-slate-200/80 hover:bg-slate-50/90 hover:text-slate-800"
+              "relative flex-1 min-w-[220px] max-w-[640px] transition-all duration-200 z-[70]",
+              // Glass plus visible sur fond blanc
+              "rounded-2xl border border-slate-200/70 bg-slate-50/80 backdrop-blur-xl",
+              isSearchFocused
+                ? "scale-[1.01] shadow-[0_12px_35px_rgba(15,23,42,0.22)]"
+                : "scale-[1] shadow-[0_4px_18px_rgba(15,23,42,0.12)]"
             )}
-            title={t('filters.search.clear')}
           >
-            <FaTimes />
-          </button>
-        )}
-
-        {searchQuery !== String(search || "") && (
-          <button
-            type="button"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={handleSearch}
-            className={cls(
-              "h-8 px-3 rounded-xl text-white font-medium inline-flex items-center gap-2 transition-all duration-200 active:scale-[0.98] focus:outline-none",
-              theme.primaryRing,
-              "bg-blue-600/95 hover:bg-blue-700 shadow-[0_8px_24px_rgba(37,99,235,0.45)] hover:-translate-y-[1px]"
-            )}
-            title={t('filters.search.execute')}
-          >
-            <FaRocket />
-          </button>
-        )}
-      </div>
-
-      {showSearchHistory && searchHistory.length > 0 && (
-        <div className="absolute left-0 right-0 top-[44px] transition-all duration-200 z-[80] opacity-100 translate-y-0 pointer-events-auto animate-[dropdown-in_.14s_ease-out]">
-          <div className="bg-slate-50/95 backdrop-blur-xl border border-slate-200/80 rounded-xl shadow-2xl overflow-hidden">
-            <div className="px-3 py-2 text-xs text-slate-600 border-b border-slate-100/80 flex items-center justify-between">
-              <span className="inline-flex items-center gap-2">
-                <FaHistory aria-hidden="true" /> {t('filters.search.recentSearches')}
-              </span>
-              <button
-                onClick={clearHistory}
-                className="text-red-500 hover:text-red-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-200 rounded"
-                title={t('filters.search.clearHistory')}
-              >
-                <FaTrash />
-              </button>
-            </div>
-            <div className="max-h-56 overflow-y-auto">
-              {searchHistory.map((h, index) => (
-                <button
-                  key={h.id}
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => { setSearchQuery(h.term); setTimeout(handleSearch, 0); }}
-                  className={cls(
-                    "w-full text-left px-3 py-2 text-sm text-slate-700 flex items-center gap-2 transition-all duration-150",
-                    "hover:bg-slate-50/80 focus-visible:outline-none focus-visible:bg-slate-100 active:scale-[0.98]"
-                  )}
-                  style={{ transitionDelay: `${Math.min(index, 6) * ANIMATION_DELAYS.HISTORY_STAGGER}ms` }}
-                >
-                  <FaSearch className="text-slate-400 text-xs" aria-hidden="true" />
-                  <span className="flex-1 truncate">{h.term}</span>
-                  <span className="text-[11px] text-slate-400">
-                    {new Date(h.timestamp).toLocaleDateString()}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-
-    {/* Right controls */}
-    <div className="flex items-center gap-2 ml-3">
-      {/* Thème (desktop – toujours caché pour l’instant) */}
-      <label className="relative hidden md:hidden">
-        <span className="sr-only">Theme</span>
-        <select
-          value={themeKey}
-          onChange={(e) => saveTheme(e.target.value)}
-          className={cls(
-            "h-10 px-3 rounded-xl border bg-slate-50/80 backdrop-blur-md text-sm cursor-pointer",
-            "border-slate-200/80 focus:outline-none",
-            theme.primaryRing
-          )}
-          title="Theme"
-        >
-          <option value="neutral">Neutral</option>
-          <option value="pro">Pro</option>
-          <option value="colored">Coloré</option>
-        </select>
-      </label>
-
-      {/* Vue grid / list */}
-      <div
-        className="hidden sm:flex bg-slate-50/80 backdrop-blur-md rounded-2xl border border-slate-200/80 p-1 shadow-sm"
-        role="tablist"
-      >
-        {[
-          { key: "grid", icon: FaThLarge, label: t('filters.view.grid') },
-          { key: "list", icon: FaTable,   label: t('filters.view.list') },
-        ].map(({ key, icon: Icon, label }) => {
-          const active = view === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setView(key)}
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              onFocus={() => { setIsSearchFocused(true); setShowSearchHistory(true); }}
+              onBlur={() => { setIsSearchFocused(false); if (!isHistoryPinned) setShowSearchHistory(false); }}
+              placeholder={isMobile ? t('filters.search.placeholder') : ""}
               className={cls(
-                "h-8 px-3 rounded-xl text-sm inline-flex items-center gap-2 transition-all",
+                "w-full pl-10 pr-20 h-10 rounded-2xl border-0 bg-transparent text-slate-900",
+                "placeholder:text-slate-400",
+                "transition-[box-shadow,border-color,transform] duration-200",
                 "focus:outline-none",
                 theme.primaryRing,
-                active
-                  ? "bg-white text-slate-900 shadow-[0_8px_18px_rgba(15,23,42,0.20)] font-semibold"
-                  : "text-slate-500 hover:bg-white/60"
+                isSearchFocused
+                  ? "shadow-[inset_0_0_0_1px_rgba(59,130,246,.35)]"
+                  : "shadow-none"
               )}
-              title={label}
-              role="tab"
-              aria-selected={active}
-            >
-              <Icon aria-hidden="true" />
-            </button>
-          );
-        })}
-      </div>
+              aria-label={t('filters.search.ariaLabel')}
+              autoComplete="off"
+            />
 
-      {/* Per page */}
-      <label className="relative hidden sm:block">
-        <span className="sr-only">{t('filters.itemsPerPage')}</span>
-        <select
-          value={perPage}
-          onChange={(e) => setPerPage(Number(e.target.value))}
-          className={cls(
-            "h-10 px-3 rounded-xl border bg-slate-50/80 backdrop-blur-md text-sm focus:outline-none cursor-pointer",
-            "border-slate-200/80",
-            theme.primaryRing
-          )}
-          title={t('filters.itemsPerPage')}
-        >
-          {[12, 24, 48, 96].map((count) => (
-            <option key={count} value={count}>{count}/page</option>
-          ))}
-        </select>
-      </label>
+            {!isMobile && !searchQuery.length && (
+              <div className="pointer-events-none absolute left-10 right-20 top-1/2 -translate-y-1/2 text-slate-500 text-[13px] select-none">
+                <span className="inline-flex items-center gap-2">
+                  <span className="whitespace-nowrap">
+                    {animatedHintText}
+                    {!prefersReduced && (
+                      <span className="ml-0.5 inline-block w-[1px] h-[1.2em] align-middle bg-slate-400 animate-caret-blink" />
+                    )}
+                  </span>
+                  <span className="hidden md:inline text-[11px] px-2 py-0.5 rounded-full bg-slate-50/90 border border-slate-200/80 backdrop-blur-sm">
+                    {t('filters.search.tip')}
+                  </span>
+                </span>
+              </div>
+            )}
 
-      {/* Mode de chargement : pagination classique / scroll infini */}
-      <div
-        className={cls(
-          "hidden sm:flex relative items-center rounded-2xl border border-slate-200/80",
-          "bg-slate-50/80 backdrop-blur-md p-1 shadow-sm",
-          theme.primaryRing
-        )}
-        role="tablist"
-        aria-label={t('filters.loadMode.label') || 'Mode de chargement'}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          const mode = e.dataTransfer.getData("text/plain");
-          if (mode === "page" || mode === "infinite") {
-            setLoadMode?.(mode);
-          }
-        }}
-      >
-        {/* Knob glass + bleu clair pour bien ressortir */}
-        <div
-          className={cls(
-            "absolute inset-y-1 left-1 rounded-xl bg-blue-50/95 backdrop-blur-xl",
-            "shadow-[0_0_0_1px_rgba(191,219,254,0.9),0_12px_25px_rgba(15,23,42,0.18)]",
-            "transition-transform duration-200"
-          )}
-          style={{
-            width: "calc(50% - 4px)",
-            transform: loadMode === "infinite" ? "translateX(100%)" : "translateX(0%)",
-          }}
-          aria-hidden="true"
-        />
-
-        {/* Pagination */}
-        <button
-          type="button"
-          draggable
-          onDragStart={(e) => {
-            e.dataTransfer.effectAllowed = "move";
-            e.dataTransfer.setData("text/plain", "page");
-          }}
-          onClick={() => setLoadMode?.("page")}
-          className={cls(
-            "relative z-10 flex-1 h-8 px-3 rounded-xl text-xs inline-flex items-center justify-center gap-1.5",
-            "transition-all focus:outline-none",
-            loadMode === "page"
-              ? "text-slate-900 font-semibold"
-              : "text-slate-500"
-          )}
-          aria-pressed={loadMode === "page"}
-          title={t('paginated') || 'Pagination par pages'}
-        >
-          <FaBars aria-hidden="true" />
-          <span className="hidden xl:inline">
-            {t('paginated') || 'Pages'}
-          </span>
-        </button>
-
-        {/* Infini */}
-        <button
-          type="button"
-          draggable
-          onDragStart={(e) => {
-            e.dataTransfer.effectAllowed = "move";
-            e.dataTransfer.setData("text/plain", "infinite");
-          }}
-          onClick={() => setLoadMode?.("infinite")}
-          className={cls(
-            "relative z-10 flex-1 h-8 px-3 rounded-xl text-xs inline-flex items-center justify-center gap-1.5",
-            "transition-all focus:outline-none",
-            loadMode === "infinite"
-              ? "text-slate-900 font-semibold"
-              : "text-slate-500"
-          )}
-          aria-pressed={loadMode === "infinite"}
-          title={t('infinite') || 'Scroll infini'}
-        >
-          <FaSyncAlt aria-hidden="true" />
-          <span className="hidden xl:inline">
-            {t('infinite') || 'Infini'}
-          </span>
-        </button>
-      </div>
-
-      {/* Bouton Filters (desktop / mobile) */}
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => {
-            if (isMobile) setShowMobileModal(true);
-            else setIsExpanded(prev => !prev);
-          }}
-          className={cls(
-            "h-10 px-4 rounded-2xl font-medium inline-flex items-center gap-2 border transition-all",
-            "focus:outline-none",
-            theme.primaryRing,
-            (isExpanded && !isMobile)
-              ? "bg-blue-600/95 text-white border-blue-500 shadow-[0_10px_30px_rgba(37,99,235,0.55)]"
-              : "bg-slate-50/80 text-slate-800 border-slate-200/80 hover:bg-slate-50/95 hover:border-slate-300 shadow-sm"
-          )}
-          title={t('filters.toggleFilters')}
-          aria-expanded={isExpanded}
-          aria-controls="filters-panel"
-          aria-pressed={isExpanded}
-        >
-          <FaFilter aria-hidden="true" />
-          <span className="hidden sm:inline">{t('filters.filters')}</span>
-          {activeFiltersCount > 0 && (
-            <span
+            <FaSearch
               className={cls(
-                "inline-flex ml-1 items-center justify-center text-[11px] font-semibold px-2 py-0.5 rounded-full text-white",
-                "animate-bounce bg-red-500/90 shadow-[0_0_0_1px_rgba(248,113,113,0.6)]"
+                "absolute left-3 top-1/2 -translate-y-1/2 transition-all duration-200",
+                isSearchFocused ? `${theme.accentIcon} translate-x-[1px] scale-110` : "text-slate-400 translate-x-0 scale-100"
               )}
+              aria-hidden="true"
+            />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { setIsHistoryPinned((p) => !p); setShowSearchHistory((p) => !p); }}
+                title={isHistoryPinned ? t('filters.search.hideHistory') : t('filters.search.showHistory')}
+                className={cls(
+                  "h-8 w-8 rounded-xl border inline-flex items-center justify-center transition-all duration-200",
+                  "active:scale-95 focus:outline-none",
+                  theme.primaryRing,
+                  isHistoryPinned
+                    ? "bg-slate-50/95 text-slate-900 border-slate-200/90 shadow-sm"
+                    : "bg-slate-50/60 text-slate-600 border-slate-200/80 hover:bg-slate-50/90 hover:text-slate-800"
+                )}
+                aria-pressed={isHistoryPinned}
+              >
+                <FaHistory />
+              </button>
+
+              {searchQuery && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setSearchQuery("")}
+                  className={cls(
+                    "h-8 w-8 rounded-xl border inline-flex items-center justify-center transition-all duration-200 active:scale-95 focus:outline-none",
+                    theme.primaryRing,
+                    "bg-slate-50/60 text-slate-600 border-slate-200/80 hover:bg-slate-50/90 hover:text-slate-800"
+                  )}
+                  title={t('filters.search.clear')}
+                >
+                  <FaTimes />
+                </button>
+              )}
+
+              {searchQuery !== String(search || "") && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={handleSearch}
+                  className={cls(
+                    "h-8 px-3 rounded-xl text-white font-medium inline-flex items-center gap-2 transition-all duration-200 active:scale-[0.98] focus:outline-none",
+                    theme.primaryRing,
+                    "bg-blue-600/95 hover:bg-blue-700 shadow-[0_8px_24px_rgba(37,99,235,0.45)] hover:-translate-y-[1px]"
+                  )}
+                  title={t('filters.search.execute')}
+                >
+                  <FaRocket />
+                </button>
+              )}
+            </div>
+
+            {showSearchHistory && searchHistory.length > 0 && (
+              <div className="absolute left-0 right-0 top-[44px] transition-all duration-200 z-[80] opacity-100 translate-y-0 pointer-events-auto animate-[dropdown-in_.14s_ease-out]">
+                <div className="bg-slate-50/95 backdrop-blur-xl border border-slate-200/80 rounded-xl shadow-2xl overflow-hidden">
+                  <div className="px-3 py-2 text-xs text-slate-600 border-b border-slate-100/80 flex items-center justify-between">
+                    <span className="inline-flex items-center gap-2">
+                      <FaHistory aria-hidden="true" /> {t('filters.search.recentSearches')}
+                    </span>
+                    <button
+                      onClick={clearHistory}
+                      className="text-red-500 hover:text-red-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-200 rounded"
+                      title={t('filters.search.clearHistory')}
+                    >
+                      <FaTrash />
+                    </button>
+                  </div>
+                  <div className="max-h-56 overflow-y-auto">
+                    {searchHistory.map((h, index) => (
+                      <button
+                        key={h.id}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => { setSearchQuery(h.term); setTimeout(handleSearch, 0); }}
+                        className={cls(
+                          "w-full text-left px-3 py-2 text-sm text-slate-700 flex items-center gap-2 transition-all duration-150",
+                          "hover:bg-slate-50/80 focus-visible:outline-none focus-visible:bg-slate-100 active:scale-[0.98]"
+                        )}
+                        style={{ transitionDelay: `${Math.min(index, 6) * ANIMATION_DELAYS.HISTORY_STAGGER}ms` }}
+                      >
+                        <FaSearch className="text-slate-400 text-xs" aria-hidden="true" />
+                        <span className="flex-1 truncate">{h.term}</span>
+                        <span className="text-[11px] text-slate-400">
+                          {new Date(h.timestamp).toLocaleDateString()}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right controls */}
+          <div className="flex items-center gap-2 ml-3">
+            {/* Thème (desktop – toujours caché pour l’instant) */}
+            <label className="relative hidden md:hidden">
+              <span className="sr-only">Theme</span>
+              <select
+                value={themeKey}
+                onChange={(e) => saveTheme(e.target.value)}
+                className={cls(
+                  "h-10 px-3 rounded-xl border bg-slate-50/80 backdrop-blur-md text-sm cursor-pointer",
+                  "border-slate-200/80 focus:outline-none",
+                  theme.primaryRing
+                )}
+                title="Theme"
+              >
+                <option value="neutral">Neutral</option>
+                <option value="pro">Pro</option>
+                <option value="colored">Coloré</option>
+              </select>
+            </label>
+
+            {/* Vue grid / list */}
+            <div
+              className="hidden sm:flex bg-slate-50/80 backdrop-blur-md rounded-2xl border border-slate-200/80 p-1 shadow-sm"
+              role="tablist"
             >
-              {activeFiltersCount}
-            </span>
-          )}
-          <span className="sm:hidden inline-flex items-center ml-1">
-            <FaBars />
-          </span>
-        </button>
+              {[
+                { key: "grid", icon: FaThLarge, label: t('filters.view.grid') },
+                { key: "list", icon: FaTable,   label: t('filters.view.list') },
+              ].map(({ key, icon: Icon, label }) => {
+                const active = view === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setView(key)}
+                    className={cls(
+                      "h-8 px-3 rounded-xl text-sm inline-flex items-center gap-2 transition-all",
+                      "focus:outline-none",
+                      theme.primaryRing,
+                      active
+                        ? "bg-white text-slate-900 shadow-[0_8px_18px_rgba(15,23,42,0.20)] font-semibold"
+                        : "text-slate-500 hover:bg-white/60"
+                    )}
+                    title={label}
+                    role="tab"
+                    aria-selected={active}
+                  >
+                    <Icon aria-hidden="true" />
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Per page */}
+            <label className="relative hidden sm:block">
+              <span className="sr-only">{t('filters.itemsPerPage')}</span>
+              <select
+                value={perPage}
+                onChange={(e) => setPerPage(Number(e.target.value))}
+                className={cls(
+                  "h-10 px-3 rounded-xl border bg-slate-50/80 backdrop-blur-md text-sm focus:outline-none cursor-pointer",
+                  "border-slate-200/80",
+                  theme.primaryRing
+                )}
+                title={t('filters.itemsPerPage')}
+              >
+                {[12, 24, 48, 96].map((count) => (
+                  <option key={count} value={count}>{count}/page</option>
+                ))}
+              </select>
+            </label>
+
+            {/* Mode de chargement : pagination classique / scroll infini */}
+            <div
+              className={cls(
+                "hidden sm:flex relative items-center rounded-2xl border border-slate-200/80",
+                "bg-slate-50/80 backdrop-blur-md p-1 shadow-sm",
+                theme.primaryRing,
+                dragMode && "ring-2 ring-blue-200 shadow-[0_0_0_1px_rgba(191,219,254,0.9),0_14px_40px_rgba(15,23,42,0.28)]"
+              )}
+              role="tablist"
+              aria-label={t('filters.loadMode.label') || 'Mode de chargement'}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const mode = e.dataTransfer.getData("text/plain");
+                if (mode === "page") {
+                  setLoadMode?.("pagination");
+                } else if (mode === "infinite") {
+                  setLoadMode?.("infinite");
+                }
+                setDragMode(null);
+              }}
+
+            >
+              {/* Knob glass + bleu clair pour bien ressortir */}
+              <div
+                className={cls(
+                  "absolute inset-y-1 left-1 rounded-xl bg-blue-50/95 backdrop-blur-xl",
+                  "shadow-[0_0_0_1px_rgba(191,219,254,0.9),0_12px_25px_rgba(15,23,42,0.18)]",
+                  "transition-transform duration-200",
+                  dragMode && "scale-[1.03]"
+                )}
+                style={{
+                  width: "calc(50% - 4px)",
+                  transform: loadMode === "infinite" ? "translateX(100%)" : "translateX(0%)",
+                }}
+                aria-hidden="true"
+              />
+
+              {/* Pagination */}
+              <button
+                type="button"
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", "page");
+                  setDragMode("page");
+                }}
+                onDragEnd={() => setDragMode(null)}
+                onClick={() => setLoadMode?.("pagination")}
+                className={cls(
+                  "relative z-10 flex-1 h-8 px-3 rounded-xl text-xs inline-flex items-center justify-center gap-1.5",
+                  "transition-all focus:outline-none",
+                  loadMode === "page"
+                    ? "text-slate-900 font-semibold"
+                    : "text-slate-500"
+                )}
+                aria-pressed={loadMode === "page"}
+                title={t('paginated') || 'Pagination par pages'}
+              >
+                <FaBars aria-hidden="true" />
+                <span className="hidden xl:inline">
+                  {t('paginated') || 'Pages'}
+                </span>
+              </button>
+
+              {/* Infini */}
+              <button
+                type="button"
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", "infinite");
+                  setDragMode("infinite");
+                }}
+                onDragEnd={() => setDragMode(null)}
+                onClick={() => setLoadMode?.("infinite")}
+                className={cls(
+                  "relative z-10 flex-1 h-8 px-3 rounded-xl text-xs inline-flex items-center justify-center gap-1.5",
+                  "transition-all focus:outline-none",
+                  loadMode === "infinite"
+                    ? "text-slate-900 font-semibold"
+                    : "text-slate-500"
+                )}
+                aria-pressed={loadMode === "infinite"}
+                title={t('infinite') || 'Scroll infini'}
+              >
+                <FaSyncAlt aria-hidden="true" />
+                <span className="hidden xl:inline">
+                  {t('infinite') || 'Infini'}
+                </span>
+              </button>
+            </div>
+
+            {/* Bouton Filters (desktop / mobile) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isMobile) setShowMobileModal(true);
+                  else setIsExpanded(prev => !prev);
+                }}
+                className={cls(
+                  "h-10 px-4 rounded-2xl font-medium inline-flex items-center gap-2 border transition-all",
+                  "focus:outline-none",
+                  theme.primaryRing,
+                  (isExpanded && !isMobile)
+                    ? "bg-blue-600/95 text-white border-blue-500 shadow-[0_10px_30px_rgba(37,99,235,0.55)]"
+                    : "bg-slate-50/80 text-slate-800 border-slate-200/80 hover:bg-slate-50/95 hover:border-slate-300 shadow-sm"
+                )}
+                title={t('filters.toggleFilters')}
+                aria-expanded={isExpanded}
+                aria-controls="filters-panel"
+                aria-pressed={isExpanded}
+              >
+                <FaFilter aria-hidden="true" />
+                <span className="hidden sm:inline">{t('filters.filters')}</span>
+                {activeFiltersCount > 0 && (
+                  <span
+                    className={cls(
+                      "inline-flex ml-1 items-center justify-center text-[11px] font-semibold px-2 py-0.5 rounded-full text-white",
+                      "animate-bounce bg-red-500/90 shadow-[0_0_0_1px_rgba(248,113,113,0.6)]"
+                    )}
+                  >
+                    {activeFiltersCount}
+                  </span>
+                )}
+                <span className="sm:hidden inline-flex items-center ml-1">
+                  <FaBars />
+                </span>
+              </button>
+            </div>
+
+            {/* Export */}
+            {/* <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent("articlelib:export"))}
+              className={cls(
+                "h-10 w-10 rounded-2xl border inline-flex items-center justify-center transition-all",
+                "bg-slate-50/80 text-slate-800 border-slate-200/80 hover:bg-slate-50/95 hover:border-slate-300 shadow-sm active:scale-[0.97]",
+                theme.primaryRing
+              )}
+              title={t('filters.export')}
+            >
+              <FaDownload aria-hidden="true" />
+            </button> */}
+          </div>
+        </div>
       </div>
-
-      {/* Export */}
-      <button
-        type="button"
-        onClick={() => window.dispatchEvent(new CustomEvent("articlelib:export"))}
-        className={cls(
-          "h-10 w-10 rounded-2xl border inline-flex items-center justify-center transition-all",
-          "bg-slate-50/80 text-slate-800 border-slate-200/80 hover:bg-slate-50/95 hover:border-slate-300 shadow-sm active:scale-[0.97]",
-          theme.primaryRing
-        )}
-        title={t('filters.export')}
-      >
-        <FaDownload aria-hidden="true" />
-      </button>
-    </div>
-  </div>
-</div>
-
-
-
 
       {/* Panneau des filtres (desktop) */}
       <div
@@ -1178,19 +1197,26 @@ export default function FiltersPanel({
         ref={wrapperRef}
         style={{ height: !isMobile ? (isExpanded ? height : 0) : 0 }}
         className={cls(
-          "transition-[height] duration-300 ease-out overflow-hidden border-t",
-          theme.borderSoft
+          "transition-[height] duration-300 ease-out overflow-hidden border-t border-slate-200/60",
+          "bg-slate-50/80 backdrop-blur-xl"
         )}
         aria-hidden={!isExpanded || isMobile}
       >
         <div ref={contentRef}>
           {isExpanded && !isMobile && (
-            <div ref={dropdownRef} className={cls("bg-gradient-to-b to-white", theme.headerFrom)}>
+            <div
+              ref={dropdownRef}
+              className={cls(
+                "bg-gradient-to-b to-white/80",
+                theme.headerFrom,
+                "backdrop-blur-xl"
+              )}
+            >
               {/* Pills + Scroll-shadows */}
               <div className="relative">
                 {/* Gradients left/right (scroll-shadows) */}
-                <div className="pointer-events-none absolute left-0 top-0 h-full w-6 bg-gradient-to-r from-white to-transparent" />
-                <div className="pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-white to-transparent" />
+                <div className="pointer-events-none absolute left-0 top-0 h-full w-6 bg-gradient-to-r from-slate-50/90 to-transparent" />
+                <div className="pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-slate-50/90 to-transparent" />
 
                 <div
                   ref={pillsScrollerRef}
@@ -1211,7 +1237,7 @@ export default function FiltersPanel({
                       onClick={toggleCardColor}
                       className={cls(
                         "h-10 w-10 rounded-xl border inline-flex items-center justify-center transition-colors",
-                        "bg-white border-slate-200 hover:bg-slate-50",
+                        "bg-slate-50/80 border-slate-200 hover:bg-slate-100",
                         theme.primaryRing
                       )}
                       title={
@@ -1228,7 +1254,7 @@ export default function FiltersPanel({
                       type="button"
                       onClick={handleResetFilters}
                       className={cls(
-                        "h-10 px-3 rounded-xl border inline-flex items-center gap-2 transition-colors bg-white text-slate-700 hover:bg-slate-100 focus:outline-none",
+                        "h-10 px-3 rounded-xl border inline-flex items-center gap-2 transition-colors bg-slate-50/80 text-slate-700 hover:bg-slate-100 focus:outline-none",
                         theme.primaryRing,
                         "border-slate-200"
                       )}
@@ -1243,7 +1269,8 @@ export default function FiltersPanel({
                       className={cls(
                         "h-10 px-4 rounded-xl text-white font-medium inline-flex items-center gap-2 transition-colors focus:outline-none",
                         theme.primaryRing,
-                        theme.primaryBg
+                        theme.primaryBg,
+                        "shadow-[0_10px_28px_rgba(37,99,235,0.45)]"
                       )}
                       title={t('filters.apply')}
                     >
@@ -1381,7 +1408,7 @@ export default function FiltersPanel({
                       {savedFilters.map((sf) => (
                         <div
                           key={sf.id}
-                          className="rounded-xl border border-slate-200 bg-white p-3 hover:shadow-md transition"
+                          className="rounded-xl border border-slate-200 bg-slate-50/90 backdrop-blur-sm p-3 hover:shadow-md transition"
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
@@ -1496,7 +1523,13 @@ function FilterSection({ visible, title, children, onClear, action, theme = THEM
   if (!visible) return null;
   return (
     <div className="transition-all origin-top opacity-100 translate-y-0 scale-[1]">
-      <section className={cls("rounded-2xl bg-white shadow-sm p-4 border", theme.borderSoft)}>
+      <section
+        className={cls(
+          "rounded-2xl border p-4 bg-slate-50/80 backdrop-blur-xl",
+          "shadow-[0_14px_40px_rgba(15,23,42,0.16)]",
+          theme.borderSoft
+        )}
+      >
         <header className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-slate-800">{title}</h3>
           <div className="flex items-center gap-2">
@@ -1618,6 +1651,39 @@ function SaveModal({ initialValue = "", onSave, onClose }) {
     </div>
   );
 }
+function FiltersPortal({ children, containerId = 'overlays-root' }) {
+  const [host, setHost] = useState(null);
+
+  useLayoutEffect(() => {
+    let root = document.getElementById(containerId);
+    let createdRoot = false;
+
+    if (!root) {
+      root = document.createElement('div');
+      root.id = containerId;
+      root.style.position = 'relative';
+      document.body.appendChild(root);
+      createdRoot = true;
+    }
+
+    const el = document.createElement('div');
+    el.style.position = 'fixed';
+    el.style.inset = '0';
+    el.style.zIndex = '999';
+    root.appendChild(el);
+
+    setHost(el);
+
+    return () => {
+      root.removeChild(el);
+      if (createdRoot && root.childElementCount === 0) {
+        root.remove();
+      }
+    };
+  }, [containerId]);
+
+  return host ? createPortal(children, host) : null;
+}
 
 /* =========================
    Mobile bottom-sheet (wrapper sans hooks) + contenu avec hooks
@@ -1626,8 +1692,14 @@ function MobileFiltersModal(props) {
   // ⚠️ AUCUN HOOK ICI
   const { open } = props;
   if (!open) return null;
-  return <MobileFiltersModalContent {...props} />;
+
+  return (
+    <FiltersPortal>
+      <MobileFiltersModalContent {...props} />
+    </FiltersPortal>
+  );
 }
+
 
 function MobileFiltersModalContent({
   open, onClose,
@@ -1675,7 +1747,7 @@ function MobileFiltersModalContent({
   const authFiltered = filterBy(safeAuthors,   authLocalQuery);
 
   return (
-    <div className="fixed inset-0 z-[80]">
+    <div className="fixed inset-0 z-[80] flex flex-col justify-end">
       {/* Overlay */}
       <button
         type="button"
@@ -1691,13 +1763,13 @@ function MobileFiltersModalContent({
         aria-modal="true"
         aria-label={t('filters.filters')}
         className="
-          fixed inset-x-0 bottom-0 w-full
+          relative w-full
           bg-white rounded-t-2xl shadow-2xl
           animate-sheet-in
           flex flex-col
-          h-[85vh] max-h-[92vh] md:max-h-[92svh]
+          h-[65vh] max-h-[72vh]
           overflow-hidden
-          will-change:transform
+          will-change-transform
         "
       >
         {/* Handle + Header sticky */}
@@ -1926,13 +1998,14 @@ function MobileFiltersModalContent({
   );
 }
 
+
 function AccordionItem({ open, onToggle, title, children, onClear }) {
   return (
-    <section className="rounded-xl border border-slate-200 overflow-hidden">
+    <section className="rounded-xl border border-slate-200 overflow-hidden bg-slate-50/70">
       <button
         type="button"
         onClick={onToggle}
-        className="w-full h-12 px-3 flex items-center justify-between bg-white"
+        className="w-full h-12 px-3 flex items-center justify-between bg-white/90"
         aria-expanded={open}
       >
         <span className="text-sm font-medium text-slate-900">{title}</span>

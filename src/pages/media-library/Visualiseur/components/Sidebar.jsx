@@ -245,7 +245,7 @@ export default function Sidebar({
       {/* Sidebar */}
       <aside
         ref={ref}
-        className="fixed top-20 left-0 z-50 w=[320px] sm:w-[360px] h-[calc(100vh-5rem)]
+        className="visualiseur-sidebar-animated fixed top-20 left-0 z-50 w=[320px] sm:w-[360px] h-[calc(100vh-5rem)]
                    flex flex-col
                    bg-white/30 backdrop-blur-2xl
                    border-r border-white/40 ring-1 ring-white/40

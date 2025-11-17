@@ -109,6 +109,13 @@ function articleCategoryCandidates(a = {}) {
   return Array.from(candidates);
 }
 
+// Normalisation du mode de chargement (gère les anciennes valeurs "page")
+const normalizeLoadMode = (mode, fallback = "pagination") => {
+  if (mode === "infinite" || mode === "pagination") return mode;
+  if (fallback === "infinite" || fallback === "pagination") return fallback;
+  return "pagination";
+};
+
 export default function ArticleLibrary({
   articles = [],
   fetchArticles,                 // async ({ page, perPage, search, filters, sort }) => { data, total, facets? }
@@ -131,7 +138,9 @@ export default function ArticleLibrary({
   const [filters, setFiltersState] = useState(toSafeFilters(persisted.filters || DEFAULT_FILTERS));
 
   const [sort, setSort]       = useState([{ key: "published_at", dir: "desc" }]);
-  const [loadMode, setLoadMode] = useState(persisted.loadMode || defaultLoadMode);
+  const [loadMode, setLoadMode] = useState(
+    normalizeLoadMode(persisted.loadMode, defaultLoadMode)
+  );
 
   const [rows, setRows]   = useState([]);
   const [total, setTotal] = useState(0);

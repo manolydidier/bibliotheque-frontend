@@ -1101,6 +1101,133 @@ notfound: {
   }
 }
 ,
+legal: {
+  config: {
+    platformName: "Bibliothèque Numérique Mada",
+    lastUpdate: "November 14, 2025",
+    country: "Madagascar",
+    jurisdiction: "Antananarivo",
+    contactEmail: "contact@bibliotheque-mada.mg",
+    privacyEmail: "privacy@bibliotheque-mada.mg"
+  },
+
+  ui: {
+    badge: "Legal information",
+    headerTitle: "Terms of Use & Privacy Policy",
+    headerIntro:
+      "By creating an account, you accept our Terms of Use, our Privacy Policy and our Cookies Policy.",
+    tabs: {
+      terms: "Terms of Use",
+      privacy: "Privacy Policy",
+      cookies: "Cookies Policy"
+    },
+    searchButton: "Search",
+    searchHint: "Search in: Terms of Use, Privacy Policy and Cookies Policy.",
+    searchPlaceholder: "Search a term (e.g. account, data, cookies…)",
+    searchNoResult:
+      "No result found for “{{query}}” in the Terms of Use, Privacy Policy or Cookies Policy.",
+    searchEmpty:
+      "Type a keyword to search in the Terms of Use, Privacy Policy and Cookies Policy.",
+    print: "Print",
+    copy: "Copy",
+    copied: "Copied ✓",
+    copyError: "Error",
+    footerQuestion: "Questions? Contact us at {{email}}"
+  },
+
+  // ===== Terms (CGU) =====
+  terms: {
+    1: {
+      title: "1. Purpose of the terms",
+      body:
+        "These Terms of Use (the “Terms”) define the rules applicable when you use the platform Bibliothèque Numérique Mada to consult, borrow, purchase or manage books and other documentary resources.\n\nBy creating an account or using the platform, you acknowledge that you have read these Terms and accept them without reservation."
+    },
+    2: {
+      title: "2. Access to the platform",
+      body:
+        "The platform is in principle accessible 24/7, except for maintenance operations, updates or events beyond our control.\n\nYou are responsible for your equipment (computer, phone, Internet connection) and for any costs related to accessing the service."
+    },
+    3: {
+      title: "3. Account creation and use",
+      body:
+        "To use certain features (borrowing, purchasing, history, favourites, etc.), you must create a personal account and provide accurate and up-to-date information.\n\nYou are responsible for keeping your password confidential and for any activity carried out from your account. If you suspect fraudulent use, you must inform us as soon as possible."
+    },
+    4: {
+      title: "4. User behaviour",
+      body:
+        "You agree to use the platform in compliance with the law and the rights of others.\n\nIn particular, the following are prohibited: hateful, insulting, defamatory or discriminatory remarks; illegal, fraudulent or misleading activities; any attempt to hack, intrude or disrupt the service; and any infringement of copyrights or licence terms of the contents made available on the platform."
+    },
+    5: {
+      title: "5. Intellectual property",
+      body:
+        "Books, e-books, journals, digital resources, as well as the design and features of the platform are protected by intellectual property law.\n\nUnless otherwise stated, you only obtain a strictly personal and non-transferable right of use. Any unauthorised reproduction, distribution or exploitation is prohibited."
+    },
+    6: {
+      title: "6. Account suspension or closure",
+      body:
+        "In the event of a breach of these Terms or of abusive behaviour, we may temporarily restrict your access, suspend certain features or close your account.\n\nYou may also request the deletion of your account via the settings or by contacting us at the address indicated in the Privacy Policy."
+    },
+    7: {
+      title: "7. Applicable law and jurisdiction",
+      body:
+        "These Terms are governed by the law in force in Madagascar.\n\nIn the event of a dispute, we give priority to seeking an amicable solution before referring the matter to the competent courts of Antananarivo."
+    }
+  },
+
+  // ===== Privacy Policy =====
+  privacy: {
+    1: {
+      title: "1. Data we collect",
+      body:
+        "We collect the information that you provide directly (for example when creating an account, placing an order or contacting us) as well as data related to your use of the platform (consultation of books, borrowing and purchase history, preferences, etc.).\n\nThis may include identification data (surname, first name, email), account data (encrypted password), usage data (pages viewed, searches, clicks) and transaction data (borrowing or purchase history, payments)."
+    },
+    2: {
+      title: "2. How we use your data",
+      body:
+        "Your data is used to provide and improve library services, manage your account and history, inform you about your borrowings, reservations or orders, personalise certain reading recommendations, and comply with our legal and security obligations.\n\nWe only process your data when it is necessary for the operation of the platform, for the execution of the services requested or to meet legal or regulatory obligations."
+    },
+    3: {
+      title: "3. Data hosting and sharing",
+      body:
+        "The platform is hosted by technical service providers, who may be located outside Madagascar. When data is transferred outside the country, we strive to ensure that appropriate data-protection safeguards are in place.\n\nWe do not sell your personal data. It may be shared only with our technical providers (hosting, payment, emailing, analytics), with competent authorities where required by law, or with our institutional partners in the form of aggregated and anonymised statistics."
+    },
+    4: {
+      title: "4. Data retention period",
+      body:
+        "Your data is kept for the period strictly necessary to manage the library, your account and the services you use, then archived or anonymised according to legal requirements and our statistical monitoring needs.\n\nCertain data may be kept for a longer period when required by law (for example in accounting or litigation matters)."
+    },
+    5: {
+      title: "5. Your rights",
+      body:
+        "Within the limits set by applicable law, you have a right of access, rectification, erasure (in certain cases), opposition or restriction of some processing operations, as well as a right to data portability.\n\nTo exercise your rights or ask a question about the protection of your data, you can contact us at the following address: privacy@bibliotheque-mada.mg."
+    }
+  },
+
+  // ===== Cookies Policy =====
+  cookies: {
+    1: {
+      title: "1. What is a cookie?",
+      body:
+        "A cookie is a small text file stored on your device (computer, smartphone, tablet) when you consult the platform.\n\nIt allows certain information to be remembered in order to make your browsing easier and to measure the audience of the site."
+    },
+    2: {
+      title: "2. Types of cookies we use",
+      body:
+        "We may use different types of cookies:\n\n– strictly necessary cookies, essential for the technical operation of the site (authentication, security, session persistence, etc.);\n– preference cookies, which remember your choices (language, display, last opened tab, etc.);\n– analytics or audience-measurement cookies, which help us understand how the platform is used so that we can improve it."
+    },
+    3: {
+      title: "3. Managing your cookies",
+      body:
+        "On your first visit, an information banner may ask you to choose your preferences regarding non-essential cookies.\n\nYou can change your choices at any time from your browser settings (deletion or blocking of cookies) and, where available, from the cookie-management module displayed on the platform."
+    },
+    4: {
+      title: "4. Consequences of refusing cookies",
+      body:
+        "Refusing certain cookies may limit some features of the platform (for example, automatic login or saving of display preferences).\n\nHowever, the main library features should generally remain accessible."
+    }
+  }
+}
+,
               "role_permissions_management": "Role Permissions Management",
             "manage_role_permissions_description": "Manage associations between roles and permissions",
             "search_roles_permissions": "Search roles and permissions...",
@@ -2312,6 +2439,136 @@ notfound: {
     "author": "Auteur"
   }
 
+,
+legal: {
+  config: {
+    platformName: "Bibliothèque Numérique Mada",
+    lastUpdate: "14 novembre 2025",
+    country: "Madagascar",
+    jurisdiction: "Antananarivo",
+    contactEmail: "contact@bibliotheque-mada.mg",
+    privacyEmail: "privacy@bibliotheque-mada.mg"
+  },
+
+  ui: {
+    badge: "Informations légales",
+    headerTitle: "Conditions générales et politique de confidentialité",
+    headerIntro:
+      "En créant un compte, vous acceptez nos Conditions générales d’utilisation, notre Politique de confidentialité et notre Politique d’utilisation des cookies.",
+    tabs: {
+      terms: "Conditions générales",
+      privacy: "Politique de confidentialité",
+      cookies: "Politique des cookies"
+    },
+    searchButton: "Rechercher",
+    searchHint:
+      "Recherche sur : Conditions générales, Politique de confidentialité et Politique des cookies.",
+    searchPlaceholder:
+      "Rechercher un terme (ex : compte, données, cookies…)",
+    searchNoResult:
+      "Aucun résultat trouvé pour « {{query}} » dans les Conditions générales, la Politique de confidentialité ou la Politique des cookies.",
+    searchEmpty:
+      "Tapez un mot-clé pour lancer une recherche dans les Conditions générales, la Politique de confidentialité et la Politique des cookies.",
+    print: "Imprimer",
+    copy: "Copier",
+    copied: "Copié ✓",
+    copyError: "Erreur",
+    footerQuestion:
+      "Des questions ? Contactez-nous à {{email}}"
+  },
+
+  // ===== CGU =====
+  terms: {
+    1: {
+      title: "1. Objet des conditions générales",
+      body:
+        "Les présentes Conditions générales d’utilisation (les « Conditions ») définissent les règles applicables lorsque vous utilisez la plateforme Bibliothèque Numérique Mada pour consulter, emprunter, acheter ou gérer des livres et autres ressources documentaires.\n\nEn créant un compte ou en utilisant la plateforme, vous reconnaissez avoir pris connaissance de ces Conditions et les accepter sans réserve."
+    },
+    2: {
+      title: "2. Accès à la plateforme",
+      body:
+        "La plateforme est accessible, en principe, 24h/24 et 7j/7, sauf opérations de maintenance, mises à jour ou événements indépendants de notre volonté.\n\nVous êtes responsable de votre matériel (ordinateur, téléphone, connexion Internet) et des coûts liés à l’accès au service."
+    },
+    3: {
+      title: "3. Création et utilisation du compte",
+      body:
+        "Pour utiliser certaines fonctionnalités (emprunt, achat, historique, favoris, etc.), vous devez créer un compte personnel et fournir des informations exactes et à jour.\n\nVous êtes responsable de la confidentialité de votre mot de passe et de toute activité réalisée depuis votre compte. En cas de suspicion d’utilisation frauduleuse, vous devez nous en informer dans les meilleurs délais."
+    },
+    4: {
+      title: "4. Comportement de l’utilisateur",
+      body:
+        "Vous vous engagez à utiliser la plateforme dans le respect de la loi et des droits d’autrui.\n\nSont notamment interdits : les propos injurieux, haineux, diffamatoires ou discriminatoires ; les activités illégales, frauduleuses ou trompeuses ; les tentatives de piratage, d’intrusion ou de perturbation du service ; ainsi que la violation des droits d’auteur ou des licences d’utilisation des contenus mis à disposition sur la plateforme."
+    },
+    5: {
+      title: "5. Propriété intellectuelle",
+      body:
+        "Les livres, e-books, revues, ressources numériques, ainsi que le design et les fonctionnalités de la plateforme sont protégés par le droit de la propriété intellectuelle.\n\nSauf mention contraire, vous n’obtenez qu’un droit d’usage strictement personnel et non transférable. Toute reproduction, diffusion ou exploitation non autorisée est interdite."
+    },
+    6: {
+      title: "6. Suspension ou fermeture de compte",
+      body:
+        "En cas de non-respect de ces Conditions ou de comportement abusif, nous pouvons limiter temporairement votre accès, suspendre certaines fonctionnalités ou fermer votre compte.\n\nVous pouvez également demander la suppression de votre compte via les paramètres ou en nous contactant à l’adresse indiquée dans la Politique de confidentialité."
+    },
+    7: {
+      title: "7. Loi applicable",
+      body:
+        "Ces Conditions sont soumises au droit en vigueur à Madagascar.\n\nEn cas de litige, nous privilégions la recherche d’une solution amiable avant toute saisine des tribunaux compétents d’Antananarivo."
+    }
+  },
+
+  // ===== Confidentialité =====
+  privacy: {
+    1: {
+      title: "1. Données que nous collectons",
+      body:
+        "Nous collectons les informations que vous nous fournissez directement (par exemple lors de la création de compte, d’une commande ou d’une prise de contact) ainsi que des données liées à votre utilisation de la plateforme (consultation de livres, historique d’emprunts ou d’achats, préférences, etc.).\n\nIl peut s’agir notamment de données d’identification (nom, prénom, adresse e-mail), de données de compte (mot de passe chiffré), de données d’usage (pages consultées, recherches, clics) et de données de transaction (historique d’emprunts ou d’achats, paiements)."
+    },
+    2: {
+      title: "2. Comment nous utilisons vos données",
+      body:
+        "Vos données sont utilisées pour fournir et améliorer les services de la bibliothèque, gérer votre compte et votre historique, vous informer sur vos emprunts, réservations ou commandes, personnaliser certaines recommandations de lecture et respecter nos obligations légales et de sécurité.\n\nNous ne traitons vos données que lorsque cela est nécessaire au fonctionnement de la plateforme, à l’exécution des services que vous avez demandés ou au respect d’obligations légales ou réglementaires."
+    },
+    3: {
+      title: "3. Hébergement et partage de vos données",
+      body:
+        "La plateforme est hébergée chez des prestataires techniques, qui peuvent être situés en dehors de Madagascar. Lorsque des données sont transférées hors du pays, nous nous efforçons de mettre en place des garanties de protection adaptées.\n\nNous ne vendons pas vos données personnelles. Elles peuvent être partagées uniquement avec nos prestataires techniques (hébergement, paiement, e-mailing, analyse d’audience), avec les autorités compétentes lorsque la loi l’impose, ou avec nos partenaires institutionnels sous forme de statistiques agrégées et anonymisées."
+    },
+    4: {
+      title: "4. Durée de conservation",
+      body:
+        "Vos données sont conservées pendant la durée strictement nécessaire à la gestion de la bibliothèque, de votre compte et des services que vous utilisez, puis archivées ou anonymisées selon les exigences légales et nos besoins de suivi statistique.\n\nCertaines données peuvent être conservées plus longtemps lorsqu’une obligation légale l’exige (par exemple en matière comptable ou de contentieux)."
+    },
+    5: {
+      title: "5. Vos droits",
+      body:
+        "Dans les limites prévues par la loi applicable, vous disposez notamment d’un droit d’accès, de rectification, d’effacement (dans certains cas), d’opposition ou de limitation de certains traitements, ainsi que d’un droit à la portabilité de vos données.\n\nPour exercer vos droits ou poser une question sur la protection de vos données, vous pouvez nous contacter à l’adresse suivante : privacy@bibliotheque-mada.mg."
+    }
+  },
+
+  // ===== Cookies =====
+  cookies: {
+    1: {
+      title: "1. Qu’est-ce qu’un cookie ?",
+      body:
+        "Un cookie est un petit fichier texte déposé sur votre appareil (ordinateur, smartphone, tablette) lorsque vous consultez la plateforme.\n\nIl permet notamment de mémoriser certaines informations pour faciliter votre navigation et mesurer l’audience du site."
+    },
+    2: {
+      title: "2. Types de cookies utilisés",
+      body:
+        "Nous pouvons utiliser différents types de cookies :\n\n– des cookies strictement nécessaires, indispensables au fonctionnement technique du site (authentification, sécurité, maintien de session, etc.) ;\n– des cookies de préférence, qui mémorisent vos choix (langue, affichage, dernier onglet consulté, etc.) ;\n– des cookies de mesure d’audience ou d’analyse, qui nous aident à comprendre comment la plateforme est utilisée afin de l’améliorer."
+    },
+    3: {
+      title: "3. Gestion de vos cookies",
+      body:
+        "Lors de votre première visite, une bannière d’information peut vous inviter à choisir vos préférences en matière de cookies non essentiels.\n\nVous pouvez à tout moment modifier vos choix depuis les paramètres de votre navigateur (suppression ou blocage des cookies) et, lorsque cette fonction est disponible, via le module de gestion des cookies affiché sur la plateforme."
+    },
+    4: {
+      title: "4. Impact du refus de certains cookies",
+      body:
+        "Le refus de certains cookies peut limiter certaines fonctionnalités de la plateforme (par exemple, la mémorisation automatique de votre session ou de certaines préférences d’affichage).\n\nLes principales fonctionnalités de consultation et d’emprunt devraient toutefois rester accessibles dans la plupart des cas."
+    }
+  }
+}
 ,
 // === Navbar & Notifications (clés manquantes) ===
 "moderation": "Modération",

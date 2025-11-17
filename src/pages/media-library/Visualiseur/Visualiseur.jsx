@@ -1148,7 +1148,8 @@ export default function Visualiseur() {
         </div>
 
         <div className="flex gap-2 lg:gap-6 xl:gap-2">
-          {sidebarOpen && (
+        {sidebarOpen && (
+        
             <Sidebar
               open={sidebarOpen}
               onOpen={() => setSidebarOpen(true)}
@@ -1169,13 +1170,13 @@ export default function Visualiseur() {
               iconForType={iconForType}
               iconBgForType={iconBgForType}
               toAbsolute={toAbsolute}
-               me={me}
+              me={me}
             />
-          )}
-
+      
+        )}
           {/* Main */}
           <div className="flex-1 flex flex-col w-full">
-            <div className="bg-white/60 backdrop-blur-xl rounded-2xl shadow-xl border border-white/40 overflow-hidden">
+           <div className="visualiseur-app-pop bg-white/60 backdrop-blur-xl rounded-2xl shadow-xl border border-white/40 overflow-hidden">
               {/* Toolbar STICKY */}
               <div className={`sticky top-5 z-50 bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40`}>
                 <div className={`absolute inset-x-0 -top-px h-px ${ACCENT.hairline}`} />
@@ -1301,12 +1302,11 @@ export default function Visualiseur() {
 
         {/* Fullscreen Modal */}
         {fullscreen && (
-          <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center">
+           <div className="visualiseur-fullscreen-overlay fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center">
             <div className="relative w-full h-full flex items-center justify-center">
-              <div className="max-w-7xl w-full p-6 sm:p-10 lg:p-12">
+              <div className="visualiseur-fullscreen-card max-w-7xl w-full p-6 sm:p-10 lg:p-12">
                 <div className={`bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl ${ACCENT.glow}`}>
-
-                  <Tabs list={tabs} active={activeTab} onChange={setActiveTab} />
+                   <Tabs list={tabs} active={activeTab} onChange={setActiveTab} />
                   {activeTab === t('visualiseur.tabs.preview') && (
                     <Apercu
                       article={article}
@@ -1590,10 +1590,10 @@ function Medias({ mediaList, onPreview }) {
   }
 
   const Card = ({ m }) => (
-    <div
-      key={m.id ?? m.fileUrl}
-      className={`rounded-2xl border border-slate-200/60 bg-white/70 backdrop-blur-sm p-4 hover:shadow-xl transition-all duration-300 w-64 ${ACCENT.glowSoft}`}
-    >
+   <div
+    key={m.id ?? m.fileUrl}
+    className={`visualiseur-media-card rounded-2xl border border-slate-200/60 bg-white/70 backdrop-blur-sm p-4 hover:shadow-xl transition-all duration-300 w-64 ${ACCENT.glowSoft}`}
+  >
       <div className="flex items-center gap-3">
         <div className={`w-12 h-12 ${iconBgForType(m.type)} rounded-xl flex items-center justify-center`}>
           {iconForType(m.type, "text-lg")}

@@ -894,38 +894,46 @@ export default function Dashboard() {
 
   const headerRight = (
     <div className="flex items-center gap-3">
-      <div className="flex items-center gap-1 rounded-lg bg-gray-100 p-1">
-        {[7, 30, 60, 90].map(d => (
-          <button
-            key={d}
-            onClick={() => onChangeRange(d)}
-            className={`px-3 py-1.5 text-sm font-medium rounded-md transition ${
-              rangeDays === d ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            {d}j
-          </button>
-        ))}
-      </div>
-      {(activeTab === 'audience' || activeTab === 'resume') && (
-        <button 
-          onClick={exportAudienceCSV} 
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
-        >
-          <FiDownload />
-          <span>Export</span>
-        </button>
-      )}
-      {activeTab === 'contenu' && (
-        <button 
-          onClick={exportRecentCSV} 
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
-        >
-          <FiDownload />
-          <span>Export</span>
-        </button>
-      )}
-    </div>
+  {/* Range selector – même look que le filter */}
+  <div className="flex items-center gap-1 rounded-2xl border border-slate-200/60 bg-white/60 backdrop-blur-sm px-1.5 py-1 shadow-sm">
+    {[7, 30, 60, 90].map((d) => (
+      <button
+        key={d}
+        onClick={() => onChangeRange(d)}
+        className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-xl transition-all
+          ${
+            rangeDays === d
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500 hover:text-slate-900 hover:bg-white/60"
+          }`}
+      >
+        {d}j
+      </button>
+    ))}
+  </div>
+
+  {/* Export – même style que les filtres, bouton glass */}
+  {(activeTab === "audience" || activeTab === "resume") && (
+    <button
+      onClick={exportAudienceCSV}
+      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200/60 bg-white/60 backdrop-blur-sm px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-700 shadow-sm hover:bg-white hover:shadow-md transition-all"
+    >
+      <FiDownload className="h-4 w-4" />
+      <span className="hidden sm:inline">Export</span>
+    </button>
+  )}
+
+  {activeTab === "contenu" && (
+    <button
+      onClick={exportRecentCSV}
+      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200/60 bg-white/60 backdrop-blur-sm px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-700 shadow-sm hover:bg-white hover:shadow-md transition-all"
+    >
+      <FiDownload className="h-4 w-4" />
+      <span className="hidden sm:inline">Export</span>
+    </button>
+  )}
+</div>
+
   );
 
   return (

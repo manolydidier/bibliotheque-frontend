@@ -39,6 +39,7 @@ import NotFoundPage from './component/NotFound/NotFoundPage';
 /* 🔹 AJOUTS: hook + helper pour rôles/permissions (mêmes que Comments.jsx) */
 import useMeFromLaravel from './hooks/useMeFromLaravel';
 import { computeRights } from './utils/access';
+import TermsOfUse from './pages/auth/TermsOfUse';
 
 function BootScreen() {
   return (
@@ -184,6 +185,7 @@ export default function App() {
 
                 {/* 404 */}
                 <Route path="*" element={<NotFoundPage />} />
+                <Route path="termsofuse" element={<TermsOfUse />} />
 
               </Routes>
             </Router>

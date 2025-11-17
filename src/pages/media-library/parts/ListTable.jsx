@@ -281,7 +281,7 @@ export default function ListTable({ rows, sort, setSort, routeBase }) {
     <div ref={containerRef} className="rounded-xl border bg-white shadow-sm overflow-hidden">
       {/* Toolbar colonne */}
       <div className="flex items-center justify-between px-3 py-2 border-b bg-slate-50">
-        <div className="text-xs text-slate-500">
+        <div className="text-xs text-slate-500/0">
           {t('listtable.responsive.width')}:{" "}
           <span className="font-medium">{Math.round(containerWidth)}px</span>{" "}
           — {mode === "auto"

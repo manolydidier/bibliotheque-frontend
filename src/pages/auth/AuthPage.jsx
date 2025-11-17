@@ -4,6 +4,8 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faUserPlus, faSignInAlt, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { NavLink,  } from 'react-router-dom';
+
 import { useTranslation } from 'react-i18next';
 import GlobalErrorBanner from './GlobalErrorBanner';
 import './auth.css';
@@ -943,6 +945,14 @@ const AuthPage = ({ initialView = 'login' }) => {
                       <input type="checkbox" name="acceptTerms" checked={formData.acceptTerms} onChange={handleChange}/>
                       <span>{t("accept_terms")}</span>
                     </label>
+                      <NavLink
+                      to="/termsofuse"
+                     
+                      className="px-3 py-2 rounded-md bg-white border border-slate-200 hover:bg-slate-100 inline-flex items-center gap-2 text-sm"
+                    >
+                     
+                      termsofuse
+                    </NavLink>
                     <InlineError id="err-terms" visible={!!errors.acceptTerms || (submitAttempted && !formData.acceptTerms)}>
                       {t('acceptTermsRequired')}
                     </InlineError>
