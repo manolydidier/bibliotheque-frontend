@@ -652,101 +652,98 @@ const tabFields = {
   }, [isEdit, model]);
 
   /* ========= Submit global ========= */
- // AVANT : const handleSubmit = async () => {
-const handleSubmit = async (overrideModel) => {
-  setIsSubmitting(true);
-  try {
-    setErrors({});
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      setErrors({});
 
-    const srcModel = overrideModel || model;   // ✅ on utilise soit overrideModel, soit model
+      const payload = {
+        ...model,
+        is_featured: !!model.is_featured,
+        is_sticky: !!model.is_sticky,
+        allow_comments: !!model.allow_comments,
+        allow_sharing: !!model.allow_sharing,
+        allow_rating: !!model.allow_rating,
 
-    const payload = {
-      ...srcModel,
-      is_featured: !!srcModel.is_featured,
-      is_sticky: !!srcModel.is_sticky,
-      allow_comments: !!srcModel.allow_comments,
-      allow_sharing: !!srcModel.allow_sharing,
-      allow_rating: !!srcModel.allow_rating,
+        published_at: model.published_at ? toSqlDateTime(model.published_at) : null,
+        scheduled_at: model.scheduled_at ? toSqlDateTime(model.scheduled_at) : null,
+        expires_at:   model.expires_at   ? toSqlDateTime(model.expires_at)   : null,
+        reviewed_at:  model.reviewed_at  ? toSqlDateTime(model.reviewed_at)  : null,
 
-      published_at: srcModel.published_at ? toSqlDateTime(srcModel.published_at) : null,
-      scheduled_at: srcModel.scheduled_at ? toSqlDateTime(srcModel.scheduled_at) : null,
-      expires_at:   srcModel.expires_at   ? toSqlDateTime(srcModel.expires_at)   : null,
-      reviewed_at:  srcModel.reviewed_at  ? toSqlDateTime(srcModel.reviewed_at)  : null,
+        author_id:     model.author_id     ? Number(model.author_id)     : null,
+        reviewed_by:   model.reviewed_by   ? Number(model.reviewed_by)   : null,
+        reading_time:  Number(model.reading_time || 0),
+        word_count:    Number(model.word_count   || 0),
+        rating_average:Number(model.rating_average || 0),
+        rating_count:  Number(model.rating_count   || 0),
 
-      author_id:     srcModel.author_id     ? Number(srcModel.author_id)     : null,
-      reviewed_by:   srcModel.reviewed_by   ? Number(srcModel.reviewed_by)   : null,
-      reading_time:  Number(srcModel.reading_time || 0),
-      word_count:    Number(srcModel.word_count   || 0),
-      rating_average:Number(srcModel.rating_average || 0),
-      rating_count:  Number(srcModel.rating_count   || 0),
+        categories: ensureNumberArray(model.categories),
+        tags:       ensureNumberArray(model.tags),
 
-      categories: ensureNumberArray(srcModel.categories),
-      tags:       ensureNumberArray(srcModel.tags),
+        meta:     typeof model.meta     === 'object' ? model.meta     : {},
+        seo_data: typeof model.seo_data === 'object' ? model.seo_data : {},
+      };
 
-      meta:     typeof srcModel.meta     === 'object' ? srcModel.meta     : {},
-      seo_data: typeof srcModel.seo_data === 'object' ? srcModel.seo_data : {},
-    };
+      // Nettoyage
+      Object.keys(payload).forEach(key => {
+        if (payload[key] === '' || payload[key] === null) delete payload[key];
+      });
 
-    Object.keys(payload).forEach(key => {
-      if (payload[key] === '' || payload[key] === null) delete payload[key];
-    });
+      const withFiles = !!(featFile || avatarFile);
 
-    const withFiles = !!(featFile || avatarFile);
-    let res;
-
-    if (isEdit) {
-      if (withFiles) {
-        const fd = toFormData(payload, { featured: featFile || null, avatar: avatarFile || null });
-        res = await updateArticleWithFiles(srcModel.id, fd);
+      let res;
+      if (isEdit) {
+        if (withFiles) {
+          const fd = toFormData(payload, { featured: featFile || null, avatar: avatarFile || null });
+          res = await updateArticleWithFiles(model.id, fd);
+        } else {
+          res = await updateArticleJSON(model.id, payload);
+        }
       } else {
-        res = await updateArticleJSON(srcModel.id, payload);
+        if (withFiles) {
+          const fd = toFormData(payload, { featured: featFile || null, avatar: avatarFile || null });
+          res = await createArticleWithFiles(fd);
+        } else {
+          res = await createArticleJSON(payload);
+        }
       }
-    } else {
-      if (withFiles) {
-        const fd = toFormData(payload, { featured: featFile || null, avatar: avatarFile || null });
-        res = await createArticleWithFiles(fd);
+
+      setProgress(100);
+      setErrors({});
+      const data = res?.data?.data || res?.data || res;
+      setModel(prev => ({ ...prev, ...(data || {}) }));
+      if (isEdit) setBaseline(data || {});
+
+      showSuccess(isEdit ? 'Article mis à jour ✅' : 'Article créé ✅');
+
+      setPostSaveDialog({
+        open: true,
+        urls: buildUrlsFromArticle(data),
+        mode: isEdit ? 'update' : 'create'
+      });
+
+      if (!isEdit && data?.id) {
+        navigate(`/articles/${data.id}/edit`);
+      }
+    } catch (err) {
+      console.error('Erreur de soumission:', err?.response?.data || err?.message);
+      if (err.response?.status === 422 && err.response?.data?.errors) {
+        const e = err.response.data.errors || {};
+        setErrors(e);
+        const firstTabWithErrors = Object.entries(tabFields)
+          .find(([, fields]) => fields.some((f) => Array.isArray(e[f]) && e[f].length > 0));
+        if (firstTabWithErrors) setActiveTab(firstTabWithErrors[0]);
+        const errorMessages = Object.entries(e)
+          .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+          .join('\n');
+        alert(`Erreurs de validation:\n${errorMessages}`);
       } else {
-        res = await createArticleJSON(payload);
+        alert(err?.response?.data?.message || err.message || 'Erreur lors de l\'enregistrement');
       }
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setProgress(100);
-    setErrors({});
-    const data = res?.data?.data || res?.data || res;
-    setModel(prev => ({ ...prev, ...(data || {}) }));
-    if (isEdit) setBaseline(data || {});
-
-    showSuccess(isEdit ? 'Article mis à jour ✅' : 'Article créé ✅');
-
-    setPostSaveDialog({
-      open: true,
-      urls: buildUrlsFromArticle(data),
-      mode: isEdit ? 'update' : 'create'
-    });
-
-    if (!isEdit && data?.id) {
-      navigate(`/articles/${data.id}/edit`);
-    }
-  } catch (err) {
-    console.error('Erreur de soumission:', err?.response?.data || err?.message);
-    if (err.response?.status === 422 && err.response?.data?.errors) {
-      const e = err.response.data.errors || {};
-      setErrors(e);
-      const firstTabWithErrors = Object.entries(tabFields)
-        .find(([, fields]) => fields.some((f) => Array.isArray(e[f]) && e[f].length > 0));
-      if (firstTabWithErrors) setActiveTab(firstTabWithErrors[0]);
-      const errorMessages = Object.entries(e)
-        .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
-        .join('\n');
-      alert(`Erreurs de validation:\n${errorMessages}`);
-    } else {
-      alert(err?.response?.data?.message || err.message || 'Erreur lors de l\'enregistrement');
-    }
-  } finally {
-    setIsSubmitting(false);
-  }
-};
-
+  };
 
   /* ========= Sauvegarde partielle par onglet ========= */
   const savePartial = useCallback(async (tabId) => {
@@ -936,33 +933,30 @@ const handleSubmit = async (overrideModel) => {
   };
 
   /* ========= Bouton Publier maintenant ========= */
-const handlePublishNow = async () => {
-  const nowSql = toSqlDateTime(new Date());
-
-  if (isEdit && model.id) {
-    // 🔁 partie édition : OK comme tu l'avais
-    try {
-      setIsSubmitting(true);
-      const res = await updateArticleJSON(model.id, {
-        status: 'published',
-        published_at: nowSql
-      });
-      const updated = res?.data?.data || res?.data || {};
-      setModel(prev => ({ ...prev, ...updated, status: 'published', published_at: nowSql }));
-      setBaseline(prev => ({ ...(prev || {}), status: 'published', published_at: nowSql }));
-      showSuccess('Publié immédiatement ✅');
-    } catch (e) {
-      alert(e?.response?.data?.message || e.message || 'Échec de la publication');
-    } finally {
-      setIsSubmitting(false);
+  const handlePublishNow = async () => {
+    const nowSql = toSqlDateTime(new Date());
+    if (isEdit && model.id) {
+      try {
+        setIsSubmitting(true);
+        const res = await updateArticleJSON(model.id, {
+          status: 'published',
+          published_at: nowSql
+        });
+        const updated = res?.data?.data || res?.data || {};
+        setModel(prev => ({ ...prev, ...updated, status: 'published', published_at: nowSql }));
+        setBaseline(prev => ({ ...(prev || {}), status: 'published', published_at: nowSql }));
+        showSuccess('Publié immédiatement ✅');
+      } catch (e) {
+        alert(e?.response?.data?.message || e.message || 'Échec de la publication');
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
+      // En création: on force l’état puis on soumet
+      setModel(prev => ({ ...prev, status: 'published', published_at: nowSql }));
+      handleSubmit();
     }
-  } else {
-    // 🆕 création : on construit un modèle local avec published_at déjà correct
-    const nextModel = { ...model, status: 'published', published_at: nowSql };
-    setModel(nextModel);          // pour l’UI
-    await handleSubmit(nextModel); // pour l’envoi au backend ✅
-  }
-};
+  };
 
   /* ========= Autosave (onglet actif) ========= */
   // useEffect(() => {
@@ -1082,22 +1076,22 @@ const handlePublishNow = async () => {
                           )}
 
                           {isEdit ? (
-                            <button
-                              type="button"
-                              onClick={() => handleSubmit()}
-                              disabled={isSubmitting || !isAnyTabDirty}
-                              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow
-                                ${(!isAnyTabDirty || isSubmitting)
-                                  ? 'bg-slate-400 cursor-not-allowed'
-                                  : 'bg-blue-600 hover:bg-blue-700'}`}
-                            >
-                              <FiSave className="w-4 h-4" />
-                              {isSubmitting ? 'Enregistrement…' : 'Mettre à jour'}
-                            </button>
+                            isAnyTabDirty ? (
+                              <button
+                                type="button"
+                                onClick={handleSubmit}
+                                disabled={isSubmitting}
+                                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow
+                                  ${isSubmitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                              >
+                                <FiSave className="w-4 h-4" />
+                                {isSubmitting ? 'Enregistrement…' : 'Mettre à jour'}
+                              </button>
+                            ) : null
                           ) : (
                             <button
                               type="button"
-                              onClick={() => handleSubmit()}
+                              onClick={handleSubmit}
                               disabled={isSubmitting || !isCreateValid}
                               title={!isCreateValid ? 'Renseignez au moins le titre et le contenu' : undefined}
                               className={`hidden md:inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold shadow
@@ -1107,7 +1101,6 @@ const handlePublishNow = async () => {
                               {isSubmitting ? 'Enregistrement…' : 'Enregistrer'}
                             </button>
                           )}
-
                         </div>
                       </div>
                     </div>    
