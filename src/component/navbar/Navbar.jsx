@@ -565,7 +565,7 @@ const Navbar = () => {
 
   const baseBg = onAuth
     ? 'from-blue-50/80 via-blue-100/70 to-white/60 backdrop-blur-xl border-blue-200/60'
-    : 'from-blue-900 via-indigo-700 to-blue-700 border-white/10';
+    : 'from-blue-900 via-blue-700 to-blue-700 border-white/10';
 
   const heightClass = isCompact ? 'h-14' : 'h-20';
   const textScaleClass = isCompact ? 'text-xl' : 'text-2xl';
@@ -764,7 +764,7 @@ const Navbar = () => {
                   aria-label="Menu utilisateur"
                 >
                   {/* Header */}
-                  <div className="px-4 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white">
+                  <div className="px-4 py-3 bg-gradient-to-r from-blue-600 via-blue-600 to-blue-700 text-white">
                     <div className="flex items-center gap-3">
                       <img
                         src={avatarSrc}
@@ -921,7 +921,7 @@ function NotificationsDialog({
           aria-label={t('notifications','Notifications')}
           className="absolute right-2 top=[72px] top-[72px] w-[26rem] max-w-[96vw] bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 overflow-hidden"
         >
-          <div className="px-4 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white flex items-center justify-between">
+          <div className="px-4 py-3 bg-gradient-to-r from-blue-600 via-blue-600 to-blue-700 text-white flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="font-semibold">{t('notifications','Notifications')}</span>
               {newCount > 0 && <span className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full">{newCount}</span>}

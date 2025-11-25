@@ -30,6 +30,11 @@ const ANIMATION_DELAYS = {
   CHIP_STAGGER: 12,
   HISTORY_STAGGER: 15,
 };
+  function normalizeSearchText(text) {
+  return String(text || "")
+    .replace(/\s+/g, " ") // remplace tous les groupes de blancs par un seul espace
+    .trim();              // enlève espace début/fin
+}
 
 const STORAGE_KEYS = {
   FILTERS: "article-filters",
@@ -65,14 +70,14 @@ const THEME_STYLES = {
     badgeBg: "bg-red-600",
   },
   pro: {
-    accentIcon: "text-indigo-600",
-    headerFrom: "from-indigo-50",
-    primaryBg: "bg-indigo-600 hover:bg-indigo-700",
-    primaryRing: "focus-visible:ring-indigo-200",
-    toggleActive: "bg-indigo-50 text-indigo-700 border-indigo-200",
-    ringSoft: "ring-2 ring-indigo-100",
-    borderSoft: "border-indigo-200",
-    textAccent: "text-indigo-900",
+    accentIcon: "text-blue-600",
+    headerFrom: "from-blue-50",
+    primaryBg: "bg-blue-600 hover:bg-blue-700",
+    primaryRing: "focus-visible:ring-blue-200",
+    toggleActive: "bg-blue-50 text-blue-700 border-blue-200",
+    ringSoft: "ring-2 ring-blue-100",
+    borderSoft: "border-blue-200",
+    textAccent: "text-blue-900",
     badgeBg: "bg-rose-600",
   },
   colored: {
@@ -217,15 +222,25 @@ const useSavedFilters = () => {
 const useSearchHistory = () => {
   const validateHistory = useCallback((data) => {
     if (!Array.isArray(data)) return [];
-    return data.filter(item =>
-      item && typeof item === 'object' && typeof item.term === 'string' && item.term.trim() && typeof item.timestamp === 'number'
-    ).slice(0, 8);
+    return data
+      .filter(item =>
+        item &&
+        typeof item === 'object' &&
+        typeof item.term === 'string' &&
+        normalizeSearchText(item.term) &&           // ✅ on valide un term normalisé non vide
+        typeof item.timestamp === 'number'
+      )
+      .slice(0, 8);
   }, []);
 
-  const [history, setHistory, clearHistory] = useLocalStorage(STORAGE_KEYS.SEARCH_HISTORY, [], validateHistory);
+  const [history, setHistory, clearHistory] = useLocalStorage(
+    STORAGE_KEYS.SEARCH_HISTORY,
+    [],
+    validateHistory
+  );
 
   const addToHistory = useCallback((term) => {
-    const clean = String(term || "").trim();
+    const clean = normalizeSearchText(term);        // ✅ normalisation ici aussi
     if (!clean) return;
     const entry = { id: Date.now(), term: clean, timestamp: Date.now() };
     const updated = [entry, ...history.filter(h => h.term !== clean)].slice(0, 8);
@@ -234,6 +249,7 @@ const useSearchHistory = () => {
 
   return { history, addToHistory, clearHistory };
 };
+
 
 function useToast() {
   const [toasts, setToasts] = useState([]);
@@ -308,6 +324,48 @@ const extractArray = (src) => {
   if (src && Array.isArray(src.records)) return src.records;
   return [];
 };
+// -------------------------------------------
+// Suggestions de recherche (API)
+// -------------------------------------------
+const normalizeSuggestionResults = (input) => {
+  const raw = Array.isArray(input)
+    ? input
+    : Array.isArray(input?.data)
+    ? input.data
+    : Array.isArray(input?.suggestions)
+    ? input.suggestions
+    : [];
+
+  return raw
+    .map((x) => {
+      if (typeof x === "string") {
+        return { label: x, term: x };
+      }
+      if (!x || typeof x !== "object") return null;
+      const label = x.label || x.query || x.term || "";
+      const term = x.query || x.term || x.label || "";
+      if (!term) return null;
+      return { label, term };
+    })
+    .filter(Boolean);
+};
+
+async function fetchSearchSuggestions(term) {
+  if (!term) return [];
+  const params = { q: term, limit: 8 };
+
+  try {
+    const res = await api.get("/search/suggestions", { params });
+    return normalizeSuggestionResults(res?.data);
+  } catch {
+    try {
+      const res = await api.get("/search/suggestions", { params });
+      return normalizeSuggestionResults(res?.data);
+    } catch {
+      return [];
+    }
+  }
+}
 
 const normalizeOptionsList = (input, kind) => {
   return extractArray(input)
@@ -503,6 +561,7 @@ export default function FiltersPanel({
   const [catQuery, setCatQuery] = useState("");
   const [tagQuery, setTagQuery] = useState("");
 
+
   useEffect(() => {
     let aborted = false;
 
@@ -624,8 +683,50 @@ export default function FiltersPanel({
 
   const { savedFilters, saveFilter, deleteFilter } = useSavedFilters();
   const { history: searchHistory, addToHistory, clearHistory } = useSearchHistory();
+    // NEW – suggestions de recherche
+  const [suggestions, setSuggestions] = useState([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const suggestDebounceRef = useRef(null);
+
   const { show: showToast, toastElements } = useToast();
   const { wrapperRef, contentRef, height } = useAutoHeight(isExpanded && !isMobile, [activeMenu, localFilters, savedFilters, cardColorEnabled, themeKey]);
+
+
+const normalizedQueryForFilter = useMemo(
+  () => normalizeSearchText(searchQuery).toLowerCase(),
+  [searchQuery]
+);
+
+const filteredHistory = useMemo(() => {
+  if (!normalizedQueryForFilter) return searchHistory;
+  return searchHistory.filter((h) =>
+    String(h.term || "").toLowerCase().includes(normalizedQueryForFilter)
+  );
+}, [searchHistory, normalizedQueryForFilter]);
+  const hasHistoryMatches = filteredHistory.length > 0; // NEW
+  const hasSuggestions = suggestions.length > 0;        // NEW
+  // Ghost text / auto-complétion inline
+  const ghostText = useMemo(() => {
+    const normalized = normalizeSearchText(searchQuery);
+    if (!normalized) return "";
+    if (!suggestions || !suggestions.length) return "";
+
+    const lower = normalized.toLowerCase();
+
+    const match = suggestions.find((s) => {
+      const base = String(s.term || s.label || "").toLowerCase();
+      return base.startsWith(lower);
+    });
+
+    if (!match) return "";
+
+    const full = String(match.term || match.label || "");
+    if (full.length <= normalized.length) return "";
+
+    // On renvoie le texte complet suggéré (search + complétion)
+    return normalized + full.slice(normalized.length);
+  }, [searchQuery, suggestions]);
+
 
   // Responsive listener
   useEffect(() => {
@@ -675,6 +776,45 @@ export default function FiltersPanel({
     document.addEventListener("mousedown", handleOutsideClick);
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [handleOutsideClick]);
+  // NEW – fetch suggestions basées sur la saisie
+  useEffect(() => {
+    const normalized = normalizeSearchText(searchQuery);
+
+    // Si la recherche est vide après normalisation → on nettoie les suggestions
+    if (!normalized) {
+      if (suggestDebounceRef.current) {
+        clearTimeout(suggestDebounceRef.current);
+        suggestDebounceRef.current = null;
+      }
+      setSuggestions([]);
+      setLoadingSuggestions(false);
+      return;
+    }
+
+    if (suggestDebounceRef.current) {
+      clearTimeout(suggestDebounceRef.current);
+    }
+
+    suggestDebounceRef.current = setTimeout(async () => {
+      setLoadingSuggestions(true);
+      try {
+        const s = await fetchSearchSuggestions(normalized);
+        setSuggestions(s);
+      } catch {
+        setSuggestions([]);
+      } finally {
+        setLoadingSuggestions(false);
+        suggestDebounceRef.current = null;
+      }
+    }, 250);
+
+    return () => {
+      if (suggestDebounceRef.current) {
+        clearTimeout(suggestDebounceRef.current);
+        suggestDebounceRef.current = null;
+      }
+    };
+  }, [searchQuery]);
 
   useEffect(() => {
     const onKey = (ev) => {
@@ -716,12 +856,26 @@ export default function FiltersPanel({
     showToast(t('filters.toasts.filtersReset'), "success");
   }, [setFilters, normalizeFilters, showToast, t, isMobile]);
 
-  const handleSearch = useCallback(() => {
-    setSearch(searchQuery);
-    addToHistory(searchQuery);
+const handleSearch = useCallback(() => {
+  const normalized = normalizeSearchText(searchQuery); // ✅ multi-espaces → 1 espace + trim
+
+  if (!normalized) {
+    setSearch("");
+    setSuggestions([]);             // NEW : on vide aussi les suggestions
     setShowSearchHistory(false);
     setIsHistoryPinned(false);
-  }, [searchQuery, setSearch, addToHistory]);
+    return;
+  }
+
+  setSearchQuery(normalized);
+  setSearch(normalized);
+  addToHistory(normalized);
+
+  setShowSearchHistory(false);
+  setIsHistoryPinned(false);
+}, [searchQuery, setSearch, addToHistory]);
+
+
 
   const generateSuggestedName = useCallback(() => {
     const parts = [];
@@ -834,7 +988,19 @@ export default function FiltersPanel({
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               onFocus={() => { setIsSearchFocused(true); setShowSearchHistory(true); }}
-              onBlur={() => { setIsSearchFocused(false); if (!isHistoryPinned) setShowSearchHistory(false); }}
+              onBlur={(e) => {
+                  setIsSearchFocused(false);
+
+                  // e.relatedTarget = l’élément qui va recevoir le focus
+                  const next = e.relatedTarget;
+                  if (
+                    !isHistoryPinned &&
+                    (!next || !searchWrapperRef.current?.contains(next))
+                  ) {
+                    setShowSearchHistory(false);
+                  }
+                }}
+
               placeholder={isMobile ? t('filters.search.placeholder') : ""}
               className={cls(
                 "w-full pl-10 pr-20 h-10 rounded-2xl border-0 bg-transparent text-slate-900",
@@ -849,6 +1015,19 @@ export default function FiltersPanel({
               aria-label={t('filters.search.ariaLabel')}
               autoComplete="off"
             />
+                        {/* Ghost suggestion (auto-complétion inline) */}
+            {!isMobile && isSearchFocused && searchQuery && ghostText && (
+              <div className="pointer-events-none absolute left-10 right-20 top-1/2 -translate-y-1/2 text-slate-400 text-[13px] select-none">
+                <span>
+                  {/* On “réécrit” ce que l’utilisateur a tapé en invisible pour aligner la complétion */}
+                  <span className="invisible">{searchQuery}</span>
+                  <span className="opacity-60">
+                    {ghostText.slice(searchQuery.length)}
+                  </span>
+                </span>
+              </div>
+            )}
+
 
             {!isMobile && !searchQuery.length && (
               <div className="pointer-events-none absolute left-10 right-20 top-1/2 -translate-y-1/2 text-slate-500 text-[13px] select-none">
@@ -896,7 +1075,11 @@ export default function FiltersPanel({
                 <button
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => setSearchQuery("")}
+                      onClick={() => {
+                      setSearchQuery("");
+                      setSuggestions([]);      // NEW – on vide aussi les suggestions
+                    }}
+
                   className={cls(
                     "h-8 w-8 rounded-xl border inline-flex items-center justify-center transition-all duration-200 active:scale-95 focus:outline-none",
                     theme.primaryRing,
@@ -925,45 +1108,125 @@ export default function FiltersPanel({
               )}
             </div>
 
-            {showSearchHistory && searchHistory.length > 0 && (
-              <div className="absolute left-0 right-0 top-[44px] transition-all duration-200 z-[80] opacity-100 translate-y-0 pointer-events-auto animate-[dropdown-in_.14s_ease-out]">
-                <div className="bg-slate-50/95 backdrop-blur-xl border border-slate-200/80 rounded-xl shadow-2xl overflow-hidden">
-                  <div className="px-3 py-2 text-xs text-slate-600 border-b border-slate-100/80 flex items-center justify-between">
-                    <span className="inline-flex items-center gap-2">
-                      <FaHistory aria-hidden="true" /> {t('filters.search.recentSearches')}
-                    </span>
+          {showSearchHistory && (hasHistoryMatches || hasSuggestions) && (
+        <div className="absolute left-0 right-0 top-[44px] transition-all duration-200 z-[80] opacity-100 translate-y-0 pointer-events-auto animate-[dropdown-in_.14s_ease-out]">
+          <div className="bg-slate-50/95 backdrop-blur-xl border border-slate-200/80 rounded-xl shadow-2xl overflow-hidden">
+            {hasHistoryMatches && (
+              <>
+                <div className="px-3 py-2 text-xs text-slate-600 border-b border-slate-100/80 flex items-center justify-between">
+                  <span className="inline-flex items-center gap-2">
+                    <FaHistory aria-hidden="true" /> {t('filters.search.recentSearches')}
+                  </span>
+                  <button
+                    onClick={clearHistory}
+                    className="text-red-500 hover:text-red-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-200 rounded"
+                    title={t('filters.search.clearHistory')}
+                  >
+                    <FaTrash />
+                  </button>
+                </div>
+                <div className="max-h-40 overflow-y-auto">
+                  {filteredHistory.map((h, index) => (
                     <button
-                      onClick={clearHistory}
-                      className="text-red-500 hover:text-red-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-200 rounded"
-                      title={t('filters.search.clearHistory')}
+                      key={h.id}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        const normalized = normalizeSearchText(h.term);
+                        setSearchQuery(normalized);
+                        setTimeout(() => {
+                          setSearch(normalized);
+                          addToHistory(normalized);
+                          setShowSearchHistory(false);
+                          setIsHistoryPinned(false);
+                        }, 0);
+                      }}
+                      className={cls(
+                        "w-full text-left px-3 py-2 text-sm text-slate-700 flex items-center gap-2 transition-all duration-150",
+                        "hover:bg-slate-50/80 focus-visible:outline-none focus-visible:bg-slate-100 active:scale-[0.98]"
+                      )}
+                      style={{
+                        transitionDelay: `${Math.min(
+                          index,
+                          6
+                        ) * ANIMATION_DELAYS.HISTORY_STAGGER}ms`,
+                      }}
                     >
-                      <FaTrash />
+                      <FaSearch className="text-slate-400 text-xs" aria-hidden="true" />
+                      <span className="flex-1 truncate">{h.term}</span>
+                      <span className="text-[11px] text-slate-400">
+                        {new Date(h.timestamp).toLocaleDateString()}
+                      </span>
                     </button>
-                  </div>
-                  <div className="max-h-56 overflow-y-auto">
-                    {searchHistory.map((h, index) => (
+                  ))}
+                </div>
+              </>
+            )}
+
+            {hasSuggestions && (
+              <>
+                <div className={cls(
+                  "px-3 pt-2 pb-1 text-xs text-slate-600 flex items-center justify-between",
+                  hasHistoryMatches ? "border-t border-slate-100/80" : ""
+                )}>
+                  <span className="inline-flex items-center gap-2">
+                    <FaSearch aria-hidden="true" />
+                    {t('filters.search.suggestions') || "Suggestions de recherche"}
+                  </span>
+                  {loadingSuggestions && (
+                    <span className="text-[11px] text-slate-400">
+                      {t('filters.search.loadingSuggestions') || "mise à jour…"}
+                    </span>
+                  )}
+                </div>
+                <div className="max-h-40 overflow-y-auto">
+                  {suggestions.map((sug, index) => {
+                    const raw = sug.term || sug.label || "";
+                    return (
                       <button
-                        key={h.id}
+                        key={`${raw}-${index}`}
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => { setSearchQuery(h.term); setTimeout(handleSearch, 0); }}
-                        className={cls(
-                          "w-full text-left px-3 py-2 text-sm text-slate-700 flex items-center gap-2 transition-all duration-150",
-                          "hover:bg-slate-50/80 focus-visible:outline-none focus-visible:bg-slate-100 active:scale-[0.98]"
-                        )}
-                        style={{ transitionDelay: `${Math.min(index, 6) * ANIMATION_DELAYS.HISTORY_STAGGER}ms` }}
+                        onClick={() => {
+                          const normalized = normalizeSearchText(raw);
+                          if (!normalized) return;
+                          setSearchQuery(normalized);
+                          setTimeout(() => {
+                            setSearch(normalized);
+                            addToHistory(normalized);
+                            setShowSearchHistory(false);
+                            setIsHistoryPinned(false);
+                          }, 0);
+                        }}
+                        className="w-full text-left px-3 py-2 text-sm text-slate-700 flex items-center gap-2 hover:bg-slate-50/80 active:scale-[0.98] transition-all"
                       >
                         <FaSearch className="text-slate-400 text-xs" aria-hidden="true" />
-                        <span className="flex-1 truncate">{h.term}</span>
-                        <span className="text-[11px] text-slate-400">
-                          {new Date(h.timestamp).toLocaleDateString()}
+                        <span className="flex-1 truncate">
+                          {sug.label || sug.term}
                         </span>
                       </button>
-                    ))}
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+                  )}
+
+
+            {showSearchHistory &&
+              !hasHistoryMatches &&
+              !hasSuggestions &&
+              searchHistory.length > 0 && (
+                <div className="absolute left-0 right-0 top-[44px] z-[80]">
+                  <div className="bg-slate-50/95 border border-slate-200/80 rounded-xl shadow-2xl px-3 py-2 text-xs text-slate-500">
+                    {t('filters.search.noSuggestion') ||
+                      "Aucune suggestion ne correspond à votre recherche."}
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+
           </div>
 
           {/* Right controls */}

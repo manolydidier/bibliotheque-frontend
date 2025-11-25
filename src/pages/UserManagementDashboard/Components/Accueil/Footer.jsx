@@ -1,4 +1,5 @@
-import React from 'react';
+// src/components/layout/Footer.jsx (ou ton chemin actuel)
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   FaLinkedin, 
@@ -9,11 +10,16 @@ import {
   FaPhone,
   FaMapMarkerAlt,
   FaArrowRight,
-  FaHeart
 } from 'react-icons/fa';
+import axios from 'axios';
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
+
+  const [email, setEmail] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
   const footerLinks = {
     plateforme: [
@@ -43,6 +49,59 @@ const Footer = () => {
     { icon: FaInstagram, href: '#', label: 'Instagram', color: 'hover:text-pink-600' }
   ];
 
+  // 🔐 si tu as déjà configuré axios.defaults.baseURL = '/api' ailleurs, tu peux supprimer ça :
+  axios.defaults.baseURL = axios.defaults.baseURL || '/api';
+
+  const handleSubscribe = async (e) => {
+    e.preventDefault();
+    setSuccessMsg('');
+    setErrorMsg('');
+
+    const trimmed = email.trim();
+
+    if (!trimmed) {
+      setErrorMsg('Veuillez saisir une adresse email.');
+      return;
+    }
+
+    // petite validation rapide côté front
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmed)) {
+      setErrorMsg('Adresse email invalide.');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      const { data } = await axios.post('/newsletter/subscribe', {
+        email: trimmed,
+      });
+
+      setSuccessMsg(
+        data?.message ||
+        (data?.already_subscribed
+          ? 'Vous êtes déjà abonné à la newsletter.'
+          : 'Merci, vous êtes maintenant abonné.')
+      );
+      setEmail('');
+    } catch (err) {
+      // Gestion simple des erreurs
+      if (err?.response?.status === 422) {
+        const msg =
+          err.response.data?.message ||
+          'Adresse email invalide ou déjà utilisée.';
+        setErrorMsg(msg);
+      } else {
+        setErrorMsg(
+          'Une erreur est survenue. Merci de réessayer dans quelques instants.'
+        );
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <footer className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white mt-20">
       {/* Newsletter Section */}
@@ -55,18 +114,45 @@ const Footer = () => {
                 Recevez les dernières actualités et publications directement dans votre boîte mail
               </p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
+
+            <form
+              onSubmit={handleSubscribe}
+              className="flex flex-col sm:flex-row gap-3"
+            >
               <input
                 type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 placeholder="Votre adresse email"
-                className="flex-1 px-4 py-3 rounded-lg bg-slate-800/50 border border-slate-700 focus:border-[#1690FF] focus:outline-none focus:ring-2 focus:ring-[#1690FF]/20 transition-all"
+                className="flex-1 px-4 py-3 rounded-lg bg-slate-800/50 border border-slate-700 focus:border-[#1690FF] focus:outline-none focus:ring-2 focus:ring-[#1690FF]/20 transition-all text-sm"
+                disabled={submitting}
               />
-              <button className="px-6 py-3 bg-[#1690FF] hover:bg-[#1378d6] text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 whitespace-nowrap">
-                S'abonner
-                <FaArrowRight className="text-sm" />
+              <button
+                type="submit"
+                disabled={submitting}
+                className="px-6 py-3 bg-[#1690FF] hover:bg-[#1378d6] disabled:opacity-70 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 whitespace-nowrap"
+              >
+                {submitting ? 'Envoi…' : "S'abonner"}
+                {!submitting && <FaArrowRight className="text-sm" />}
               </button>
-            </div>
+            </form>
           </div>
+
+          {/* Messages de feedback */}
+          {(successMsg || errorMsg) && (
+            <div className="mt-4">
+              {successMsg && (
+                <p className="text-sm text-emerald-400">
+                  {successMsg}
+                </p>
+              )}
+              {errorMsg && (
+                <p className="text-sm text-red-400">
+                  {errorMsg}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -170,8 +256,6 @@ const Footer = () => {
                 </Link>
               ))}
             </div>
-
-        
           </div>
         </div>
       </div>

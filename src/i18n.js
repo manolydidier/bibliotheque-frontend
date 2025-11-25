@@ -568,7 +568,8 @@ i18n
       "showHistory": "Show search history",
       "hideHistory": "Hide search history",
       "recentSearches": "Recent searches",
-      "clearHistory": "Clear history"
+      "clearHistory": "Clear history",
+      "suggestions": "Suggestions"
     },
     "searchHints": {
       "example1": "Ex: ai startup after:2024-01-01",
@@ -1928,7 +1929,8 @@ legal: {
       "showHistory": "Afficher l'historique",
       "hideHistory": "Masquer l'historique",
       "recentSearches": "Recherches récentes",
-      "clearHistory": "Effacer l'historique"
+      "clearHistory": "Effacer l'historique",
+      "suggestions": "Suggestions",
     },
     "searchHints": {
       "example1": "Ex : ia startup after:2024-01-01",
