@@ -5,6 +5,7 @@ import Footer from './Footer'
 import HomeLanding from './HomeLanding'
 import PartnersStrip from './PartnersStrip'
 import Slide from './Slider'
+import ContactPage from './Contact'
 const Accueil = () => {
   
   return(
@@ -14,7 +15,7 @@ const Accueil = () => {
           <Actu />
           <Objectif />
           <PartnersStrip/>
-
+          <ContactPage/>
           <Footer/>
       </div>
   )

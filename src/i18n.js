@@ -1229,6 +1229,132 @@ legal: {
   }
 }
 ,
+
+  "config": {
+    "platformName": "Bibliothèque Numérique Mada",
+    "lastUpdate": "Last updated: November 25, 2025",
+    "jurisdiction": "Governing law: Madagascar"
+  },
+  "ui": {
+    "headerTitle": "Technical documentation",
+    "headerIntro": "Learn more about the technical structure of the platform, main concepts and integration best practices.",
+    "searchButton": "Search in the documentation",
+    "searchHint": "Use technical keywords (API, authentication, role, etc.) to filter sections.",
+    "tocTitle": "Table of contents",
+    "tocHint": "Click on an item to jump to the section.",
+    "tocSections": "Sections",
+    "bookmarksTitle": "Bookmarks",
+    "searchEmpty": "Type a term to search in the documentation.",
+    "searchNoResult": "No result found for “{{query}}”.",
+    "searchResultsCount": "{{count}} result(s) found in the documentation.",
+    "searchHistoryTitle": "Recent searches",
+    "clearHistory": "Clear",
+    "highlightToggle": "Highlight",
+    "sectionDone": "Read",
+    "sectionFav": "Favorite",
+    "markRead": "Mark as read",
+    "markUnread": "Mark as unread",
+    "noSections": "No documentation section available.",
+    "readingNow": "You are reading: {{tab}}",
+    "footerQuestion": "Questions about the documentation? Contact us at {{email}}.",
+    "printFull": "Print documentation",
+    "copyAll": "Copy all documentation"
+  },
+  "tabs": {
+    "overview": "Overview",
+    "architecture": "Architecture",
+    "api": "API & Integrations"
+  },
+  "sections": {
+    "overview_intro": {
+      "title": "Platform overview",
+      "body": "This documentation presents the Bibliothèque Numérique Mada, a platform dedicated to browsing, managing and publishing digital resources.\n\nIt explains the main concepts, module structure and general technical usage rules."
+    },
+    "overview_roles": {
+      "title": "User roles and profiles",
+      "body": "The platform defines several roles: basic user, librarian, administrator and possibly institutional partners.\n\nEach role has specific rights in terms of reading, editing, validation and administration."
+    },
+    "architecture_frontend": {
+      "title": "Frontend architecture",
+      "body": "The user interface is built with React and a modular, component-based approach.\n\nThe design relies on Tailwind CSS, with glassmorphism elements and light/dark themes."
+    },
+    "architecture_backend": {
+      "title": "Backend architecture",
+      "body": "The server side exposes a secured REST API, handling authentication, resource management (books, articles, media) and admin operations.\n\nAll communication between frontend and backend goes through this API."
+    },
+    "api_auth": {
+      "title": "Authentication & security",
+      "body": "Access to protected resources requires authentication. Depending on configuration, this may rely on tokens, sessions or a hybrid system.\n\nPasswords must be stored securely, and sensitive API calls must be protected (HTTPS, permission checks)."
+    },
+    "api_endpoints": {
+      "title": "Main API endpoints",
+      "body": "The detailed API endpoints (list, parameters, return codes) are documented separately or via tools like Swagger/OpenAPI.\n\nThis section simply reminds that it is recommended to use standard API clients and to limit unnecessary calls for better performance."
+    }
+  }
+
+,
+// en/resources.json
+
+  "faq": {
+    "faq": {
+      "badge": "FAQ & quick help",
+      "headerTitle": "Frequently asked questions",
+      "headerIntro": "A simple, user-friendly page with answers to the most common questions about how to use the platform.",
+      "headerHelper": "Click on a question to display the answer. This FAQ complements the technical documentation and legal policies but does not replace them.",
+      "blockTitle": "Common questions",
+      "blockSubtitle": "Quick help for sign-up, login and support.",
+      "counterLabel": "{{count}} listed question(s).",
+      "empty": "No question has been added yet. You can populate this FAQ with feedback from your users.",
+      "footerInfo": "This FAQ is designed as a user help space: it explains, in simple terms, the steps to follow to use the platform on a daily basis. It complements the technical documentation and legal policies but does not replace them.",
+      "items": {
+        "create_account": {
+          "question": "How do I create an account on the platform?",
+          "answer": "Click on the sign-up button, fill in the required fields (name, email, password) and validate. You will receive, if needed, a confirmation email."
+        },
+        "forgot_password": {
+          "question": "What should I do if I forgot my password?",
+          "answer": "Use the “Forgot password” link on the login page. Enter your email address to receive a reset link."
+        },
+        "contact_support": {
+          "question": "How can I contact support?",
+          "answer": "You can use the platform’s contact form or send an email to the support address indicated in the Contact section of the site."
+        }
+      }
+    }
+  }
+,
+// en/resources.json
+   
+
+  "userGuide": {
+    "badge": "User guide",
+    "headerTitle": "Getting started with the platform",
+    "headerIntro": "A step-by-step guide to help new users: sign-up, navigation, profile management and access to key features.",
+    "helperText": "This page is a practical guide for end-users, not a legal document. Its goal is to make onboarding as simple as possible.",
+    "tutorialHint": "You can add here a link to a tutorial video or an introductory webinar.",
+    "flowTitle": "User journey",
+    "flowIntro": "This guide summarises the main onboarding steps. Adapt the content depending on your roles (reader, contributor, administrator) and the modules enabled on the platform.",
+    "steps": {
+      "step1": {
+        "title": "Create an account and sign in",
+        "body": "Click on the sign-up button, fill in the required information and submit. Once your account is created, use your credentials to sign in to the platform."
+      },
+      "step2": {
+        "title": "Browse the content",
+        "body": "From the home page, access the available articles, resources and tools. Use the search bar or filters to quickly find what you need."
+      },
+      "step3": {
+        "title": "Manage your profile",
+        "body": "From the settings section, you can update your personal information, change your password and configure your notification preferences."
+      }
+    },
+    "helpTitle": "Need additional help?",
+    "helpBody": "Complete this page with screenshots, detailed step-by-step guides or links to the FAQ and legal policies. You can also specify support contacts or opening hours."
+  }
+
+,
+
+
               "role_permissions_management": "Role Permissions Management",
             "manage_role_permissions_description": "Manage associations between roles and permissions",
             "search_roles_permissions": "Search roles and permissions...",
@@ -2572,6 +2698,125 @@ legal: {
   }
 }
 ,
+
+  "config": {
+    "platformName": "Bibliothèque Numérique Mada",
+    "lastUpdate": "Dernière mise à jour : 25 novembre 2025",
+    "jurisdiction": "Droit applicable : Madagascar"
+  },
+  "ui": {
+    "headerTitle": "Documentation technique",
+    "headerIntro": "Découvrez la structure technique de la plateforme, les principaux concepts et les bonnes pratiques d'intégration.",
+    "searchButton": "Rechercher dans la documentation",
+    "searchHint": "Utilisez des mots-clés techniques (API, authentification, rôle, etc.) pour filtrer les sections.",
+    "tocTitle": "Sommaire",
+    "tocHint": "Cliquez sur un élément pour accéder directement à la section.",
+    "tocSections": "Sections",
+    "bookmarksTitle": "Favoris",
+    "searchEmpty": "Tapez un terme pour lancer une recherche dans la documentation.",
+    "searchNoResult": "Aucun résultat trouvé pour « {{query}} ».",
+    "searchResultsCount": "{{count}} résultat(s) trouvé(s) dans la documentation.",
+    "searchHistoryTitle": "Dernières recherches",
+    "clearHistory": "Effacer",
+    "highlightToggle": "Surlignage",
+    "sectionDone": "Lu",
+    "sectionFav": "Favori",
+    "markRead": "Marquer comme lu",
+    "markUnread": "Marquer comme non lu",
+    "noSections": "Aucune section de documentation disponible.",
+    "readingNow": "Vous lisez : {{tab}}",
+    "footerQuestion": "Une question sur la documentation ? Écrivez-nous à {{email}}.",
+    "printFull": "Imprimer la documentation",
+    "copyAll": "Copier toute la documentation"
+  },
+  "tabs": {
+    "overview": "Vue d’ensemble",
+    "architecture": "Architecture",
+    "api": "API & Intégrations"
+  },
+  "sections": {
+    "overview_intro": {
+      "title": "Présentation de la plateforme",
+      "body": "Cette documentation présente la Bibliothèque Numérique Mada, une plateforme destinée à la consultation, la gestion et la diffusion de ressources numériques.\n\nElle explique les concepts principaux, la structure des modules, ainsi que les règles générales d’utilisation technique."
+    },
+    "overview_roles": {
+      "title": "Rôles et profils utilisateurs",
+      "body": "La plateforme distingue plusieurs rôles : utilisateur simple, bibliothécaire, administrateur et éventuellement partenaires institutionnels.\n\nChaque rôle dispose de droits spécifiques en matière de lecture, d’édition, de validation et d’administration."
+    },
+    "architecture_frontend": {
+      "title": "Architecture frontend",
+      "body": "L’interface utilisateur est développée avec React, en utilisant une approche modulaire et des composants réutilisables.\n\nLe design repose sur Tailwind CSS, avec des éléments de type « glassmorphism » et un thème clair/sombre."
+    },
+    "architecture_backend": {
+      "title": "Architecture backend",
+      "body": "La partie serveur expose une API REST sécurisée, chargée de l’authentification, de la gestion des ressources (livres, articles, médias) et des opérations d’administration.\n\nLes communications entre le frontend et le backend se font exclusivement via cette API."
+    },
+    "api_auth": {
+      "title": "Authentification & sécurité",
+      "body": "L’accès aux ressources protégées nécessite une authentification. Selon la configuration, celle-ci peut reposer sur des jetons (tokens), des sessions ou un système hybride.\n\nLes mots de passe doivent être stockés de manière sécurisée et les appels sensibles à l’API doivent être protégés (HTTPS, vérification des permissions)."
+    },
+    "api_endpoints": {
+      "title": "Principaux endpoints API",
+      "body": "La documentation technique détaillée des endpoints API (liste, paramètres, codes de retour) est fournie dans un document séparé ou via un outil comme Swagger/OpenAPI.\n\nCette section rappelle simplement qu’il est recommandé d’utiliser des clients API standard et de limiter les appels superflus pour de meilleures performances."
+    }
+  }
+,
+"faq": {
+    "faq": {
+      "badge": "FAQ & aide rapide",
+      "headerTitle": "Foire aux questions",
+      "headerIntro": "Une page simple et pédagogique pour répondre aux questions les plus fréquentes sur l’utilisation de la plateforme.",
+      "headerHelper": "Cliquez sur une question pour afficher la réponse. Cette FAQ complète la documentation technique, elle n’a pas valeur de texte légal.",
+      "blockTitle": "Questions fréquentes",
+      "blockSubtitle": "Une aide rapide pour l’inscription, la connexion et le support.",
+      "counterLabel": "{{count}} question(s) listée(s).",
+      "empty": "Aucune question enregistrée pour le moment. Vous pouvez alimenter cette FAQ à partir des retours utilisateurs.",
+      "footerInfo": "Cette FAQ est pensée comme un espace d’aide utilisateur : elle vulgarise les étapes à suivre pour utiliser la plateforme au quotidien. Elle complète la documentation technique et les politiques légales, mais ne les remplace pas.",
+      "items": {
+        "create_account": {
+          "question": "Comment créer un compte sur la plateforme ?",
+          "answer": "Cliquez sur le bouton d’inscription, renseignez les champs requis (nom, email, mot de passe) puis validez. Vous recevrez, le cas échéant, un email de confirmation."
+        },
+        "forgot_password": {
+          "question": "Que faire si j’ai oublié mon mot de passe ?",
+          "answer": "Utilisez le lien « Mot de passe oublié » sur la page de connexion. Entrez votre adresse email pour recevoir un lien de réinitialisation."
+        },
+        "contact_support": {
+          "question": "Comment contacter le support ?",
+          "answer": "Vous pouvez utiliser le formulaire de contact de la plateforme ou envoyer un email à l’adresse de support indiquée dans la rubrique Contact du site."
+        }
+      }
+    }
+  }
+,
+  "userGuide": {
+    "badge": "Guide d’utilisation",
+    "headerTitle": "Bien démarrer avec la plateforme",
+    "headerIntro": "Un guide pas à pas pour accompagner les nouveaux utilisateurs : inscription, navigation, gestion du profil et accès aux fonctionnalités clés.",
+    "helperText": "Cette page est un guide pratique pour les utilisateurs, ce n’est pas un document juridique. Elle a pour but de rendre la prise en main la plus simple possible.",
+    "tutorialHint": "Vous pourrez ajouter ici un lien vers une vidéo tutorielle ou un webinaire d’introduction.",
+    "flowTitle": "Parcours utilisateur",
+    "flowIntro": "Ce guide résume les principales étapes de prise en main. Adaptez le contenu en fonction de vos rôles (lecteur, contributeur, administrateur) et des modules activés sur la plateforme.",
+    "steps": {
+      "step1": {
+        "title": "Créer un compte et se connecter",
+        "body": "Cliquez sur le bouton d’inscription, renseignez les informations demandées puis validez. Une fois votre compte créé, utilisez vos identifiants pour vous connecter à la plateforme."
+      },
+      "step2": {
+        "title": "Parcourir les contenus",
+        "body": "Depuis la page d’accueil, accédez aux articles, ressources et outils disponibles. Utilisez le moteur de recherche ou les filtres pour trouver rapidement ce qui vous intéresse."
+      },
+      "step3": {
+        "title": "Gérer votre profil",
+        "body": "Depuis la section paramètres, vous pouvez mettre à jour vos informations personnelles, changer votre mot de passe et configurer vos préférences de notification."
+      }
+    },
+    "helpTitle": "Besoin d’aide supplémentaire ?",
+    "helpBody": "Complétez cette page avec des captures d’écran, des pas-à-pas détaillés ou des liens vers la FAQ et les politiques légales. Vous pouvez également préciser les contacts de support ou les horaires d’assistance."
+   }
+
+,
+
 // === Navbar & Notifications (clés manquantes) ===
 "moderation": "Modération",
 "hello": "Bonjour",

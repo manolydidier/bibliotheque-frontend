@@ -529,3 +529,88 @@
   border-color: rgba(59, 130, 246, 0.35);
   background-color: rgba(255, 255, 255, 0.9);
 }
+
+
+/* === Styles personnalisés pour React Datepicker === */
+/* Conteneur du popper (position générale) */
+.dtp-popper {
+  z-index: 9999; /* par sécurité */
+}
+
+/* Bloc principal du calendrier */
+.dtp-calendar.react-datepicker {
+  border-radius: 5.25rem;
+  border: 1px solid rgba(184, 148, 148, 0.4);
+  background: radial-gradient(circle at top left, #eff6ff 0, #0f172a 55%);
+  box-shadow:
+    0 20px 40px rgba(15, 23, 42, 0.45),
+    0 0 0 1px rgba(148, 163, 184, 0.3);
+  color: #e5e7eb;
+  backdrop-filter: blur(18px);
+  overflow: hidden;
+}
+
+/* Header (mois / navigation) */
+.dtp-calendar .react-datepicker__header {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.9), rgba(56, 189, 248, 0.85));
+  border-bottom: 1px solid rgba(125, 211, 252, 0.5);
+  padding: 0.6rem 0.75rem;
+}
+
+.dtp-calendar .react-datepicker__current-month {
+  color: #f9fafb;
+  font-weight: 700;
+}
+
+/* Noms des jours */
+.dtp-calendar .react-datepicker__day-name {
+  color: rgba(226, 232, 240, 0.85);
+  font-size: 0.75rem;
+}
+
+/* Jours */
+.dtp-calendar .react-datepicker__day {
+  color: #e5e7eb;
+  border-radius: 999px;
+}
+
+.dtp-calendar .react-datepicker__day--today {
+  border: 1px solid rgba(96, 165, 250, 0.9);
+}
+
+.dtp-calendar .react-datepicker__day--selected,
+.dtp-calendar .react-datepicker__day--keyboard-selected {
+  background: linear-gradient(135deg, #3b82f6, #06b6d4);
+  color: white;
+}
+
+/* Hover sur un jour */
+.dtp-calendar .react-datepicker__day:hover {
+  background: rgba(37, 99, 235, 0.35);
+}
+
+/* Colonne time picker */
+.dtp-calendar .react-datepicker__time-container {
+  border-left: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+/* Liste des heures */
+.dtp-calendar .react-datepicker__time-list {
+  background: rgba(15, 23, 42, 0.85);
+}
+
+/* Chaque entrée de la liste (on rajoute dtp-time-item) */
+.dtp-calendar .react-datepicker__time-list-item.dtp-time-item {
+  color: #e5e7eb;
+  border-radius: 999px;
+  margin: 2px 4px;
+}
+
+.dtp-calendar .react-datepicker__time-list-item--selected.dtp-time-item {
+  background: linear-gradient(135deg, #3b82f6, #06b6d4);
+  color: white;
+}
+
+.dtp-calendar .react-datepicker__time-list-item.dtp-time-item:hover {
+  background: rgba(37, 99, 235, 0.35);
+}

@@ -40,6 +40,10 @@ import NotFoundPage from './component/NotFound/NotFoundPage';
 import useMeFromLaravel from './hooks/useMeFromLaravel';
 import { computeRights } from './utils/access';
 import TermsOfUse from './pages/auth/TermsOfUse';
+import DocumentationPage from './pages/Divers/Documentation';
+import UserGuidePage from './pages/Divers/UserGuide';
+import FAQPage from './pages/Divers/FAQ';
+import AboutPage from './pages/About/About';
 
 function BootScreen() {
   return (
@@ -121,12 +125,7 @@ export default function App() {
                   <Route
                     path="/about"
                     element={
-                      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-                        <div className="bg-white p-8 rounded-lg shadow-md">
-                          <h1 className="text-3xl font-bold text-blue-600 mb-4">Page About</h1>
-                          <p className="text-gray-600">Cette page sera créée ultérieurement</p>
-                        </div>
-                      </div>
+                      <AboutPage />
                     }
                   />
                 </Route>
@@ -186,6 +185,9 @@ export default function App() {
                 {/* 404 */}
                 <Route path="*" element={<NotFoundPage />} />
                 <Route path="termsofuse" element={<TermsOfUse />} />
+                 <Route path="/documentation" element={<DocumentationPage />} />
+                <Route path="/guide" element={<UserGuidePage />} />
+                <Route path="/faq" element={<FAQPage />} />
 
               </Routes>
             </Router>

@@ -498,24 +498,64 @@ const ToggleButton = ({ active, onClick, icon, label, disabled = false, theme = 
   </button>
 );
 
-const InputWithIcon = ({ icon, onChange, label, ...props }) => (
-  <div className="relative">
+const InputWithIcon = ({ icon, onChange, label, type = "text", ...props }) => (
+  <div className="relative group">
     <label className="sr-only">{label}</label>
-    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs" aria-hidden="true">
+
+    <span
+      className="
+        absolute left-3 top-1/2 -translate-y-1/2
+        text-slate-400 text-xs pointer-events-none
+        transition-colors
+        group-focus-within:text-blue-500
+      "
+      aria-hidden="true"
+    >
       {icon}
     </span>
+
     <input
       {...props}
+      type={type}
       onChange={(e) => onChange?.(e.target.value)}
       className={cls(
-        "w-full h-10 pl-9 pr-3 rounded-lg border border-slate-200",
+        // base
+        "w-full h-10 rounded-lg border text-sm",
+        "pl-9 pr-3",
+        "border-slate-200 bg-white/90",
+        "transition-all placeholder:text-slate-400",
         "focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300",
-        "transition-all placeholder:text-slate-400 bg-white/90"
+        // petit effet glass / shadow au focus
+        "group-focus-within:shadow-[0_10px_25px_rgba(15,23,42,0.08)]",
+
+        // style spécifique pour les dates
+        type === "date" &&
+          [
+            "pr-10", // plus d’espace pour l’icône calendrier
+            "appearance-none",
+            "[&::-webkit-calendar-picker-indicator]:opacity-0",
+            "[&::-webkit-calendar-picker-indicator]:cursor-pointer",
+            "relative"
+          ]
       )}
       aria-label={label}
     />
+
+    {type === "date" && (
+      <span
+        className="
+          pointer-events-none absolute right-3 top-1/2 -translate-y-1/2
+          text-slate-400 text-sm
+          transition-colors
+          group-focus-within:text-blue-500
+        "
+      >
+        <FaCalendar />
+      </span>
+    )}
   </div>
 );
+
 
 // -------------------------------------------
 // Main component

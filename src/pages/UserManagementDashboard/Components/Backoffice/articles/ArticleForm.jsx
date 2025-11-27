@@ -9,6 +9,10 @@ import {
   FiTrash2,
   
 } from 'react-icons/fi';
+// src/pages/.../ArticleForm.jsx
+import DateTimeInput from "../../../../../component/DateTimeInput";
+
+
 import ArticleMediaManager from "../Medias/ArticleMediaManager";
 // ✅ Ton éditeur TinyMCE React
 import RichTextEditor from './RichTextEditor';
@@ -1460,45 +1464,66 @@ const tabFields = {
                 Planification temporelle
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+               <div className="space-y-3">
+                <label className="text-sm font-semibold text-slate-700">
+                  Date de publication
+                </label>
+
+                <DateTimeInput
+                  value={model.published_at || null}   // string SQL ou null
+                  onChange={(sql) => onChange("published_at", sql)}
+                  className={inputClass("published_at")}
+                  placeholder="Choisir la date de publication…"
+                />
+
+                <p className="text-xs text-slate-500">
+                  {toDate(model.published_at)
+                    ? `${formatDate(toDate(model.published_at))} • ${formatTime(toDate(model.published_at))}`
+                    : "—"}
+                </p>
+                <FieldError name="published_at" />
+              </div>
+
                 <div className="space-y-3">
-                  <label className="text-sm font-semibold text-slate-700">Date de publication</label>
-                  <input
-                    type="datetime-local"
-                    className={inputClass('published_at')}
-                    value={toInputLocal(model.published_at)}
-                    onChange={e => onChange('published_at', toSqlDateTime(e.target.value))}
+                  <label className="text-sm font-semibold text-slate-700">
+                    Publication programmée
+                  </label>
+
+                  <DateTimeInput
+                    value={model.scheduled_at || null}
+                    onChange={(sql) => onChange("scheduled_at", sql)}
+                    className={inputClass("scheduled_at")}
+                    placeholder="Programmer la publication…"
                   />
+
                   <p className="text-xs text-slate-500">
-                    {toDate(model.published_at) ? `${formatDate(toDate(model.published_at))} • ${formatTime(toDate(model.published_at))}` : '—'}
-                  </p>
-                  <FieldError name="published_at" />
-                </div>
-                <div className="space-y-3">
-                  <label className="text-sm font-semibold text-slate-700">Publication programmée</label>
-                  <input
-                    type="datetime-local"
-                    className={inputClass('scheduled_at')}
-                    value={toInputLocal(model.scheduled_at)}
-                    onChange={e => onChange('scheduled_at', toSqlDateTime(e.target.value))}
-                  />
-                  <p className="text-xs text-slate-500">
-                    {toDate(model.scheduled_at) ? `${formatDate(toDate(model.scheduled_at))} • ${formatTime(toDate(model.scheduled_at))}` : '—'}
+                    {toDate(model.scheduled_at)
+                      ? `${formatDate(toDate(model.scheduled_at))} • ${formatTime(toDate(model.scheduled_at))}`
+                      : "—"}
                   </p>
                   <FieldError name="scheduled_at" />
                 </div>
+
                 <div className="space-y-3">
-                  <label className="text-sm font-semibold text-slate-700">Date d'expiration</label>
-                  <input
-                    type="datetime-local"
-                    className={inputClass('expires_at')}
-                    value={toInputLocal(model.expires_at)}
-                    onChange={e => onChange('expires_at', toSqlDateTime(e.target.value))}
-                  />
-                  <p className="text-xs text-slate-500">
-                    {toDate(model.expires_at) ? `${formatDate(toDate(model.expires_at))} • ${formatTime(toDate(model.expires_at))}` : '—'}
-                  </p>
-                  <FieldError name="expires_at" />
-                </div>
+                <label className="text-sm font-semibold text-slate-700">
+                  Date d'expiration
+                </label>
+
+                <DateTimeInput
+                  value={model.expires_at || null}
+                  onChange={(sql) => onChange("expires_at", sql)}
+                  className={inputClass("expires_at")}
+                  placeholder="Définir une date d'expiration…"
+                />
+
+                <p className="text-xs text-slate-500">
+                  {toDate(model.expires_at)
+                    ? `${formatDate(toDate(model.expires_at))} • ${formatTime(toDate(model.expires_at))}`
+                    : "—"}
+                </p>
+                <FieldError name="expires_at" />
+              </div>
+
               </div>
             </section>
 
@@ -1880,17 +1905,22 @@ const tabFields = {
                 <div className="space-y-6">
                   <div className="space-y-3">
                     <label className={sectionTitle}>Date de révision</label>
-                    <input
-                      type="datetime-local"
-                      className={inputClass('reviewed_at')}
-                      value={toInputLocal(model.reviewed_at)}
-                      onChange={e => onChange('reviewed_at', toSqlDateTime(e.target.value))}
+
+                    <DateTimeInput
+                      value={model.reviewed_at || null}
+                      onChange={(sql) => onChange("reviewed_at", sql)}
+                      className={inputClass("reviewed_at")}
+                      placeholder="Choisir la date de révision…"
                     />
+
                     <p className="text-xs text-slate-500">
-                      {toDate(model.reviewed_at) ? `${formatDate(toDate(model.reviewed_at))} • ${formatTime(toDate(model.reviewed_at))}` : '—'}
+                      {toDate(model.reviewed_at)
+                        ? `${formatDate(toDate(model.reviewed_at))} • ${formatTime(toDate(model.reviewed_at))}`
+                        : "—"}
                     </p>
                     <FieldError name="reviewed_at" />
                   </div>
+
                   <div className="space-y-3">
                     <label className={sectionTitle}>Notes de révision</label>
                     <textarea rows={6} className={inputClass('review_notes')} value={model.review_notes || ''} onChange={e => onChange('review_notes', e.target.value)} placeholder="Commentaires, suggestions d'amélioration..." />

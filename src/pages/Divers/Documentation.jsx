@@ -1,4 +1,4 @@
-// src/pages/LegalPolicies.jsx
+// src/pages/Documentation.jsx
 import React, { useState, useRef, useMemo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -14,10 +14,8 @@ import {
   FiTrash2,
   FiType,
 } from "react-icons/fi";
-import { LEGAL_SECTIONS } from "./legalData";
-import { useLocation, useNavigate } from "react-router-dom";
 
-const STORAGE_KEY = "legal_policies_prefs_v1";
+const STORAGE_KEY = "doc_page_prefs_v1";
 
 function classNames(...classes) {
   return classes.filter(Boolean).join(" ");
@@ -34,33 +32,34 @@ function loadPrefs() {
     if (!raw) return {};
     return JSON.parse(raw) || {};
   } catch (e) {
-    console.error("Error loading legal preferences:", e);
+    console.error("Error loading doc preferences:", e);
     return {};
   }
 }
 
-// 🔎 helper pour lire le tab dans l'URL
-const getTabFromSearch = (search) => {
-  const params = new URLSearchParams(search);
-  const tab = params.get("tab");
-  const allowed = ["terms", "privacy", "cookies"];
-  return allowed.includes(tab) ? tab : null;
-};
+// 🔹 Sections de la page Documentation (peut être déplacé dans un fichier dédié)
+export const DOC_SECTIONS = [
+  { id: "overview_intro", tab: "overview", i18nKey: "sections.overview_intro" },
+  { id: "overview_roles", tab: "overview", i18nKey: "sections.overview_roles" },
+  {
+    id: "architecture_frontend",
+    tab: "architecture",
+    i18nKey: "sections.architecture_frontend",
+  },
+  {
+    id: "architecture_backend",
+    tab: "architecture",
+    i18nKey: "sections.architecture_backend",
+  },
+  { id: "api_auth", tab: "api", i18nKey: "sections.api_auth" },
+  { id: "api_endpoints", tab: "api", i18nKey: "sections.api_endpoints" },
+];
 
-export default function LegalPolicies() {
+export default function DocumentationPage() {
   const { t, i18n } = useTranslation();
-  const location = useLocation();
-  const navigate = useNavigate();
 
-  // Charger les préférences une seule fois
   const prefsRef = useRef(loadPrefs());
 
-  // 🧠 tab initial : priorité à l’URL, sinon prefs, sinon "terms"
-  const [activeTab, setActiveTab] = useState(() => {
-    const urlTab = getTabFromSearch(location.search);
-    if (urlTab) return urlTab;
-    return prefsRef.current.activeTab || "terms";
-  });
   const [darkMode, setDarkMode] = useState(
     typeof prefsRef.current.darkMode === "boolean"
       ? prefsRef.current.darkMode
@@ -75,13 +74,13 @@ export default function LegalPolicies() {
       ? prefsRef.current.searchHistory
       : []
   );
-
   const [highlightEnabled, setHighlightEnabled] = useState(
     typeof prefsRef.current.highlightEnabled === "boolean"
       ? prefsRef.current.highlightEnabled
       : true
   );
-  const [copyStatus, setCopyStatus] = useState("idle"); // idle | success | error
+
+  const [copyStatus, setCopyStatus] = useState("idle");
   const [highlightId, setHighlightId] = useState(null);
   const [bookmarks, setBookmarks] = useState(
     Array.isArray(prefsRef.current.bookmarks) ? prefsRef.current.bookmarks : []
@@ -95,7 +94,7 @@ export default function LegalPolicies() {
     typeof prefsRef.current.fontScale === "number"
       ? prefsRef.current.fontScale
       : 100
-  ); // 80 - 150
+  );
 
   const [scrollProgress, setScrollProgress] = useState(0);
   const [activeSectionId, setActiveSectionId] = useState(null);
@@ -104,17 +103,17 @@ export default function LegalPolicies() {
   const contentRef = useRef(null);
   const searchInputRef = useRef(null);
 
-  // Config légal depuis i18n
-  const config = t("legal.config", { returnObjects: true }) || {};
+  // Config depuis i18n (facultatif, même structure que legal.config)
+  const config =
+    t("resources.documentation.config", { returnObjects: true }) || {};
   const platformName = config.platformName || "Bibliothèque Numérique Mada";
   const lastUpdate = config.lastUpdate || "";
-  const jurisdiction = config.jurisdiction || "";
   const contactEmail = config.contactEmail || "contact@example.com";
 
-  // Index de recherche basé sur la langue active
+  // Index de recherche basé sur les sections de documentation
   const searchIndex = useMemo(
     () =>
-      LEGAL_SECTIONS.map((item) => ({
+      DOC_SECTIONS.map((item) => ({
         ...item,
         title: t(`${item.i18nKey}.title`),
         body: t(`${item.i18nKey}.body`),
@@ -122,31 +121,10 @@ export default function LegalPolicies() {
     [t, i18n.language]
   );
 
-  // 💡 helper : changement d’onglet + synchro URL
-  const updateTab = (nextTab) => {
-    setActiveTab((current) => {
-      if (current === nextTab) return current;
-      return nextTab;
-    });
-
-    const params = new URLSearchParams(location.search);
-    params.set("tab", nextTab);
-    navigate(`${location.pathname}?${params.toString()}`, { replace: true });
-  };
-
-  // Garder le state en phase si l’URL change (back/forward, lien direct…)
-  useEffect(() => {
-    const urlTab = getTabFromSearch(location.search);
-    if (urlTab && urlTab !== activeTab) {
-      setActiveTab(urlTab);
-    }
-  }, [location.search, activeTab]);
-
-  // Sauvegarde des préférences (mise en page)
+  // Sauvegarde des préférences
   useEffect(() => {
     if (typeof window === "undefined") return;
     const prefsToSave = {
-      activeTab,
       darkMode,
       fontScale,
       bookmarks,
@@ -157,10 +135,9 @@ export default function LegalPolicies() {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(prefsToSave));
     } catch (e) {
-      console.error("Error saving legal preferences:", e);
+      console.error("Error saving doc preferences:", e);
     }
   }, [
-    activeTab,
     darkMode,
     fontScale,
     bookmarks,
@@ -169,14 +146,14 @@ export default function LegalPolicies() {
     searchHistory,
   ]);
 
-  // Focus auto sur l’input quand l’overlay de recherche s’ouvre
+  // Focus auto sur l’input quand overlay ouvert
   useEffect(() => {
     if (isSearchOpen && searchInputRef.current) {
       searchInputRef.current.focus();
     }
   }, [isSearchOpen]);
 
-  // Suivi du scroll (progress + section active + bouton back-to-top)
+  // Scroll progress + active section + back-to-top
   useEffect(() => {
     const handleScroll = () => {
       const scrollTop =
@@ -188,7 +165,6 @@ export default function LegalPolicies() {
       setScrollProgress(progress);
       setShowBackToTop(scrollTop > 320);
 
-      // Scroll spy
       if (contentRef.current) {
         const sections =
           contentRef.current.querySelectorAll("[data-section-id]");
@@ -210,12 +186,9 @@ export default function LegalPolicies() {
     window.addEventListener("scroll", handleScroll, { passive: true });
     handleScroll();
 
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-    };
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Helper snippet
   const makeSnippet = (text, query) => {
     const lower = text.toLowerCase();
     const q = query.toLowerCase();
@@ -234,7 +207,6 @@ export default function LegalPolicies() {
   const runSearch = (query) => {
     const q = query.trim().toLowerCase();
     if (!q) return [];
-
     return searchIndex
       .filter((item) =>
         (item.title + " " + item.body).toLowerCase().includes(q)
@@ -260,9 +232,7 @@ export default function LegalPolicies() {
     });
   };
 
-  const clearSearchHistory = () => {
-    setSearchHistory([]);
-  };
+  const clearSearchHistory = () => setSearchHistory([]);
 
   const handleSearchChange = (e) => {
     const value = e.target.value;
@@ -276,13 +246,7 @@ export default function LegalPolicies() {
     addToSearchHistory(value);
   };
 
-  const scrollToSection = (targetId, targetTab) => {
-    if (targetTab && targetTab !== activeTab) {
-      updateTab(targetTab);
-      setTimeout(() => scrollToSection(targetId), 0);
-      return;
-    }
-
+  const scrollToSection = (targetId) => {
     if (!contentRef.current) return;
     const el = contentRef.current.querySelector(
       `[data-section-id="${targetId}"]`
@@ -298,7 +262,7 @@ export default function LegalPolicies() {
 
   const handleSearchResultClick = (result) => {
     setIsSearchOpen(false);
-    scrollToSection(result.id, result.tab);
+    scrollToSection(result.id);
   };
 
   const handleCopy = async () => {
@@ -316,9 +280,7 @@ export default function LegalPolicies() {
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const handlePrint = () => window.print();
 
   const toggleBookmark = (sectionId) => {
     setBookmarks((prev) =>
@@ -344,31 +306,21 @@ export default function LegalPolicies() {
     });
   };
 
+  const completedCount = completedSections.length;
+  const favCount = bookmarks.length;
+  const totalSections = DOC_SECTIONS.length;
+
   // THEME + GLASS
   const pageBg = darkMode
-    ? "bg-gradient_to-br from-slate-950 via-slate-900 to-slate-950 text-slate-50"
+    ? "bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-50"
     : "bg-gradient-to-br from-slate-100 via-slate-50 to-slate-200 text-slate-900";
 
   const cardBg = darkMode ? "bg-slate-900/70" : "bg-white/40";
   const borderColor = darkMode ? "border-slate-800/80" : "border-white/60";
   const subtleText = darkMode ? "text-slate-400" : "text-slate-500";
   const headingText = darkMode ? "text-slate-50" : "text-slate-900";
-
   const cardBase =
     "rounded-2xl border shadow-sm shadow-slate-900/10 backdrop-blur-xl";
-
-  const tabLabel =
-    activeTab === "terms"
-      ? t("legal.ui.tabs.terms", {
-          defaultValue: "Conditions générales",
-        })
-      : activeTab === "privacy"
-      ? t("legal.ui.tabs.privacy", {
-          defaultValue: "Politique de confidentialité",
-        })
-      : t("legal.ui.tabs.cookies", {
-          defaultValue: "Politique des cookies",
-        });
 
   return (
     <div className={classNames(pageBg, "min-h-screen py-6 sm:py-10")}>
@@ -376,27 +328,27 @@ export default function LegalPolicies() {
         {/* HEADER */}
         <header className="mb-4 sm:mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
-            {/* <div className="inline-flex items-center gap-2 rounded-full border border-amber-200/70 bg-amber-50/50 px-3 py-1 text-xs font-medium text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200 backdrop-blur-sm">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-              {t("legal.ui.badge")}
-            </div> */}
             <h1
               className={classNames(
                 headingText,
                 "text-xl sm:text-2xl font-semibold tracking-tight"
               )}
             >
-              {t("legal.ui.headerTitle")}
+              {t("resources.documentation.headerTitle", {
+                defaultValue: "Documentation",
+              })}
             </h1>
             <p className={classNames(subtleText, "text-xs sm:text-sm")}>
-              {t("legal.ui.headerIntro")}
+              {t("resources.documentation.headerIntro", {
+                defaultValue:
+                  "Espace documentation utilisateur : guides, flux et exemples d’usage pour maîtriser la plateforme.",
+              })}
             </p>
             <p className={classNames(subtleText, "text-xs sm:text-[11px]")}>
               {platformName}
               {lastUpdate
                 ? ` • ${t("common.lastUpdate", { defaultValue: lastUpdate })}`
                 : ""}
-              {jurisdiction ? ` • ${jurisdiction}` : ""}
             </p>
           </div>
 
@@ -435,15 +387,15 @@ export default function LegalPolicies() {
               )}
             </button>
 
-            {/* Bouton recherche mobile (ouvre l’overlay) */}
+            {/* Recherche mobile */}
             <button
               type="button"
               onClick={() => setIsSearchOpen(true)}
-              aria-label={t("legal.ui.searchButton", {
-                defaultValue: "Rechercher dans les textes",
+              aria-label={t("resources.ui.searchButton", {
+                defaultValue: "Rechercher dans la documentation",
               })}
-              title={t("legal.ui.searchButton", {
-                defaultValue: "Rechercher dans les textes",
+              title={t("resources.ui.searchButton", {
+                defaultValue: "Rechercher dans la documentation",
               })}
               className={classNames(
                 "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition backdrop-blur-sm lg:hidden",
@@ -453,149 +405,72 @@ export default function LegalPolicies() {
               )}
             >
               <FiSearch className="h-4 w-4" />
-              <span>{t("legal.ui.searchButton", { defaultValue: "Recherche" })}</span>
+              <span>
+                {t("resources.ui.searchButton", { defaultValue: "Recherche" })}
+              </span>
             </button>
           </div>
         </header>
 
-        {/* Barre de progression de lecture */}
+        {/* BANDEAU STATUT / CONTEXTE (doc ≠ lois) */}
+        <div
+          className={classNames(
+            cardBase,
+            darkMode
+              ? "bg-sky-900/40 border-sky-700/60"
+              : "bg-sky-50/90 border-sky-100",
+            "mb-3 px-3 sm:px-4 py-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
+          )}
+        >
+          <div className="flex items-center gap-2 text-[11px] sm:text-xs">
+            <span
+              className={classNames(
+                "inline-flex items-center rounded-full px-2 py-[3px] text-[10px] font-semibold tracking-wide uppercase",
+                darkMode
+                  ? "bg-sky-500/20 text-sky-100 border border-sky-400/60"
+                  : "bg-sky-100 text-sky-800 border border-sky-200"
+              )}
+            >
+              {t("resources.documentation.badge", {
+                defaultValue: "Espace documentation utilisateur",
+              })}
+            </span>
+            <span className={classNames(subtleText, "hidden sm:inline")}>
+              {t("resources.documentation.badgeHint", {
+                defaultValue:
+                  "Ce contenu explique le fonctionnement de la bibliothèque numérique. Il ne s’agit pas de textes légaux.",
+              })}
+            </span>
+          </div>
+          <div
+            className={classNames(
+              "flex items-center gap-2 text-[11px] sm:text-xs",
+              subtleText
+            )}
+          >
+            <span>
+              {t("resources.documentation.statsSections", {
+                defaultValue: "{{count}} section(s) de doc lue(s)",
+                count: completedCount,
+              })}{" "}
+              / {totalSections}
+            </span>
+            <span>•</span>
+            <span>
+              {t("resources.documentation.statsFav", {
+                defaultValue: "{{count}} en favori",
+                count: favCount,
+              })}
+            </span>
+          </div>
+        </div>
+
+        {/* Barre de progression */}
         <div className="mb-4 h-1.5 w-full rounded-full bg-slate-200/70 dark:bg-slate-800/70 overflow-hidden backdrop-blur-sm">
           <div
             className="h-full rounded-full bg-sky-500/80 transition-[width] duration-200"
             style={{ width: `${scrollProgress}%` }}
           />
-        </div>
-
-        {/* TABS + CONTROLES */}
-        <div className={classNames(cardBase, cardBg, borderColor, "mb-4 sm:mb-6")}>
-          <div className="flex flex-col gap-2 border-b border-transparent px-3 py-2.5 sm:px-4 sm:py-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              {/* Tabs – version glass + contrastée */}
-              <div
-                className={classNames(
-                  "inline-flex items-center rounded-2xl border px-1.5 py-1 text-[11px] sm:text-xs backdrop-blur-md shadow-sm",
-                  darkMode
-                    ? "bg-slate-900/70 border-slate-700/80 shadow-black/30"
-                    : "bg-white/55 border-white/80 shadow-slate-900/10"
-                )}
-              >
-                {["terms", "privacy", "cookies"].map((tab) => {
-                  const isActive = activeTab === tab;
-                  const label =
-                    tab === "terms"
-                      ? t("legal.ui.tabs.terms", {
-                          defaultValue: "Conditions générales",
-                        })
-                      : tab === "privacy"
-                      ? t("legal.ui.tabs.privacy", {
-                          defaultValue: "Politique de confidentialité",
-                        })
-                      : t("legal.ui.tabs.cookies", {
-                          defaultValue: "Politique des cookies",
-                        });
-
-                  return (
-                    <button
-                      key={tab}
-                      type="button"
-                      onClick={() => updateTab(tab)}
-                      className={classNames(
-                        "relative inline-flex items-center rounded-2xl px-3 sm:px-3.5 py-1.5 font-medium transition-all",
-                        "focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-0",
-                        isActive
-                          ? darkMode
-                            ? "bg-gradient-to-r from-sky-500/80 to-indigo-500/80 text-white shadow-md shadow-sky-500/40"
-                            : "bg-gradient-to-r from-sky-500 to-indigo-500 text-white shadow-md shadow-sky-500/40"
-                          : darkMode
-                          ? "text-slate-300 hover:bg-slate-800/80"
-                          : "text-slate-700 hover:bg-slate-100/80"
-                      )}
-                    >
-                      <span className="whitespace-nowrap">{label}</span>
-                      {isActive && (
-                        <span
-                          className={classNames(
-                            "pointer-events-none absolute -bottom-1 left-1/2 h-0.5 w-6 -translate-x-1/2 rounded-full",
-                            darkMode
-                              ? "bg-sky-400/90"
-                              : "bg-sky-500/90"
-                          )}
-                        />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Contrôles : taille de police + surlignage */}
-              <div className="flex items-center gap-2 text-[11px]">
-                <div className="inline-flex items-center gap-1 rounded-full border border-slate-200/70 dark:border-slate-700/80 bg-white/60 dark:bg-slate-900/70 px-2 py-1 backdrop-blur-sm">
-                  <FiType className="h-3.5 w-3.5 text-slate-400" />
-                  <button
-                    type="button"
-                    onClick={() => handleFontScaleChange("smaller")}
-                    className="px-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800/80"
-                  >
-                    A-
-                  </button>
-                  <span className="px-1 text-[10px] tabular-nums">
-                    {fontScale}%
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleFontScaleChange("larger")}
-                    className="px-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800/80"
-                  >
-                    A+
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setHighlightEnabled((v) => !v)}
-                  className={classNames(
-                    "inline-flex items-center gap-1 rounded-full border px-2 py-1",
-                    highlightEnabled
-                      ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:border-emerald-500/70 dark:bg-emerald-900/40 dark:text-emerald-100"
-                      : "border-slate-200/80 bg-white/60 text-slate-500 dark:border-slate-700/80 dark:bg-slate-900/70 dark:text-slate-300"
-                  )}
-                >
-                  <span className="text-[10px]">
-                    {t("legal.ui.highlightToggle", {
-                      defaultValue: "Surlignage",
-                    })}
-                  </span>
-                  <span
-                    className={classNames(
-                      "inline-flex h-3.5 w-6 items-center rounded-full p-[1px] transition-colors",
-                      highlightEnabled
-                        ? "bg-emerald-500/70"
-                        : "bg-slate-400/60"
-                    )}
-                  >
-                    <span
-                      className={classNames(
-                        "h-3 w-3 rounded-full bg-white shadow-sm transition-transform",
-                        highlightEnabled ? "translate-x-2.5" : "translate-x-0"
-                      )}
-                    />
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className={classNames(subtleText, "text-[11px] sm:text-xs")}>
-                {t("legal.ui.searchHint")}
-              </p>
-              <p className={classNames(subtleText, "text-[11px] sm:text-xs")}>
-                {t("legal.ui.readingNow", {
-                  defaultValue: "Vous lisez : {{tab}}",
-                  tab: tabLabel,
-                })}
-              </p>
-            </div>
-          </div>
         </div>
 
         {/* CONTENU PRINCIPAL */}
@@ -613,7 +488,7 @@ export default function LegalPolicies() {
             )}
           >
             <SectionList
-              tab={activeTab}
+              sections={DOC_SECTIONS}
               darkMode={darkMode}
               highlightId={highlightId}
               searchQuery={searchQuery}
@@ -635,13 +510,12 @@ export default function LegalPolicies() {
               "hidden lg:flex flex-col px-4 py-4"
             )}
           >
-            {/* Table des matières enrichie avec fond bien visible */}
             <TableOfContents
-              activeTab={activeTab}
+              sections={DOC_SECTIONS}
               darkMode={darkMode}
               bookmarks={bookmarks}
-              activeSectionId={activeSectionId}
               completedSections={completedSections}
+              activeSectionId={activeSectionId}
               onNavigate={scrollToSection}
             />
 
@@ -654,16 +528,21 @@ export default function LegalPolicies() {
                     "text-sm font-semibold tracking-tight"
                   )}
                 >
-                  {t("legal.ui.searchButton")}
+                  {t("resources.ui.searchTitle", {
+                    defaultValue: "Recherche",
+                  })}
                 </h2>
                 <p className={classNames(subtleText, "text-[11px] mt-0.5")}>
-                  {t("legal.ui.searchHint")}
+                  {t("resources.ui.searchHint", {
+                    defaultValue:
+                      "Tapez un mot-clé pour retrouver rapidement une section.",
+                  })}
                 </p>
               </div>
               <FiSearch className={classNames(subtleText, "h-4 w-4")} />
             </div>
 
-            {/* Champ de recherche */}
+            {/* Champ recherche */}
             <div className="mb-3">
               <div
                 className={classNames(
@@ -683,8 +562,12 @@ export default function LegalPolicies() {
                   type="text"
                   value={searchQuery}
                   onChange={handleSearchChange}
-                  placeholder={t("legal.ui.searchPlaceholder")}
-                  aria-label={t("legal.ui.searchPlaceholder")}
+                  placeholder={t("resources.ui.searchPlaceholder", {
+                    defaultValue: "Rechercher dans la documentation…",
+                  })}
+                  aria-label={t("resources.ui.searchPlaceholder", {
+                    defaultValue: "Rechercher dans la documentation…",
+                  })}
                   className={classNames(
                     "flex-1 bg-transparent text-xs outline-none z-1",
                     darkMode ? "text-slate-50" : "text-slate-900"
@@ -693,12 +576,12 @@ export default function LegalPolicies() {
               </div>
             </div>
 
-            {/* Historique de recherche */}
+            {/* Historique */}
             {searchHistory.length > 0 && (
               <div className="mb-3">
                 <div className="mb-1 flex items-center justify-between text-[11px]">
                   <span className={subtleText}>
-                    {t("legal.ui.searchHistoryTitle", {
+                    {t("resources.ui.searchHistoryTitle", {
                       defaultValue: "Dernières recherches",
                     })}
                   </span>
@@ -714,7 +597,7 @@ export default function LegalPolicies() {
                   >
                     <FiTrash2 className="h-3 w-3" />
                     <span>
-                      {t("legal.ui.clearHistory", {
+                      {t("resources.ui.clearHistory", {
                         defaultValue: "Effacer",
                       })}
                     </span>
@@ -744,7 +627,7 @@ export default function LegalPolicies() {
               </div>
             )}
 
-            {/* Résultats de recherche */}
+            {/* Résultats */}
             <div className="flex-1 overflow-auto space-y-1.5 text-xs pr-1">
               <SearchResults
                 searchQuery={searchQuery}
@@ -752,26 +635,30 @@ export default function LegalPolicies() {
                 onResultClick={handleSearchResultClick}
                 darkMode={darkMode}
                 highlightEnabled={highlightEnabled}
+                tPrefix="resources.documentation"
               />
             </div>
 
             <footer className="mt-3 border-t border-slate-200/60 dark:border-slate-800/80 pt-2">
               <p className={classNames(subtleText, "text-[11px]")}>
-                {t("legal.ui.footerQuestion", { email: contactEmail })}
+                {t("resources.ui.footerQuestion", {
+                  defaultValue: "Une question sur la documentation ?",
+                })}{" "}
+                {contactEmail}
               </p>
             </footer>
           </aside>
         </main>
 
-        {/* FOOTER : Print + Copy (actions globales) */}
+        {/* FOOTER : Print + Copy */}
         <footer className="mt-4 sm:mt-6 flex justify-end gap-2 text-xs">
           <button
             type="button"
             onClick={handlePrint}
-            aria-label={t("legal.ui.printFull", {
+            aria-label={t("resources.ui.printFull", {
               defaultValue: "Imprimer la page",
             })}
-            title={t("legal.ui.printFull", {
+            title={t("resources.ui.printFull", {
               defaultValue: "Imprimer la page",
             })}
             className={classNames(
@@ -786,10 +673,10 @@ export default function LegalPolicies() {
           <button
             type="button"
             onClick={handleCopy}
-            aria-label={t("legal.ui.copyAll", {
+            aria-label={t("resources.ui.copyAll", {
               defaultValue: "Copier tout le contenu",
             })}
-            title={t("legal.ui.copyAll", {
+            title={t("resources.ui.copyAll", {
               defaultValue: "Copier tout le contenu",
             })}
             className={classNames(
@@ -802,7 +689,7 @@ export default function LegalPolicies() {
           </button>
         </footer>
 
-        {/* Bouton retour en haut */}
+        {/* Back to top */}
         {showBackToTop && (
           <button
             type="button"
@@ -820,7 +707,7 @@ export default function LegalPolicies() {
           </button>
         )}
 
-        {/* Overlay de recherche mobile / tablette */}
+        {/* Overlay mobile */}
         {isSearchOpen && (
           <SearchOverlay
             darkMode={darkMode}
@@ -846,10 +733,10 @@ export default function LegalPolicies() {
 }
 
 /* --------------------------------------------------
- * LISTE DE SECTIONS (DRY)
+ * LISTE DE SECTIONS
  * -------------------------------------------------- */
 function SectionList({
-  tab,
+  sections,
   darkMode,
   highlightId,
   searchQuery,
@@ -861,14 +748,12 @@ function SectionList({
   fontScale,
 }) {
   const { t } = useTranslation();
-  const sections = LEGAL_SECTIONS.filter((s) => s.tab === tab);
 
   const baseSection =
     "transition-colors duration-500 rounded-xl px-2 -mx-1 sm:-mx-2";
 
-  // tailles dynamiques en fonction du % choisi
   const paragraphStyle = {
-    fontSize: `${fontScale / 100}rem`, // 100 -> 1rem, 150 -> 1.5rem
+    fontSize: `${fontScale / 100}rem`,
   };
   const headingStyle = {
     fontSize: `${(fontScale / 100) * 1.1}rem`,
@@ -882,7 +767,7 @@ function SectionList({
           "text-sm"
         )}
       >
-        {t("legal.ui.noSections", {
+        {t("resources.ui.noSections", {
           defaultValue: "Aucune section disponible.",
         })}
       </p>
@@ -929,7 +814,6 @@ function SectionList({
                   />
                 </h2>
 
-                {/* Badges de statut */}
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
                   {isCompleted && (
                     <span
@@ -939,7 +823,7 @@ function SectionList({
                       )}
                     >
                       ●{" "}
-                      {t("legal.ui.sectionDone", {
+                      {t("resources.ui.sectionDone", {
                         defaultValue: "Lu",
                       })}
                     </span>
@@ -952,7 +836,7 @@ function SectionList({
                       )}
                     >
                       ★{" "}
-                      {t("legal.ui.sectionFav", {
+                      {t("resources.ui.sectionFav", {
                         defaultValue: "Favori",
                       })}
                     </span>
@@ -961,14 +845,17 @@ function SectionList({
               </div>
 
               <div className="flex flex-col gap-1">
-                {/* Favori */}
                 <button
                   type="button"
                   onClick={() => onToggleBookmark(section.id)}
                   aria-label={
                     isBookmarked
-                      ? "Retirer des favoris"
-                      : "Ajouter aux favoris"
+                      ? t("resources.ui.removeBookmark", {
+                          defaultValue: "Retirer des favoris",
+                        })
+                      : t("resources.ui.addBookmark", {
+                          defaultValue: "Ajouter aux favoris",
+                        })
                   }
                   className={classNames(
                     "mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border text-[11px] transition",
@@ -987,16 +874,15 @@ function SectionList({
                   />
                 </button>
 
-                {/* Marquer lu */}
                 <button
                   type="button"
                   onClick={() => onToggleCompleted(section.id)}
                   aria-label={
                     isCompleted
-                      ? t("legal.ui.markUnread", {
+                      ? t("resources.ui.markUnread", {
                           defaultValue: "Marquer comme non lu",
                         })
-                      : t("legal.ui.markRead", {
+                      : t("resources.ui.markRead", {
                           defaultValue: "Marquer comme lu",
                         })
                   }
@@ -1040,7 +926,7 @@ function SectionList({
 }
 
 /* --------------------------------------------------
- * HIGHLIGHT TEXTE
+ * HIGHLIGHT
  * -------------------------------------------------- */
 function HighlightedText({ text, query, enable = true }) {
   if (!enable || !query || !query.trim()) return text;
@@ -1075,7 +961,7 @@ function HighlightedText({ text, query, enable = true }) {
 }
 
 /* --------------------------------------------------
- * RÉSULTATS DE RECHERCHE
+ * RÉSULTATS RECHERCHE
  * -------------------------------------------------- */
 function SearchResults({
   searchQuery,
@@ -1083,6 +969,7 @@ function SearchResults({
   onResultClick,
   darkMode,
   highlightEnabled,
+  tPrefix, // pour rester compatible si tu veux utiliser un autre namespace plus tard
 }) {
   const { t } = useTranslation();
   const subtleText = darkMode ? "text-slate-400" : "text-slate-500";
@@ -1090,7 +977,9 @@ function SearchResults({
   if (!searchQuery.trim()) {
     return (
       <p className={classNames(subtleText, "text-[11px]")}>
-        {t("legal.ui.searchEmpty")}
+        {t("resources.ui.searchEmpty", {
+          defaultValue: "Saisissez un terme pour lancer une recherche.",
+        })}
       </p>
     );
   }
@@ -1098,7 +987,10 @@ function SearchResults({
   if (!searchResults.length) {
     return (
       <p className={classNames(subtleText, "text-[11px]")}>
-        {t("legal.ui.searchNoResult", { query: searchQuery })}
+        {t("resources.ui.searchNoResult", {
+          defaultValue: "Aucun résultat pour « {{query}} ».",
+          query: searchQuery,
+        })}
       </p>
     );
   }
@@ -1106,9 +998,8 @@ function SearchResults({
   return (
     <>
       <p className={classNames(subtleText, "text-[11px] mb-1")}>
-        {t("legal.ui.searchResultsCount", {
-          defaultValue:
-            "{{count}} résultat(s) trouvé(s) dans les documents légaux.",
+        {t("resources.ui.searchResultsCount", {
+          defaultValue: "{{count}} résultat(s) trouvé(s).",
           count: searchResults.length,
         })}
       </p>
@@ -1127,26 +1018,15 @@ function SearchResults({
           <div className="flex items-center justify-between gap-2">
             <span
               className={classNames(
-                "inline-flex items-center rounded-full px-1.5 py-[2px] text-[10px] font-medium",
-                result.tab === "terms"
-                  ? "bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-200"
-                  : result.tab === "privacy"
-                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200"
-                  : "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200"
+                "inline-flex items-center rounded-full px-2 py-[3px] text-[10px] font-semibold uppercase tracking-wide border shadow-sm",
+                darkMode
+                  ? "bg-blue-500/20 text-blue-100 border-blue-400/70"
+                  : "bg-blue-50 text-blue-800 border-blue-200"
               )}
             >
-              {result.tab === "terms" &&
-                t("legal.ui.tabs.terms", {
-                  defaultValue: "Conditions générales",
-                })}
-              {result.tab === "privacy" &&
-                t("legal.ui.tabs.privacy", {
-                  defaultValue: "Politique de confidentialité",
-                })}
-              {result.tab === "cookies" &&
-                t("legal.ui.tabs.cookies", {
-                  defaultValue: "Politique des cookies",
-                })}
+              {t("resources.documentation.tagLabel", {
+                defaultValue: "Documentation",
+              })}
             </span>
             <FiChevronRight
               className={classNames(
@@ -1187,10 +1067,10 @@ function SearchResults({
 }
 
 /* --------------------------------------------------
- * TABLE DES MATIÈRES (Sommaire)
+ * TABLE DES MATIÈRES
  * -------------------------------------------------- */
 function TableOfContents({
-  activeTab,
+  sections,
   darkMode,
   bookmarks,
   completedSections,
@@ -1198,15 +1078,12 @@ function TableOfContents({
   onNavigate,
 }) {
   const { t } = useTranslation();
-  const sections = LEGAL_SECTIONS.filter((s) => s.tab === activeTab);
   const subtleText = darkMode ? "text-slate-400" : "text-slate-500";
   const headingText = darkMode ? "text-slate-50" : "text-slate-900";
 
   if (!sections.length) return null;
 
-  const bookmarkedSections = sections.filter((s) =>
-    bookmarks.includes(s.id)
-  );
+  const bookmarkedSections = sections.filter((s) => bookmarks.includes(s.id));
 
   return (
     <div
@@ -1223,15 +1100,14 @@ function TableOfContents({
           "text-xs font-semibold uppercase tracking-wide mb-1.5"
         )}
       >
-        {t("legal.ui.tocTitle", { defaultValue: "Sommaire" })}
+        {t("resources.ui.tocTitle", { defaultValue: "Sommaire" })}
       </h2>
       <p className={classNames(subtleText, "text-[11px] mb-2")}>
-        {t("legal.ui.tocHint", {
+        {t("resources.ui.tocHint", {
           defaultValue: "Cliquez pour accéder à une section précise.",
         })}
       </p>
 
-      {/* Favoris */}
       {bookmarkedSections.length > 0 && (
         <div className="mb-3">
           <p
@@ -1241,7 +1117,7 @@ function TableOfContents({
             )}
           >
             <FiBookmark className="h-3.5 w-3.5 text-amber-500" />
-            {t("legal.ui.bookmarksTitle", { defaultValue: "Favoris" })}
+            {t("resources.ui.bookmarksTitle", { defaultValue: "Favoris" })}
           </p>
           <nav className="space-y-1 text-xs mb-2">
             {bookmarkedSections.map((section) => {
@@ -1251,7 +1127,7 @@ function TableOfContents({
                 <button
                   key={`bm-${section.id}`}
                   type="button"
-                  onClick={() => onNavigate(section.id, section.tab)}
+                  onClick={() => onNavigate(section.id)}
                   className={classNames(
                     "w-full text-left rounded-xl border px-2.5 py-1.5 transition text-[11px]",
                     isActive
@@ -1272,14 +1148,13 @@ function TableOfContents({
         </div>
       )}
 
-      {/* Toutes les sections */}
       <p
         className={classNames(
           subtleText,
           "text-[11px] font-medium mb-1 mt-1"
         )}
       >
-        {t("legal.ui.tocSections", { defaultValue: "Sections" })}
+        {t("resources.ui.tocSections", { defaultValue: "Sections" })}
       </p>
       <nav className="space-y-1.5 text-xs">
         {sections.map((section) => {
@@ -1290,7 +1165,7 @@ function TableOfContents({
             <button
               key={section.id}
               type="button"
-              onClick={() => onNavigate(section.id, section.tab)}
+              onClick={() => onNavigate(section.id)}
               className={classNames(
                 "w-full text-left rounded-xl border px-2.5 py-1.5 transition text-[11px]",
                 isActive
@@ -1313,7 +1188,7 @@ function TableOfContents({
 }
 
 /* --------------------------------------------------
- * OVERLAY DE RECHERCHE (MOBILE / TABLETTE)
+ * OVERLAY MOBILE
  * -------------------------------------------------- */
 function SearchOverlay({
   darkMode,
@@ -1329,7 +1204,6 @@ function SearchOverlay({
   searchInputRef,
 }) {
   const { t } = useTranslation();
-
   const subtleText = darkMode ? "text-slate-400" : "text-slate-500";
   const cardBg = darkMode ? "bg-slate-900/85" : "bg-white/80";
   const borderColor = darkMode ? "border-slate-800/80" : "border-white/60";
@@ -1353,10 +1227,13 @@ function SearchOverlay({
         <div className="flex items-center justify-between mb-2">
           <div>
             <h2 className="text-sm font-semibold">
-              {t("legal.ui.searchButton")}
+              {t("resources.ui.searchTitle", { defaultValue: "Recherche" })}
             </h2>
             <p className={classNames(subtleText, "text-[11px] mt-0.5")}>
-              {t("legal.ui.searchHint")}
+              {t("resources.ui.searchHint", {
+                defaultValue:
+                  "Tapez un mot-clé pour retrouver rapidement une section.",
+              })}
             </p>
           </div>
           <button
@@ -1375,7 +1252,7 @@ function SearchOverlay({
           </button>
         </div>
 
-        {/* Champ de recherche */}
+        {/* Champ recherche */}
         <div className="mb-3">
           <div
             className={classNames(
@@ -1396,8 +1273,12 @@ function SearchOverlay({
               type="text"
               value={searchQuery}
               onChange={onChange}
-              placeholder={t("legal.ui.searchPlaceholder")}
-              aria-label={t("legal.ui.searchPlaceholder")}
+              placeholder={t("resources.ui.searchPlaceholder", {
+                defaultValue: "Rechercher dans la documentation…",
+              })}
+              aria-label={t("resources.ui.searchPlaceholder", {
+                defaultValue: "Rechercher dans la documentation…",
+              })}
               className={classNames(
                 "flex-1 bg-transparent text-xs outline-none",
                 darkMode ? "text-slate-50" : "text-slate-900"
@@ -1406,12 +1287,12 @@ function SearchOverlay({
           </div>
         </div>
 
-        {/* Historique mobile */}
+        {/* Historique */}
         {searchHistory.length > 0 && (
           <div className="mb-2">
             <div className="mb-1 flex items-center justify-between text-[11px]">
               <span className={subtleText}>
-                {t("legal.ui.searchHistoryTitle", {
+                {t("resources.ui.searchHistoryTitle", {
                   defaultValue: "Dernières recherches",
                 })}
               </span>
@@ -1427,7 +1308,7 @@ function SearchOverlay({
               >
                 <FiTrash2 className="h-3 w-3" />
                 <span>
-                  {t("legal.ui.clearHistory", {
+                  {t("resources.ui.clearHistory", {
                     defaultValue: "Effacer",
                   })}
                 </span>

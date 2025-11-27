@@ -21,13 +21,13 @@ import {
 import {
   FaDownload,
   FaExternalLinkAlt, FaChevronLeft, FaChevronRight, FaSearchPlus, FaSearchMinus,
-  FaFilePdf, FaFileExcel, FaFileWord, FaImage, FaFileVideo, FaFile, FaTag, FaStar, FaClock, FaEye, FaComment, FaChartBar, FaHistory, FaInfoCircle, FaPlay, FaTimes, FaShareAlt,FaColumns,
+  FaFilePdf, FaFileExcel, FaFileWord, FaImage, FaFileVideo, FaFile, FaTag, FaStar, FaClock, FaEye, FaComment, FaChartBar, FaHistory, FaInfoCircle, FaPlay, FaPause, FaTimes, FaShareAlt, FaColumns,
   FaLock,
   FaBars,
   FaThList,
   FaOutdent,
   FaStream,
-  FaIndent,FaPalette 
+  FaIndent,FaPalette ,  FaFileAudio,
 } from "react-icons/fa";
 import {
   ResponsiveContainer,
@@ -199,10 +199,14 @@ const initialsOf = (name) => {
 const inferTypeFromUrl = (url) => {
   if (!url) return "other";
   const s = url.toLowerCase();
+
   if (s.endsWith(".pdf")) return "pdf";
   if (/\.(xlsx?|csv)$/.test(s)) return "excel";
   if (/\.(docx?|rtf)$/.test(s)) return "word";
   if (/\.(png|jpe?g|gif|webp|svg|avif)$/.test(s)) return "image";
+  // 🔊 AUDIO (mp3, wav, ogg, m4a, aac…)
+  if (/\.(mp3|wav|ogg|m4a|aac)$/i.test(s)) return "audio";
+  // 🎬 VIDEO
   if (/\.(mp4|webm|ogg|mov)$/i.test(s)) return "video";
   if (/\.(pptx?|ppsx?)$/.test(s)) return "ppt";
   if (s.endsWith(".geojson") || s.endsWith(".json") || s.endsWith(".zip")) return "map";
@@ -217,9 +221,11 @@ const iconForType = (type, className = "") => {
     case "word":  return <FaFileWord className={`${common} text-blue-500`} />;
     case "image": return <FaImage className={`${common} text-amber-500`} />;
     case "video": return <FaFileVideo className={`${common} text-blue-500`} />;
+    case "audio": return <FaFile className={`${common} text-emerald-500`} />; // ou autre
     default:      return <FaFile className={`${common} text-slate-500`} />;
   }
 };
+
 
 const iconBgForType = (type) => {
   switch (type) {
@@ -228,9 +234,11 @@ const iconBgForType = (type) => {
     case "word": return "bg-blue-50 border-blue-100";
     case "image": return "bg-amber-50 border-amber-100";
     case "video": return "bg-blue-50 border-blue-100";
+    case "audio": return "bg-emerald-50 border-emerald-100";
     default: return "bg-slate-50 border-slate-100";
   }
 };
+
 
 /* ---------- Colors ---------- */
 function hexToRgb(hex) {
@@ -661,18 +669,26 @@ export default function Visualiseur() {
     }
   };
 
-  const typeFromMimeOrExt = (mime, url = "") => {
-    const m = (mime || "").toLowerCase();
-    const s = (url || "").toLowerCase();
+ const typeFromMimeOrExt = (mime, url = "") => {
+  const m = (mime || "").toLowerCase();
+  const s = (url || "").toLowerCase();
 
-    if (m.includes("pdf") || s.endsWith(".pdf")) return "pdf";
-    if (m.includes("presentation") || /\.(pptx?|ppsx?)$/.test(s)) return "ppt";
-    if (m.includes("spreadsheet") || /\.(xlsx?|csv)$/.test(s)) return "excel";
-    if (m.includes("word") || m.includes("msword") || /\.(docx?|rtf)$/.test(s)) return "word";
-    if (m.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg|avif)$/.test(s)) return "image";
-    if (m.startsWith("video/") || /\.(mp4|webm|ogg|mov)$/i.test(s)) return "video";
-    return "other";
-  };
+  if (m.includes("pdf") || s.endsWith(".pdf")) return "pdf";
+  if (m.includes("presentation") || /\.(pptx?|ppsx?)$/.test(s)) return "ppt";
+  if (m.includes("spreadsheet") || /\.(xlsx?|csv)$/.test(s)) return "excel";
+  if (m.includes("word") || m.includes("msword") || /\.(docx?|rtf)$/.test(s)) return "word";
+  if (m.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg|avif)$/.test(s)) return "image";
+
+  // 🔊 AUDIO
+  if (m.startsWith("audio/") || /\.(mp3|wav|ogg|m4a|aac)$/i.test(s)) return "audio";
+
+  // 🎬 VIDEO
+  if (m.startsWith("video/") || /\.(mp4|webm|ogg|mov)$/i.test(s)) return "video";
+
+  return "other";
+};
+
+
 
   /* ------- Unlock ------- */
   async function handleUnlock(password) {
@@ -894,37 +910,36 @@ export default function Visualiseur() {
 
   /* ------- Media list ------- */
   const mediaList = useMemo(() => {
-    const list = Array.isArray(article?.media) ? article.media : [];
+  const list = Array.isArray(article?.media) ? article.media : [];
 
-    return list
-      .filter(m => !!m?.url)
-      .map(m => {
-        const url = toAbsolute(m.url);
-        const title =
-          m.name?.trim?.() ||
-          m.original_filename?.trim?.() ||
-          m.filename?.trim?.() ||
-          article?.title?.trim?.() ||
-          t('visualiseur.untitled');
+  return list
+    .filter(m => !!m?.url)
+    .map(m => {
+      const url = toAbsolute(m.url);
 
-        return {
-          id: m.id,
-          title,
-          type: typeFromMimeOrExt(m.mime_type, url),
-          fileUrl: url,
-          thumbnail: m.thumbnail_url ? toAbsolute(m.thumbnail_url) : url,
-          size: m.size_readable || (typeof m.size === "number" ? `${(m.size/1024/1024).toFixed(1)} Mo` : "—"),
-          date: formatDate(m.created_at || article?.published_at),
-          category: firstCategory(article),
-          favorite: !!m.is_featured,
-          tags: Array.isArray(m.tags) ? m.tags.map(t => t.name || t) : [],
-          name: m.name,
-          filename: m.filename,
-          original_filename: m.original_filename,
-          mime_type: m.mime_type,
-        };
-      });
-  }, [article, t]);
+      return {
+        id: m.id,
+        title: m.name || m.original_filename || m.filename || article?.title || t('visualiseur.untitled'),
+        type: typeFromMimeOrExt(m.mime_type, url),
+        fileUrl: url,
+        thumbnail: m.thumbnail_url ? toAbsolute(m.thumbnail_url) : url,
+        size: m.size_readable || "—",
+        date: formatDate(m.created_at || article?.published_at),
+        category: firstCategory(article),
+        favorite: !!m.is_featured,
+        tags: Array.isArray(m.tags) ? m.tags.map(t => t.name || t) : [],
+        name: m.name,
+        filename: m.filename,
+        original_filename: m.original_filename,
+        mime_type: m.mime_type,
+
+        /* ➕ On ajoute : */
+        is_active: m.is_active ?? true,
+        sort_order: m.sort_order ?? null,
+      };
+    });
+}, [article, t]);
+
 
   /* ------- Default selected media ------- */
   const currentType  = selectedFile?.type || inferTypeFromUrl(primaryMediaUrl(article));
@@ -1538,44 +1553,104 @@ function Medias({ mediaList, onPreview }) {
 
   const activePills = React.useMemo(() => {
     const pills = [];
-    if (q.trim())    pills.push({ id:"q", label:`${t('visualiseur.media.search')}: "${q.trim()}"`, clear: () => setQ("") });
-    if (type)        pills.push({ id:"type", label:`${t('visualiseur.media.type')}: ${type.toUpperCase()}`, clear: () => setType("") });
-    if (featured!=="") pills.push({ id:"featured", label:`${t('visualiseur.media.featured')}: ${featured==="1"?t('visualiseur.media.featuredYes'):t('visualiseur.media.featuredNo')}`, clear: () => setFeatured("") });
-    if (sortBy!=="date" || sortDir!=="desc") {
-      const map = { date: t('visualiseur.media.sortDate'), title: t('visualiseur.media.sortTitle'), size: t('visualiseur.media.sortSize') };
-      pills.push({ id:"sort", label:`${t('visualiseur.media.sort')}: ${map[sortBy]} ${sortDir.toUpperCase()}`, clear: () => { setSortBy("date"); setSortDir("desc"); } });
+    if (q.trim())
+      pills.push({
+        id: "q",
+        label: `${t("visualiseur.media.search")}: "${q.trim()}"`,
+        clear: () => setQ(""),
+      });
+    if (type)
+      pills.push({
+        id: "type",
+        label: `${t("visualiseur.media.type")}: ${type.toUpperCase()}`,
+        clear: () => setType(""),
+      });
+    if (featured !== "")
+      pills.push({
+        id: "featured",
+        label: `${t("visualiseur.media.featured")}: ${
+          featured === "1"
+            ? t("visualiseur.media.featuredYes")
+            : t("visualiseur.media.featuredNo")
+        }`,
+        clear: () => setFeatured(""),
+      });
+    if (sortBy !== "date" || sortDir !== "desc") {
+      const map = {
+        date: t("visualiseur.media.sortDate"),
+        title: t("visualiseur.media.sortTitle"),
+        size: t("visualiseur.media.sortSize"),
+      };
+      pills.push({
+        id: "sort",
+        label: `${t("visualiseur.media.sort")}: ${map[sortBy]} ${sortDir.toUpperCase()}`,
+        clear: () => {
+          setSortBy("date");
+          setSortDir("desc");
+        },
+      });
     }
     return pills;
   }, [q, type, featured, sortBy, sortDir, t]);
 
   const filtered = React.useMemo(() => {
     let arr = Array.isArray(mediaList) ? mediaList.slice() : [];
-    if (type) arr = arr.filter(m => (m.type || "other") === type);
-    if (featured !== "") arr = arr.filter(m => (!!m.favorite) === (featured === "1"));
+
+    // 1️⃣ Fichiers actifs uniquement
+    arr = arr.filter((m) => m.is_active !== false);
+
+    // 2️⃣ Filtres type / featured
+    if (type) arr = arr.filter((m) => (m.type || "other") === type);
+    if (featured !== "")
+      arr = arr.filter((m) => (!!m.favorite) === (featured === "1"));
+
+    // 3️⃣ Recherche texte
     const s = q.trim().toLowerCase();
     if (s) {
-      arr = arr.filter(m =>
-        (m.title||"").toLowerCase().includes(s) ||
-        (m.mime_type||"").toLowerCase().includes(s) ||
-        (m.filename||"").toLowerCase().includes(s) ||
-        String(m.id||"").includes(s) ||
-        (Array.isArray(m.tags) ? m.tags.join(" ").toLowerCase().includes(s) : false)
+      arr = arr.filter((m) =>
+        (m.title || "").toLowerCase().includes(s) ||
+        (m.mime_type || "").toLowerCase().includes(s) ||
+        (m.filename || "").toLowerCase().includes(s) ||
+        String(m.id || "").includes(s) ||
+        (Array.isArray(m.tags)
+          ? m.tags.join(" ").toLowerCase().includes(s)
+          : false)
       );
     }
-    arr.sort((a,b) => {
+
+    // 4️⃣ Tri prioritaire par sort_order (si fourni)
+    arr.sort((a, b) => {
+      const ao = a.sort_order ?? 999999;
+      const bo = b.sort_order ?? 999999;
+      return ao - bo;
+    });
+
+    // 5️⃣ Puis tri par critère sélectionné
+    arr.sort((a, b) => {
       const dir = sortDir === "asc" ? 1 : -1;
-      if (sortBy === "title") return (a.title||"").localeCompare(b.title||"","fr",{sensitivity:"base"}) * dir;
-      if (sortBy === "size")  return ((a.size_bytes||0) - (b.size_bytes||0)) * dir;
-      const da = new Date(a.date||0).getTime();
-      const db = new Date(b.date||0).getTime();
+      if (sortBy === "title")
+        return (
+          (a.title || "").localeCompare(b.title || "", "fr", {
+            sensitivity: "base",
+          }) * dir
+        );
+      if (sortBy === "size")
+        return ((a.size_bytes || 0) - (b.size_bytes || 0)) * dir;
+
+      const da = new Date(a.date || 0).getTime();
+      const db = new Date(b.date || 0).getTime();
       return (da - db) * dir;
     });
+
     return arr;
   }, [mediaList, q, type, featured, sortBy, sortDir]);
 
   const resetAll = () => {
-    setQ(""); setType(""); setFeatured("");
-    setSortBy("date"); setSortDir("desc");
+    setQ("");
+    setType("");
+    setFeatured("");
+    setSortBy("date");
+    setSortDir("desc");
   };
 
   if (!mediaList?.length) {
@@ -1584,99 +1659,181 @@ function Medias({ mediaList, onPreview }) {
         <div className="w-20 h-20 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <FaImage className="text-slate-400 text-3xl" />
         </div>
-        <p>{t('visualiseur.media.noMedia')}</p>
+        <p>{t("visualiseur.media.noMedia")}</p>
       </div>
     );
   }
 
+  // 🔹 Card (vue grille, style “mac” + audio en bas)
   const Card = ({ m }) => (
-   <div
-    key={m.id ?? m.fileUrl}
-    className={`visualiseur-media-card rounded-2xl border border-slate-200/60 bg-white/70 backdrop-blur-sm p-4 hover:shadow-xl transition-all duration-300 w-64 ${ACCENT.glowSoft}`}
-  >
+    <div
+      key={m.id ?? m.fileUrl}
+      className={`visualiseur-media-card rounded-2xl border border-slate-200/70 bg-white/80 backdrop-blur-sm p-4 hover:shadow-2xl hover:border-slate-300 transition-all duration-300 w-64 ${ACCENT.glowSoft}`}
+    >
+      {/* Header */}
       <div className="flex items-center gap-3">
-        <div className={`w-12 h-12 ${iconBgForType(m.type)} rounded-xl flex items-center justify-center`}>
+        <div
+          className={`w-12 h-12 ${iconBgForType(
+            m.type
+          )} rounded-xl flex items-center justify-center shadow-sm ring-1 ring-white/60`}
+        >
           {iconForType(m.type, "text-lg")}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium text-slate-800 truncate" title={m.title}>{m.title}</div>
+          <div
+            className="text-sm font-semibold text-slate-900 truncate"
+            title={m.title}
+          >
+            {m.title}
+          </div>
           <div className="text-xs text-slate-500 truncate">
-            {(m.size && m.size!=="—") ? `${m.size} • ` : ""}{m.date}
+            {m.size && m.size !== "—" ? `${m.size} • ` : ""}
+            {m.date}
           </div>
         </div>
         {m.favorite && (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">
-            <FiStar className="w-3 h-3" /> {t('visualiseur.media.featured')}
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200 shadow-sm">
+            <FiStar className="w-3 h-3" /> {t("visualiseur.media.featured")}
           </span>
         )}
       </div>
 
+      {/* Preview visuel (image / vidéo seulement) */}
       {m.type === "image" && (
-        <button onClick={() => onPreview?.(m)} className="mt-3 block text-left">
+        <button
+          type="button"
+          onClick={() => onPreview?.(m)}
+          className="mt-3 block text-left"
+        >
           <img
             src={toAbsolute(m.thumbnail || m.fileUrl)}
             alt={m.title}
-            className="w-full h-44 object-cover rounded-xl border border-slate-200/50"
+            className="w-full h-44 object-cover rounded-xl border border-slate-200/60 shadow-sm"
           />
         </button>
       )}
 
-      <div className="mt-3 flex items-center gap-2">
+      {m.type === "video" && (
+        <div className="mt-3 rounded-xl overflow-hidden border border-slate-200/60 shadow-sm bg-black/90">
+          <video
+            controls
+            preload="metadata"
+            className="w-full h-44 object-cover"
+            src={m.fileUrl}
+          />
+        </div>
+      )}
+  
+      {/* Boutons d’action (style pill type macOS) */}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+      {/* 🔊 Lecteur audio TOUT EN BAS de la card */}
+      {m.type === "audio" && (
+        <div className="mt-3 rounded-2xl bg-slate-900/0 px-3 py-2 shadow-inner h-[100%] w-full">
+          <audio
+            controls
+            preload="metadata"
+            className="w-full bg-white/0 rounded-lg"
+            src={m.fileUrl}
+          />
+        </div>
+      )}
+
         <button
+          type="button"
           onClick={() => onPreview?.(m)}
-          className={`px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm ${ACCENT.focus}`}
-          title={t('visualiseur.media.preview')}
+          className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-slate-200 bg-slate-50/80 text-slate-700 text-xs sm:text-sm font-medium hover:bg-white hover:border-slate-300 hover:shadow-md active:scale-[0.97] transition-all ${ACCENT.focus}`}
+          title={t("visualiseur.media.preview")}
         >
-          <FaEye className="inline -mt-0.5 mr-2" />
-          {t('visualiseur.media.preview')}
+          <FaEye className="w-3 h-3" />
+          <span>{t("visualiseur.media.preview")}</span>
         </button>
         <a
           href={m.fileUrl}
           target="_blank"
           rel="noreferrer"
-          className={`px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm ${ACCENT.focus}`}
-          title={t('visualiseur.media.open')}
+          className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-slate-200 bg-slate-50/80 text-slate-700 text-xs sm:text-sm font-medium hover:bg-white hover:border-slate-300 hover:shadow-md active:scale-[0.97] transition-all ${ACCENT.focus}`}
+          title={t("visualiseur.media.open")}
         >
-          <FaExternalLinkAlt className="inline -mt-0.5 mr-2" />
-          {t('visualiseur.media.open')}
+          <FaExternalLinkAlt className="w-3 h-3" />
+          <span>{t("visualiseur.media.open")}</span>
         </a>
       </div>
+
+      
     </div>
   );
 
+  // 🔹 Row (vue liste, boutons stylés aussi)
   const Row = ({ m }) => (
     <div
       key={m.id ?? m.fileUrl}
-      className="flex items-center gap-3 rounded-2xl border border-slate-200/60 bg-white/70 backdrop-blur-sm p-3"
+      className="flex items-center gap-3 rounded-2xl border border-slate-200/70 bg-white/80 backdrop-blur-sm p-3 hover:shadow-lg hover:border-slate-300 transition-all duration-200"
     >
-      <div className={`w-10 h-10 ${iconBgForType(m.type)} rounded-lg flex items-center justify-center`}>
+      <div
+        className={`w-10 h-10 ${iconBgForType(
+          m.type
+        )} rounded-lg flex items-center justify-center shadow-sm ring-1 ring-white/60`}
+      >
         {iconForType(m.type, "text-base")}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-slate-800 truncate" title={m.title}>
+        <div
+          className="text-sm font-medium text-slate-900 truncate"
+          title={m.title}
+        >
           {m.title}
         </div>
         <div className="text-[12px] text-slate-500 truncate">
-          {(m.size && m.size!=="—") ? `${m.size} • ` : ""}{m.date}
-          {m.favorite && <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">{t('visualiseur.media.featured')}</span>}
+          {m.size && m.size !== "—" ? `${m.size} • ` : ""}
+          {m.date}
+          {m.favorite && (
+            <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+              {t("visualiseur.media.featured")}
+            </span>
+          )}
         </div>
+
+        {/* audio en ligne, discret, sous le texte en vue liste */}
+        {m.type === "audio" && (
+          <div className="mt-2 rounded-xl bg-slate-900/95 px-2 py-1.5 shadow-inner max-w-md">
+            <audio
+              controls
+              preload="metadata"
+              className="w-full"
+              src={m.fileUrl}
+            />
+          </div>
+        )}
       </div>
+
       <div className="flex items-center gap-2">
+        {m.type === "video" && (
+          <div className="hidden sm:block rounded-lg overflow-hidden border border-slate-200/60 bg-black/90 w-24 h-12">
+            <video
+              controls
+              preload="metadata"
+              className="w-full h-full object-cover"
+              src={m.fileUrl}
+            />
+          </div>
+        )}
+
         <button
+          type="button"
           onClick={() => onPreview?.(m)}
-          className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
-          title={t('visualiseur.media.preview')}
+          className="inline-flex items-center justify-center px-3 py-1.5 rounded-full border border-slate-200 bg-slate-50/80 text-slate-700 text-xs sm:text-sm hover:bg-white hover:border-slate-300 hover:shadow-md active:scale-[0.97] transition-all"
+          title={t("visualiseur.media.preview")}
         >
-          <FaEye />
+          <FaEye className="w-4 h-4" />
         </button>
         <a
           href={m.fileUrl}
           target="_blank"
           rel="noreferrer"
-          className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
-          title={t('visualiseur.media.open')}
+          className="inline-flex items-center justify-center px-3 py-1.5 rounded-full border border-slate-200 bg-slate-50/80 text-slate-700 text-xs sm:text-sm hover:bg-white hover:border-slate-300 hover:shadow-md active:scale-[0.97] transition-all"
+          title={t("visualiseur.media.open")}
         >
-          <FaExternalLinkAlt />
+          <FaExternalLinkAlt className="w-4 h-4" />
         </a>
       </div>
     </div>
@@ -1692,15 +1849,24 @@ function Medias({ mediaList, onPreview }) {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder={t('visualiseur.media.search')}
+              placeholder={t("visualiseur.media.search")}
               className="w-full pl-9 pr-3 py-2 rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
             />
           </div>
 
           <button
-            onClick={() => setFiltersOpen(o => !o)}
-            className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl border-2 ${filtersOpen ? "border-blue-200 text-blue-700" : "border-slate-200 text-slate-700"} hover:bg-slate-50`}
-            title={filtersOpen ? t('visualiseur.media.hideFilters') : t('visualiseur.media.showFilters')}
+            type="button"
+            onClick={() => setFiltersOpen((o) => !o)}
+            className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl border-2 ${
+              filtersOpen
+                ? "border-blue-200 text-blue-700"
+                : "border-slate-200 text-slate-700"
+            } hover:bg-slate-50`}
+            title={
+              filtersOpen
+                ? t("visualiseur.media.hideFilters")
+                : t("visualiseur.media.showFilters")
+            }
           >
             <FiFilter className="w-4 h-4" />
             {activePills.length > 0 && (
@@ -1708,22 +1874,36 @@ function Medias({ mediaList, onPreview }) {
                 {activePills.length}
               </span>
             )}
-            {filtersOpen ? <FiChevronUp className="w-4 h-4" /> : <FiChevronDown className="w-4 h-4" />}
+            {filtersOpen ? (
+              <FiChevronUp className="w-4 h-4" />
+            ) : (
+              <FiChevronDown className="w-4 h-4" />
+            )}
           </button>
         </div>
 
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={() => setViewMode("grid")}
-            className={`inline-flex items-center justify-center rounded-xl border-2 px-2.5 py-2 text-sm font-semibold ${viewMode==='grid' ? "border-blue-200 text-blue-700" : "border-slate-200 text-slate-700"} hover:bg-slate-50`}
-            title={t('visualiseur.media.grid')}
+            className={`inline-flex items-center justify-center rounded-xl border-2 px-2.5 py-2 text-sm font-semibold ${
+              viewMode === "grid"
+                ? "border-blue-200 text-blue-700"
+                : "border-slate-200 text-slate-700"
+            } hover:bg-slate-50`}
+            title={t("visualiseur.media.grid")}
           >
             <FiGrid className="w-4 h-4" />
           </button>
           <button
+            type="button"
             onClick={() => setViewMode("list")}
-            className={`inline-flex items-center justify-center rounded-xl border-2 px-2.5 py-2 text-sm font-semibold ${viewMode==='list' ? "border-blue-200 text-blue-700" : "border-slate-200 text-slate-700"} hover:bg-slate-50`}
-            title={t('visualiseur.media.list')}
+            className={`inline-flex items-center justify-center rounded-xl border-2 px-2.5 py-2 text-sm font-semibold ${
+              viewMode === "list"
+                ? "border-blue-200 text-blue-700"
+                : "border-slate-200 text-slate-700"
+            } hover:bg-slate-50`}
+            title={t("visualiseur.media.list")}
           >
             <FiList className="w-4 h-4" />
           </button>
@@ -1733,16 +1913,27 @@ function Medias({ mediaList, onPreview }) {
       {/* Pills actifs */}
       {activePills.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          {activePills.map(p => (
-            <span key={p.id} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold ${ACCENT.pill}`}>
+          {activePills.map((p) => (
+            <span
+              key={p.id}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold ${ACCENT.pill}`}
+            >
               {p.label}
-              <button onClick={p.clear} className="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded hover:bg-blue-100">
+              <button
+                type="button"
+                onClick={p.clear}
+                className="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded hover:bg-blue-100"
+              >
                 <FiX className="w-3 h-3" />
               </button>
             </span>
           ))}
-          <button onClick={resetAll} className={`ml-1 text-[11px] font-semibold underline text-blue-700 ${ACCENT.focus}`}>
-            {t('visualiseur.media.reset')}
+          <button
+            type="button"
+            onClick={resetAll}
+            className={`ml-1 text-[11px] font-semibold underline text-blue-700 ${ACCENT.focus}`}
+          >
+            {t("visualiseur.media.reset")}
           </button>
         </div>
       )}
@@ -1752,55 +1943,88 @@ function Medias({ mediaList, onPreview }) {
         <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">{t('visualiseur.media.type')}</label>
+              <label className="text-xs font-semibold text-slate-600">
+                {t("visualiseur.media.type")}
+              </label>
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
               >
-                <option value="">{t('visualiseur.media.allTypes')}</option>
-                <option value="image">{t('visualiseur.media.typeImage')}</option>
-                <option value="video">{t('visualiseur.media.typeVideo')}</option>
+                <option value="">
+                  {t("visualiseur.media.allTypes")}
+                </option>
+                <option value="image">
+                  {t("visualiseur.media.typeImage")}
+                </option>
+                <option value="video">
+                  {t("visualiseur.media.typeVideo")}
+                </option>
+                {/* tu peux ajouter un filtre audio ici si tu veux */}
                 <option value="pdf">PDF</option>
                 <option value="word">Word</option>
                 <option value="excel">Excel</option>
                 <option value="ppt">PowerPoint</option>
-                <option value="other">{t('visualiseur.media.typeOther')}</option>
+                <option value="other">
+                  {t("visualiseur.media.typeOther")}
+                </option>
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">{t('visualiseur.media.featured')}</label>
+              <label className="text-xs font-semibold text-slate-600">
+                {t("visualiseur.media.featured")}
+              </label>
               <select
                 value={featured}
                 onChange={(e) => setFeatured(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
               >
-                <option value="">{t('visualiseur.media.allFeatured')}</option>
-                <option value="1">{t('visualiseur.media.featuredYes')}</option>
-                <option value="0">{t('visualiseur.media.featuredNo')}</option>
+                <option value="">
+                  {t("visualiseur.media.allFeatured")}
+                </option>
+                <option value="1">
+                  {t("visualiseur.media.featuredYes")}
+                </option>
+                <option value="0">
+                  {t("visualiseur.media.featuredNo")}
+                </option>
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">{t('visualiseur.media.sort')}</label>
+              <label className="text-xs font-semibold text-slate-600">
+                {t("visualiseur.media.sort")}
+              </label>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
               >
-                <option value="date">{t('visualiseur.media.sortDate')}</option>
-                <option value="title">{t('visualiseur.media.sortTitle')}</option>
-                <option value="size">{t('visualiseur.media.sortSize')}</option>
+                <option value="date">
+                  {t("visualiseur.media.sortDate")}
+                </option>
+                <option value="title">
+                  {t("visualiseur.media.sortTitle")}
+                </option>
+                <option value="size">
+                  {t("visualiseur.media.sortSize")}
+                </option>
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">{t('visualiseur.media.direction')}</label>
+              <label className="text-xs font-semibold text-slate-600">
+                {t("visualiseur.media.direction")}
+              </label>
               <select
                 value={sortDir}
                 onChange={(e) => setSortDir(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border-2 border-slate-200"
               >
-                <option value="desc">{t('visualiseur.media.desc')}</option>
-                <option value="asc">{t('visualiseur.media.asc')}</option>
+                <option value="desc">
+                  {t("visualiseur.media.desc")}
+                </option>
+                <option value="asc">
+                  {t("visualiseur.media.asc")}
+                </option>
               </select>
             </div>
           </div>
@@ -1810,20 +2034,26 @@ function Medias({ mediaList, onPreview }) {
       {/* Liste / Grille */}
       {filtered.length === 0 ? (
         <div className="mt-6 rounded-2xl border-2 border-slate-200 bg-white px-4 py-6 text-center text-slate-600">
-          {t('visualiseur.media.noResults')}
+          {t("visualiseur.media.noResults")}
         </div>
       ) : viewMode === "grid" ? (
         <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {filtered.map(m => <Card key={m.id ?? m.fileUrl} m={m} />)}
+          {filtered.map((m) => (
+            <Card key={m.id ?? m.fileUrl} m={m} />
+          ))}
         </div>
       ) : (
         <div className="mt-6 grid grid-cols-1 gap-3">
-          {filtered.map(m => <Row key={m.id ?? m.fileUrl} m={m} />)}
+          {filtered.map((m) => (
+            <Row key={m.id ?? m.fileUrl} m={m} />
+          ))}
         </div>
       )}
     </div>
   );
 }
+
+
 
 function Metadonnees({ article, currentType, currentTitle }) {
   const { t } = useTranslation();
