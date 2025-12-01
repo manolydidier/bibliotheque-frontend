@@ -829,82 +829,71 @@ i18n
   }
 ,
 
-  "layout": {
-    "brand": "Media Manager",
-    "subtitle": "Back Office Admin",
-    "titles": {
-      "dashboard": "Dashboard",
-      "settings": "Settings",
-      "albums": "Albums & Photos"
-    },
-    "sections": {
-      "media": "Media Management",
-      "albums": "Albums & Photos",
-      "settings": "Settings"
-    },
-    "menu": {
-      "dashboard": "Dashboard",
-      "mediaAll": "All Media",
-      "favorites": "Favorites",
-      "documents": "Documents",
-      "imagesVideos": "Images/Videos",
-      "albumsAll": "All Albums",
-      "recentPhotos": "Recent Photos",
-      "byDate": "By Date",
-      "settings": "Configuration",
-      "users": "Users"
-    },
-    "storage": {
-      "used": "Storage used"
-    },
-    "a11y": {
-      "openSidebar": "Open sidebar",
-      "closeSidebar": "Close sidebar",
-      "notifications": "Notifications",
-      "profile": "Profile"
-    }
+layout: {
+  brand: "Media Manager",
+  subtitle: "Back Office Admin",
 
+  titles: {
+    dashboard: "Dashboard",
+    settings: "Settings",
+    platform: "Platform",
+    articlesBo: "Articles management",
+    articleNew: "New article",
+    trashed: "Trash",
+    userManagement: "Users & Access",
+    societesBo: "Company management",
+    bureauxBo: "Office management"
+  },
+
+  sections: {
+    media: "Contents & Media",
+    settings: "System & Settings",
+    users: "Users & Access"
+  },
+
+  menu: {
+    // Dashboard
+    dashboard: "Dashboard",
+
+    // Content / articles
+    platform: "Platform",
+    articlesBo: "Articles (Back office)",
+    articleNew: "New article",
+    trashed: "Trash",
+    categoriesTags: "Categories & Tags",
+
+    // Users & roles
+    myProfile: "My profile",
+    editProfile: "Edit profile",
+    user_list: "User list",
+    user_roles: "User roles",
+    roles: "Roles",
+    permissions: "Permissions",
+    activity_all: "All activity",
+
+    // Companies / offices
+    societesBo: "Companies",
+    bureauxBo: "Offices"
+  },
+
+  storage: {
+    used: "Storage used"
+  },
+
+  a11y: {
+    openSidebar: "Open sidebar",
+    closeSidebar: "Close sidebar",
+    sidebar: "Side navigation",
+    notifications: "Notifications",
+    profile: "Profile"
+  }
 }
 
+
 ,
 
 
-  "layout": {
-    "brand": "Media Manager",
-    "subtitle": "Back Office Admin",
-    "titles": {
-      "dashboard": "Dashboard",
-      "settings": "Settings",
-      "platform": "Platform",
-      "viewer": "Viewer",
-      "articlesBo": "Articles (Back Office)",
-      "articleNew": "New Article",
-      "trashed": "Trash"
-    },
-    "sections": {
-      "media": "Media Management",
-      "settings": "Settings"
-    },
-    "menu": {
-      "dashboard": "Dashboard",
-      "platform": "Platform",
-      "viewer": "Viewer",
-      "articlesBo": "Articles Controller",
-      "articleNew": "New",
-      "trashed": "Trash",
-      "settings": "Configuration",
-      "users": "Users"
-    },
-    "storage": { "used": "Storage used" },
-    "a11y": {
-      "openSidebar": "Open sidebar",
-      "closeSidebar": "Close sidebar",
-      "notifications": "Notifications",
-      "profile": "Profile"
-    }
-  }
-,
-
+ 
   "gridcard": {
     "actions": {
       "more": "More actions",
@@ -2452,78 +2441,68 @@ notfound: {
     "reset": "Réinitialiser en auto"
   }
 },
-  "layout": {
-    "brand": "Media Manager",
-    "subtitle": "Back Office Admin",
-    "titles": {
-      "dashboard": "Tableau de bord",
-      "settings": "Paramètres",
-      "albums": "Albums & Photos"
-    },
-    "sections": {
-      "media": "Gestion des médias",
-      "albums": "Albums & Photos",
-      "settings": "Paramètres"
-    },
-    "menu": {
-      "dashboard": "Tableau de bord",
-      "mediaAll": "Tous les médias",
-      "favorites": "Favoris",
-      "documents": "Documents",
-      "imagesVideos": "Images/Vidéos",
-      "albumsAll": "Tous les albums",
-      "recentPhotos": "Photos récentes",
-      "byDate": "Par date",
-      "settings": "Configuration",
-      "users": "Utilisateurs"
-    },
-    "storage": {
-      "used": "Stockage utilisé"
-    },
-    "a11y": {
-      "openSidebar": "Ouvrir le panneau latéral",
-      "closeSidebar": "Fermer le panneau latéral",
-      "notifications": "Notifications",
-      "profile": "Profil"
-    }
+  layout: {
+  brand: "Media Manager",
+  subtitle: "Back Office Admin",
+
+  titles: {
+    dashboard: "Tableau de bord",
+    settings: "Paramètres",
+    platform: "Plateforme",
+    articlesBo: "Gestion des articles",
+    articleNew: "Nouvel article",
+    trashed: "Corbeille",
+    userManagement: "Utilisateurs & Accès",
+    societesBo: "Gestion des sociétés",
+    bureauxBo: "Gestion des bureaux"
+  },
+
+  sections: {
+    media: "Contenus & Médias",
+    settings: "Système & Paramètres",
+    users: "Utilisateurs & Accès"
+  },
+
+  menu: {
+    // Dashboard
+    dashboard: "Tableau de bord",
+
+    // Contenu / articles
+    platform: "Plateforme",
+    articlesBo: "Articles (Back office)",
+    articleNew: "Nouvel article",
+    trashed: "Corbeille",
+    categoriesTags: "Catégories & Tags",
+
+    // Utilisateurs & rôles
+    myProfile: "Mon profil",
+    editProfile: "Modifier le profil",
+    user_list: "Liste des utilisateurs",
+    user_roles: "Rôles des utilisateurs",
+    roles: "Rôles",
+    permissions: "Permissions",
+    activity_all: "Activité globale",
+
+    // Sociétés / bureaux
+    societesBo: "Sociétés",
+    bureauxBo: "Bureaux"
+  },
+
+  storage: {
+    used: "Stockage utilisé"
+  },
+
+  a11y: {
+    openSidebar: "Ouvrir la barre latérale",
+    closeSidebar: "Fermer la barre latérale",
+    sidebar: "Navigation latérale",
+    notifications: "Notifications",
+    profile: "Profil"
   }
+}
+
 ,
 
-  "layout": {
-    "brand": "Media Manager",
-    "subtitle": "Back Office Admin",
-    "titles": {
-      "dashboard": "Tableau de bord",
-      "settings": "Paramètres",
-      "platform": "Plateforme",
-      "viewer": "Visualiseur",
-      "articlesBo": "Articles (Back-Office)",
-      "articleNew": "Nouvel article",
-      "trashed": "Corbeille"
-    },
-    "sections": {
-      "media": "Gestion des médias",
-      "settings": "Paramètres"
-    },
-    "menu": {
-      "dashboard": "Tableau de bord",
-      "platform": "Plateforme",
-      "viewer": "Visualiseur",
-      "articlesBo": "Contrôleur d’articles",
-      "articleNew": "Nouveau",
-      "trashed": "Corbeille",
-      "settings": "Configuration",
-      "users": "Utilisateurs"
-    },
-    "storage": { "used": "Stockage utilisé" },
-    "a11y": {
-      "openSidebar": "Ouvrir le panneau latéral",
-      "closeSidebar": "Fermer le panneau latéral",
-      "notifications": "Notifications",
-      "profile": "Profil"
-    }
-  }
-,
 
   "gridcard": {
     "actions": {

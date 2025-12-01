@@ -44,6 +44,11 @@ import DocumentationPage from './pages/Divers/Documentation';
 import UserGuidePage from './pages/Divers/UserGuide';
 import FAQPage from './pages/Divers/FAQ';
 import AboutPage from './pages/About/About';
+import SocietesIndex from './pages/UserManagementDashboard/Components/Backoffice/TenantId/Societe/SocietesIndex';
+import SocieteEditCreate from './pages/UserManagementDashboard/Components/Backoffice/TenantId/Societe/SocieteEditCreate';
+import BureauxIndex from './pages/UserManagementDashboard/Components/Backoffice/TenantId/Bureau/BureauxIndex';
+import BureauEditCreate from './pages/UserManagementDashboard/Components/Backoffice/TenantId/Bureau/BureauEditCreate';
+import BureauPublicShow from './pages/UserManagementDashboard/Components/Backoffice/TenantId/Bureau/BureauPublicShow';
 
 function BootScreen() {
   return (
@@ -136,6 +141,7 @@ export default function App() {
                     <Route path="/settings" element={<UserManagementDashboard />} />
                     <Route path="/articles" element={<ArticlesPage />} />
                     <Route path="/articles/:show" element={<Visualiseur />} />
+                    <Route path="/bureaux-public/:id" element={<BureauPublicShow />} />
                   </Route>
                 </Route>
 
@@ -179,6 +185,65 @@ export default function App() {
                         </AdminRoute>
                       }
                     />
+                      {/* 🔹 AJOUT : SOCIÉTÉS */}
+                    <Route
+                      path="/societescontroler"
+                      element={
+                        <AdminRoute>
+                          <SocietesIndex />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="/societes/create"
+                      element={
+                        <AdminRoute>
+                          <SocieteEditCreate />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="/societes/:id/edit"
+                      element={
+                        <AdminRoute>
+                          <SocieteEditCreate />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="/societes"
+                      element={
+                        <AdminRoute>
+                          <SocietesIndex />
+                        </AdminRoute>
+                      }
+                    />
+                    {/* 🔹 AJOUT : BUREAUX */}
+                    <Route
+                      path="/bureauxcontroler"
+                      element={
+                        <AdminRoute>
+                          <BureauxIndex />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="/bureaux/create"
+                      element={
+                        <AdminRoute>
+                          <BureauEditCreate />
+                        </AdminRoute>
+                      }
+                    />
+                    <Route
+                      path="/bureaux/:id/edit"
+                      element={
+                        <AdminRoute>
+                          <BureauEditCreate />
+                        </AdminRoute>
+                      }
+                    />
+  
                   </Route>
                 </Route>
 

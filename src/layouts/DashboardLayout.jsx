@@ -28,6 +28,8 @@ import {
   FaTrash,
   FaPlus,
   FaChevronDown,
+  FaBuilding,
+  FaSitemap,
 } from 'react-icons/fa';
 import { FaUsersGear } from 'react-icons/fa6';
 import { useTranslation } from 'react-i18next';
@@ -72,15 +74,19 @@ const isAbsoluteUrl = (u) => /^https?:\/\//i.test(String(u || ''));
 const toFrontPath = (input) => {
   if (!input) return null;
   if (String(input).startsWith('/')) return input;
-  try { const u = new URL(input); return `${u.pathname}${u.search}${u.hash}`; }
-  catch { return input; }
+  try {
+    const u = new URL(input);
+    return `${u.pathname}${u.search}${u.hash}`;
+  } catch {
+    return input;
+  }
 };
 
 const withQuery = (href, params = {}) => {
   if (!href) return null;
   const m = String(href).match(/^([^?#]*)(\?[^#]*)?(#.*)?$/);
   const base = m?.[1] ?? href;
-  const qs0  = (m?.[2] ?? '').replace(/^\?/, '');
+  const qs0 = (m?.[2] ?? '').replace(/^\?/, '');
   const hash = m?.[3] ?? '';
   const search = new URLSearchParams(qs0);
   Object.entries(params).forEach(([k, v]) => {
@@ -89,8 +95,6 @@ const withQuery = (href, params = {}) => {
   const qs = search.toString();
   return `${base}${qs ? `?${qs}` : ''}${hash}`;
 };
-
-
 
 const LS_KEY = (uid) => `act_seen_ts:${uid}`;
 const getLastSeenTs = (uid) => {
@@ -143,8 +147,7 @@ const buildActivityLink = (a) => {
       if (!articleSlug) return null;
       const commentId =
         a.comment_id ||
-        (typeof a.id === 'string' &&
-        a.id.startsWith('comment-approve-')
+        (typeof a.id === 'string' && a.id.startsWith('comment-approve-')
           ? a.id.replace('comment-approve-', '')
           : null);
       return commentId
@@ -165,10 +168,10 @@ const buildActivityLink = (a) => {
   }
 };
 
-const buildPendingLink= (item) => {
+const buildPendingLink = (item) => {
   const articleSlug = item.article_slug || item.slug || item.article?.slug || null;
-  const commentId   = item.comment_id || item.id || null;
-  const status      = item.status || 'pending';
+  const commentId = item.comment_id || item.id || null;
+  const status = item.status || 'pending';
   let href = item.url || item.link || null;
 
   if (!href) {
@@ -184,13 +187,11 @@ const buildPendingLink= (item) => {
   href = withQuery(href, {
     moderate: 1,
     comment_id: commentId || undefined,
-    status
+    status,
   });
 
   return href;
 };
-
-
 
 const timeAgo = (iso, t) => {
   if (!iso) return '';
@@ -262,6 +263,12 @@ const ACCENTS = {
     hover: 'hover:bg-blue-50/60',
     activeBg: 'bg-gradient-to-r from-blue-50 to-blue-100/40',
   },
+  sky: {
+    border: 'border-sky-500',
+    icon: 'text-sky-500',
+    hover: 'hover:bg-sky-50/60',
+    activeBg: 'bg-gradient-to-r from-sky-50 to-sky-100/40',
+  },
   emerald: {
     border: 'border-emerald-500',
     icon: 'text-emerald-500',
@@ -279,6 +286,18 @@ const ACCENTS = {
     icon: 'text-amber-600',
     hover: 'hover:bg-amber-50/60',
     activeBg: 'bg-gradient-to-r from-amber-50 to-amber-100/40',
+  },
+  rose: {
+    border: 'border-rose-500',
+    icon: 'text-rose-500',
+    hover: 'hover:bg-rose-50/60',
+    activeBg: 'bg-gradient-to-r from-rose-50 to-rose-100/40',
+  },
+  indigo: {
+    border: 'border-indigo-500',
+    icon: 'text-indigo-500',
+    hover: 'hover:bg-indigo-50/60',
+    activeBg: 'bg-gradient-to-r from-indigo-50 to-indigo-100/40',
   },
 };
 
@@ -298,8 +317,22 @@ const menuItemClass = (item, isActive, accentKey) => {
   }`;
 };
 
-const Content = ({ icon, labelKey, fallback, t, accentKey }) => {
+const Content = ({
+  icon,
+  labelKey,
+  fallback,
+  t,
+  accentKey,
+  showAdd,
+  onAdd,
+  isActive,
+}) => {
   const accent = ACCENTS[accentKey] || ACCENTS.blue;
+  const addBase =
+    'ml-auto inline-flex items-center gap-1 rounded-full border text-[11px] px-2 py-1 bg-white/80 text-gray-700 hover:bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500/40';
+  const addVisibility = isActive
+    ? 'opacity-100 translate-x-0'
+    : 'opacity-0 translate-x-1';
   return (
     <>
       <span
@@ -307,7 +340,25 @@ const Content = ({ icon, labelKey, fallback, t, accentKey }) => {
       >
         {icon}
       </span>
-      <span className="font-medium">{t(labelKey, fallback)}</span>
+      <span className="font-medium flex-1 truncate">
+        {t(labelKey, fallback)}
+      </span>
+
+      {showAdd && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onAdd?.();
+          }}
+          className={`${addBase} ${addVisibility} group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 ease-[cubic-bezier(.22,1,.36,1)]`}
+        >
+          <FaPlus className="text-[10px]" />
+          <span>{t('layout.menu.add', 'Ajouter')}</span>
+        </button>
+      )}
+
       <span className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl bg-gradient-to-r from-white/0 via-white/40 to-white/0" />
     </>
   );
@@ -356,7 +407,7 @@ const menuItemEmphasis = (item, isActive) => {
   return [
     'ring-1 ring-inset',
     isActive ? 'ring-blue-200' : 'ring-gray-200/70 hover:ring-gray-300',
-    'p-4 text-[15px]', // plus épais
+    'p-4 text-[15px]',
     'bg-white',
     isActive ? 'bg-gradient-to-r from-blue-50 to-blue-100/50' : '',
     'shadow-sm',
@@ -366,7 +417,7 @@ const menuItemEmphasis = (item, isActive) => {
 /* ===== Look “card” pour Media Manager & Back Office Admin ===== */
 const menuItemCardLike = (item) => {
   if (!item?.id) return '';
-  if (['platform', 'articlesBo'].includes(item.id)) {
+  if (['platform', 'articlesBo', 'societesBo', 'bureauxBo'].includes(item.id)) {
     return 'bg-white border border-gray-200/70 hover:border-gray-300 rounded-xl';
   }
   return '';
@@ -399,17 +450,15 @@ const DashboardLayout = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
-  
-// par CES lignes (mêmes noms que le Navbar)
-const API_BASE_STORAGE = import.meta.env.VITE_API_BASE_STORAGE;
-const API_BASE_URL     = import.meta.env.VITE_API_BASE_URL || '';
-const USE_SSE          = import.meta.env.VITE_USE_SSE === '1'; // aligné sur Navbar
+  // env alignés avec Navbar
+  const API_BASE_STORAGE = import.meta.env.VITE_API_BASE_STORAGE;
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+  const USE_SSE = import.meta.env.VITE_USE_SSE === '1';
 
-// endpoints de modération identiques à ceux du Navbar
-const MOD_COUNT_EP = import.meta.env.VITE_MOD_PENDING_COUNT_EP || '/moderation/pending-count';
-const MOD_LIST_EP  = import.meta.env.VITE_MOD_PENDING_LIST_EP  || '/moderation/pending';
-
-    
+  const MOD_COUNT_EP =
+    import.meta.env.VITE_MOD_PENDING_COUNT_EP || '/moderation/pending-count';
+  const MOD_LIST_EP =
+    import.meta.env.VITE_MOD_PENDING_LIST_EP || '/moderation/pending';
 
   const { isAuthenticated, user } = useSelector((s) => s.library?.auth || {});
   const userId = user?.id;
@@ -470,6 +519,7 @@ const MOD_LIST_EP  = import.meta.env.VITE_MOD_PENDING_LIST_EP  || '/moderation/p
             icon: <FaTachometerAlt />,
             link: '/dashboard',
             emphasize: true,
+            accent: 'sky',
           },
         ],
       },
@@ -482,24 +532,28 @@ const MOD_LIST_EP  = import.meta.env.VITE_MOD_PENDING_LIST_EP  || '/moderation/p
             tKey: 'layout.menu.platform',
             icon: <FaImages />,
             link: '/articles',
+            accent: 'sky',
           },
           {
             id: 'articlesBo',
             tKey: 'layout.menu.articlesBo',
             icon: <FaStar />,
             link: '/articlescontroler',
+            accent: 'indigo',
           },
           {
             id: 'articleNew',
             tKey: 'layout.menu.articleNew',
             icon: <FaPlus />,
             link: '/articles/new',
+            accent: 'emerald',
           },
           {
             id: 'trashed',
             tKey: 'layout.menu.trashed',
             icon: <FaTrash />,
             link: '/articles/trashed',
+            accent: 'rose',
           },
         ],
       },
@@ -512,6 +566,21 @@ const MOD_LIST_EP  = import.meta.env.VITE_MOD_PENDING_LIST_EP  || '/moderation/p
             tKey: 'layout.menu.categoriesTags',
             icon: <FaCog />,
             link: '/configuration',
+            accent: 'amber',
+          },
+          {
+            id: 'societesBo',
+            tKey: 'layout.menu.societesBo',
+            icon: <FaBuilding />,
+            link: '/societescontroler',
+            accent: 'violet',
+          },
+          {
+            id: 'bureauxBo',
+            tKey: 'layout.menu.bureauxBo',
+            icon: <FaSitemap />,
+            link: '/bureauxcontroler',
+            accent: 'emerald',
           },
         ],
       },
@@ -748,14 +817,19 @@ const MOD_LIST_EP  = import.meta.env.VITE_MOD_PENDING_LIST_EP  || '/moderation/p
       newTitle = t('layout.titles.articleNew');
     else if (path.startsWith('/articles'))
       newTitle = t('layout.titles.platform');
+    else if (path.startsWith('/societescontroler'))
+      newTitle = t('layout.titles.societesBo', 'Sociétés');
+    else if (path.startsWith('/bureauxcontroler'))
+      newTitle = t('layout.titles.bureauxBo', 'Bureaux');
+    else if (path.startsWith('/societes'))
+      newTitle = t('layout.titles.societesBo', 'Sociétés');
+    else if (path.startsWith('/bureaux'))
+      newTitle = t('layout.titles.bureauxBo', 'Bureaux');
     else if (path.startsWith(BASE_UM) && USER_TABS.includes(tab))
       newTitle = t('layout.titles.userManagement', 'Utilisateurs & Accès');
     else if (path.startsWith('/settings'))
       newTitle = t('layout.titles.settings');
-    else if (
-      path.startsWith('/dashboard') ||
-      path.startsWith('/backoffice')
-    )
+    else if (path.startsWith('/dashboard') || path.startsWith('/backoffice'))
       newTitle = t('layout.titles.dashboard');
     else newTitle = t('layout.titles.dashboard');
     setTitle(newTitle);
@@ -859,15 +933,21 @@ const MOD_LIST_EP  = import.meta.env.VITE_MOD_PENDING_LIST_EP  || '/moderation/p
     } catch {}
   }, [API_BASE_URL, isAuthenticated, userId]);
 
- // count
-const recomputePendingCount = useCallback(async () => {
-  if (!isAuthenticated) { setPendingCount(0); return; }
-  try {
-    const token = getTokenGuard();
-    const resp = await fetchJson(`${API_BASE_URL}${MOD_COUNT_EP}`, {}, token);
-    setPendingCount(Number(resp?.pending || 0));
-  } catch {}
-}, [API_BASE_URL, isAuthenticated, MOD_COUNT_EP]);
+  const recomputePendingCount = useCallback(async () => {
+    if (!isAuthenticated) {
+      setPendingCount(0);
+      return;
+    }
+    try {
+      const token = getTokenGuard();
+      const resp = await fetchJson(
+        `${API_BASE_URL}${MOD_COUNT_EP}`,
+        {},
+        token
+      );
+      setPendingCount(Number(resp?.pending || 0));
+    } catch {}
+  }, [API_BASE_URL, isAuthenticated, MOD_COUNT_EP]);
 
   useEffect(() => {
     const tick = () => {
@@ -879,42 +959,28 @@ const recomputePendingCount = useCallback(async () => {
     return () => clearInterval(id);
   }, [recomputeNewCount, recomputePendingCount]);
 
-  // Option : SSE pour les updates live (activer avec VITE_NOTIF_SSE=1)
-  // remplace le useEffect SSE :
-useEffect(() => {
-  if (!USE_SSE || !isAuthenticated) return;
-  let es;
-  try {
-    es = new EventSource(`${API_BASE_URL}/notifications/stream`, { withCredentials: true });
-    es.onmessage = (e) => {
-      try {
-        const { newCount: n, pending: p } = JSON.parse(e.data || '{}');
-        if (typeof n === 'number') setNewCount(Math.min(99, n));
-        if (typeof p === 'number') setPendingCount(Math.min(99, p));
-      } catch {}
-    };
-    es.onerror = () => { es?.close(); };
-  } catch {}
-  return () => es?.close();
-}, [USE_SSE, API_BASE_URL, isAuthenticated]);
-
+  useEffect(() => {
+    if (!USE_SSE || !isAuthenticated) return;
+    let es;
+    try {
+      es = new EventSource(`${API_BASE_URL}/notifications/stream`, {
+        withCredentials: true,
+      });
+      es.onmessage = (e) => {
+        try {
+          const { newCount: n, pending: p } = JSON.parse(e.data || '{}');
+          if (typeof n === 'number') setNewCount(Math.min(99, n));
+          if (typeof p === 'number') setPendingCount(Math.min(99, p));
+        } catch {}
+      };
+      es.onerror = () => {
+        es?.close();
+      };
+    } catch {}
+    return () => es?.close();
+  }, [USE_SSE, API_BASE_URL, isAuthenticated]);
 
   // Toggle + chargement au moment de l’ouverture
-  const toggleNotifications = () => {
-    setNotifOpen((prev) => {
-      const next = !prev;
-      if (next) {
-        loadNews(1, true);
-        loadPending(1, true);
-        if (userId) {
-          setLastSeenNow(userId);
-          setNewCount(0);
-        }
-      }
-      return next;
-    });
-  };
-
   const loadNews = async (page, replace = false) => {
     if (!isAuthenticated || !userId) return;
     const token = getTokenGuard();
@@ -943,24 +1009,47 @@ useEffect(() => {
   };
 
   const loadPending = async (page, replace = false) => {
-  if (!isAuthenticated) return;
-  const token = getTokenGuard();
-  setPending((s) => ({ ...s, loading: true, error: null }));
-  try {
-    const resp = await fetchJson(`${API_BASE_URL}${MOD_LIST_EP}`, { per_page: 10, page }, token);
-    const raw = Array.isArray(resp?.data) ? resp.data : [];
-    const items = raw.map((x) => ({ ...x }));
-    setPending({
-      items: replace ? items : [...(replace ? [] : pending.items), ...items],
-      page: resp?.meta?.current_page || page,
-      last: resp?.meta?.last_page || page,
-      loading: false,
-      error: null,
+    if (!isAuthenticated) return;
+    const token = getTokenGuard();
+    setPending((s) => ({ ...s, loading: true, error: null }));
+    try {
+      const resp = await fetchJson(
+        `${API_BASE_URL}${MOD_LIST_EP}`,
+        { per_page: 10, page },
+        token
+      );
+      const raw = Array.isArray(resp?.data) ? resp.data : [];
+      const items = raw.map((x) => ({ ...x }));
+      setPending({
+        items: replace ? items : [...(replace ? [] : pending.items), ...items],
+        page: resp?.meta?.current_page || page,
+        last: resp?.meta?.last_page || page,
+        loading: false,
+        error: null,
+      });
+    } catch (e) {
+      setPending((s) => ({
+        ...s,
+        loading: false,
+        error: e?.message || 'Load failed',
+      }));
+    }
+  };
+
+  const toggleNotifications = () => {
+    setNotifOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        loadNews(1, true);
+        loadPending(1, true);
+        if (userId) {
+          setLastSeenNow(userId);
+          setNewCount(0);
+        }
+      }
+      return next;
     });
-  } catch (e) {
-    setPending((s) => ({ ...s, loading: false, error: e?.message || 'Load failed' }));
-  }
-};
+  };
 
   const markAllRead = () => {
     if (userId) {
@@ -1050,7 +1139,9 @@ useEffect(() => {
             </div>
             <div className="leading-tight">
               <h2 className="text-lg font-bold">{t('layout.brand')}</h2>
-              <p className="text-[11px] text-white/80">{t('layout.subtitle')}</p>
+              <p className="text-[11px] text-white/80">
+                {t('layout.subtitle')}
+              </p>
             </div>
           </div>
         </div>
@@ -1078,7 +1169,9 @@ useEffect(() => {
                           users: 'Utilisateurs & Accès',
                           media: 'Contenus & Médias',
                           settings: 'Système & Paramètres',
-                        }[section.titleKey?.split('.').pop()] || undefined)
+                        }[
+                          section.titleKey?.split('.').pop()
+                        ] || undefined)
                       }
                     </span>
                     <FaChevronDown
@@ -1093,20 +1186,36 @@ useEffect(() => {
                 <div
                   id={`sec-${section.id}`}
                   className={`overflow-hidden transition-all duration-400 ease-[cubic-bezier(.22,1,.36,1)] ${
-                    open || isRoot ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-70'
+                    open || isRoot
+                      ? 'max-h-[1000px] opacity-100'
+                      : 'max-h-0 opacity-70'
                   }`}
                 >
                   {/* SECTION SANS GROUPES */}
                   {section.items &&
                     !section.groups &&
                     section.items.map((item) => {
+                      const accentKey =
+                        item.accent ||
+                        (section.id === 'content'
+                          ? 'blue'
+                          : section.id === 'system'
+                          ? 'violet'
+                          : 'blue');
+
+                      const isSocietes = item.id === 'societesBo';
+                      const isBureaux = item.id === 'bureauxBo';
+
                       const ContentNode = ({ isActive }) => (
                         <div
                           className={`${menuItemClass(
                             item,
                             isActive,
-                            'blue'
-                          )} ${menuItemEmphasis(item, isActive)} ${menuItemCardLike(item)}`}
+                            accentKey
+                          )} ${menuItemEmphasis(
+                            item,
+                            isActive
+                          )} ${menuItemCardLike(item)}`}
                         >
                           <Content
                             icon={item.icon}
@@ -1117,7 +1226,15 @@ useEffect(() => {
                                 : undefined
                             }
                             t={t}
-                            accentKey="blue"
+                            accentKey={accentKey}
+                            isActive={!!isActive}
+                            showAdd={isSocietes || isBureaux}
+                            onAdd={() => {
+                              if (isSocietes)
+                                navigate('/societes/create');
+                              else if (isBureaux)
+                                navigate('/bureaux/create');
+                            }}
                           />
                         </div>
                       );
@@ -1130,7 +1247,9 @@ useEffect(() => {
                           className={({ isActive }) => 'block'}
                           onClick={() => setActiveTabId(item.id)}
                         >
-                          {({ isActive }) => <ContentNode isActive={!!isActive} />}
+                          {({ isActive }) => (
+                            <ContentNode isActive={!!isActive} />
+                          )}
                         </ActiveLink>
                       ) : (
                         <button
@@ -1143,14 +1262,27 @@ useEffect(() => {
                           className={`${menuItemClass(
                             item,
                             false,
-                            'blue'
-                          )} ${menuItemEmphasis(item, false)} ${menuItemCardLike(item)} focus:outline-none focus:ring-2 focus:ring-blue-500/20 rounded-md`}
+                            accentKey
+                          )} ${menuItemEmphasis(
+                            item,
+                            false
+                          )} ${menuItemCardLike(
+                            item
+                          )} focus:outline-none focus:ring-2 focus:ring-blue-500/20 rounded-md`}
                         >
                           <Content
                             icon={item.icon}
                             labelKey={item.tKey}
                             t={t}
-                            accentKey="blue"
+                            accentKey={accentKey}
+                            isActive={false}
+                            showAdd={isSocietes || isBureaux}
+                            onAdd={() => {
+                              if (isSocietes)
+                                navigate('/societes/create');
+                              else if (isBureaux)
+                                navigate('/bureaux/create');
+                            }}
                           />
                         </button>
                       );
@@ -1185,7 +1317,9 @@ useEffect(() => {
                           <div
                             id={`sub-${group.id}`}
                             className={`overflow-hidden transition-all duration-400 ease-[cubic-bezier(.22,1,.36,1)] ${
-                              gOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-70'
+                              gOpen
+                                ? 'max-h-[1000px] opacity-100'
+                                : 'max-h-0 opacity-70'
                             }`}
                           >
                             {group.items.map((item) => {
@@ -1195,13 +1329,17 @@ useEffect(() => {
                                     item,
                                     isActive,
                                     accentKey
-                                  )} ${menuItemEmphasis(item, isActive)} ${menuItemCardLike(item)}`}
+                                  )} ${menuItemEmphasis(
+                                    item,
+                                    isActive
+                                  )} ${menuItemCardLike(item)}`}
                                 >
                                   <Content
                                     icon={item.icon}
                                     labelKey={item.tKey}
                                     t={t}
                                     accentKey={accentKey}
+                                    isActive={!!isActive}
                                   />
                                 </div>
                               );
@@ -1230,13 +1368,19 @@ useEffect(() => {
                                     item,
                                     false,
                                     accentKey
-                                  )} ${menuItemEmphasis(item, false)} ${menuItemCardLike(item)} focus:outline-none focus:ring-2 focus:ring-blue-500/20 rounded-md`}
+                                  )} ${menuItemEmphasis(
+                                    item,
+                                    false
+                                  )} ${menuItemCardLike(
+                                    item
+                                  )} focus:outline-none focus:ring-2 focus:ring-blue-500/20 rounded-md`}
                                 >
                                   <Content
                                     icon={item.icon}
                                     labelKey={item.tKey}
                                     t={t}
                                     accentKey={accentKey}
+                                    isActive={false}
                                   />
                                 </button>
                               );
@@ -1389,7 +1533,8 @@ useEffect(() => {
                         )}
                         {pendingCount > 0 && (
                           <span className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full">
-                            {pendingCount} {t('to_moderate', 'à modérer')}
+                            {pendingCount}{' '}
+                            {t('to_moderate', 'à modérer')}
                           </span>
                         )}
                       </div>
@@ -1407,7 +1552,10 @@ useEffect(() => {
                           onClick={markAllRead}
                           className="text-xs bg-white/10 hover:bg-white/20 transition rounded-full px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-white/30"
                         >
-                          {t('mark_all_read', 'Tout marquer lu')}
+                          {t(
+                            'mark_all_read',
+                            'Tout marquer lu'
+                          )}
                         </button>
                       </div>
                     </div>
@@ -1464,7 +1612,11 @@ useEffect(() => {
                                 </div>
                                 <div className="min-w-0">
                                   <div className="text-sm text-gray-900 line-clamp-2">
-                                    {a.title || t('notification', 'Notification')}
+                                    {a.title ||
+                                      t(
+                                        'notification',
+                                        'Notification'
+                                      )}
                                   </div>
                                   {a.subtitle && (
                                     <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">
@@ -1498,7 +1650,9 @@ useEffect(() => {
                           })}
                           <div className="p-3 border-t flex justify-center">
                             <button
-                              disabled={news.loading || news.page >= news.last}
+                              disabled={
+                                news.loading || news.page >= news.last
+                              }
                               onClick={() => loadNews(news.page + 1)}
                               className={`text-sm px-3 py-1.5 rounded border transition focus:outline-none focus:ring-2 focus:ring-blue-500/30 ${
                                 news.page >= news.last
@@ -1516,27 +1670,39 @@ useEffect(() => {
                         </>
                       ) : (
                         <>
-                          {pending.items.length === 0 && !pending.loading && (
-                            <div className="p-6 text-sm text-gray-500 flex items-center justify-center gap-2">
-                              <span>🧹</span>{' '}
-                              <span>
-                                {t('nothing_to_moderate', 'Rien à modérer')}
-                              </span>
-                            </div>
-                          )}
-                        {pending.items.map((p) => {
+                          {pending.items.length === 0 &&
+                            !pending.loading && (
+                              <div className="p-6 text-sm text-gray-500 flex items-center justify-center gap-2">
+                                <span>🧹</span>{' '}
+                                <span>
+                                  {t(
+                                    'nothing_to_moderate',
+                                    'Rien à modérer'
+                                  )}
+                                </span>
+                              </div>
+                            )}
+                          {pending.items.map((p) => {
                             const hrefCandidate = buildPendingLink(p);
-                            const href = toFrontPath(hrefCandidate) || '/settings';
+                            const href =
+                              toFrontPath(hrefCandidate) ||
+                              '/settings';
                             const isRel = String(href).startsWith('/');
 
                             const Row = (
                               <div className="flex items-start gap-3 p-4 hover:bg-gray-50 transition-colors duration-300 ease-[cubic-bezier(.22,1,.36,1)]">
                                 <div className="flex-shrink-0 w-9 h-9 bg-amber-50 rounded-full flex items-center justify-center">
-                                  <span className="text-amber-600">💬</span>
+                                  <span className="text-amber-600">
+                                    💬
+                                  </span>
                                 </div>
                                 <div className="min-w-0">
                                   <div className="text-sm text-gray-900 line-clamp-2">
-                                    {p.title || t('pending_item','Élément à modérer')}
+                                    {p.title ||
+                                      t(
+                                        'pending_item',
+                                        'Élément à modérer'
+                                      )}
                                   </div>
                                   {p.subtitle && (
                                     <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">
@@ -1551,11 +1717,20 @@ useEffect(() => {
                             );
 
                             return isRel ? (
-                              <Link key={p.id || `${p.article_slug}-${p.comment_id}`} to={href} onClick={() => setNotifOpen(false)}>
+                              <Link
+                                key={p.id || `${p.article_slug}-${p.comment_id}`}
+                                to={href}
+                                onClick={() => setNotifOpen(false)}
+                              >
                                 {Row}
                               </Link>
                             ) : (
-                              <a key={p.id || `${p.article_slug}-${p.comment_id}`} href={href} onClick={() => setNotifOpen(false)} rel="noopener noreferrer">
+                              <a
+                                key={p.id || `${p.article_slug}-${p.comment_id}`}
+                                href={href}
+                                onClick={() => setNotifOpen(false)}
+                                rel="noopener noreferrer"
+                              >
                                 {Row}
                               </a>
                             );
@@ -1563,9 +1738,12 @@ useEffect(() => {
                           <div className="p-3 border-t flex justify-center">
                             <button
                               disabled={
-                                pending.loading || pending.page >= pending.last
+                                pending.loading ||
+                                pending.page >= pending.last
                               }
-                              onClick={() => loadPending(pending.page + 1)}
+                              onClick={() =>
+                                loadPending(pending.page + 1)
+                              }
                               className={`text-sm px-3 py-1.5 rounded border transition focus:outline-none focus:ring-2 focus:ring-blue-500/30 ${
                                 pending.page >= pending.last
                                   ? 'text-gray-400 border-gray-200'
@@ -1705,7 +1883,6 @@ useEffect(() => {
         .sidebar::-webkit-scrollbar-track,
         .scroll-area::-webkit-scrollbar-track { background: transparent; }
 
-        /* Accessibilité: reduced motion */
         @media (prefers-reduced-motion: reduce) {
           * {
             animation-duration: .01ms !important;

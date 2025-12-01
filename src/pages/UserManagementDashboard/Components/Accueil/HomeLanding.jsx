@@ -23,6 +23,7 @@ import { useSelector } from "react-redux";
 import axios from "axios";
 
 import useLibraryStats from "../../../../hooks/useLibraryStats";
+import { FiMail } from "react-icons/fi";
 
 /* =========================
    Slider de fonctionnalités
@@ -375,34 +376,30 @@ export default function HomeHero() {
       <div className="pointer-events-none absolute inset-0 opacity-60 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.08),_transparent_55%)]" />
       <div className="relative z-10 max-w-screen-2xl mx-auto px-6 md:px-8 py-10 ">
         {/* Header */}
-        <header className="mb-12 md:mb-16">
-          <Reveal delay={0}>
-            <div className="flex flex-col items-center text-center gap-3 md:gap-4">
-              <div className="w-11 h-11 md:w-12 md:h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center border border-blue-100">
-                <FaBookOpen className="text-blue-600 text-lg md:text-xl" />
-              </div>
-              <p className="text-[11px] md:text-xs text-slate-500 font-medium uppercase tracking-widest">
-                Plateforme documentaire en ligne
-              </p>
-              <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-slate-900">
-                Bibliothèque numérique
-              </h1>
-              <div className="w-36 h-1 bg-slate-900 mx-auto" />
-              <p className="text-xs md:text-sm text-slate-600 max-w-xl">
-                Un espace partagé pour consulter, déposer et valoriser les
-                documents des programmes et des partenaires.
-              </p>
+        <header className="mb-10">
+          <div className="flex flex-col items-center text-center gap-3 md:gap-4">
+            {/* Icône dans un carré comme HomeHero */}
+            <div className="w-11 h-11 md:w-12 md:h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center border border-blue-100">
+              <FiMail className="text-blue-600 text-lg md:text-xl" />
             </div>
-          </Reveal>
 
-          <Reveal delay={80}>
-            <div className="mt-5 flex flex-wrap justify-center gap-2 hidden">
-              <Badge label="SAF FJKM" color="#0ea5e9" />
-              <Badge label="CARE" color="#8b5cf6" />
-              <Badge label="ETC" color="#10b981" />
-            </div>
-          </Reveal>
+            <p className="text-[11px] md:text-xs text-slate-500 font-medium uppercase tracking-widest">
+              Nous écrire / nous joindre
+            </p>
+
+            <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-slate-900">
+              Contact & bureaux
+            </h1>
+
+            <div className="w-32 h-1 bg-slate-900 mx-auto" />
+
+            <p className="text-xs md:text-sm text-slate-600 max-w-xl mx-auto">
+              Une question, une demande de collaboration ou un besoin spécifique&nbsp;?
+              Envoyez-nous un message, nous revenons vers vous rapidement.
+            </p>
+          </div>
         </header>
+
 
         {/* Contenu principal */}
         <div className="grid grid-cols-1 lg:grid-cols-[1.05fr,1.35fr] gap-12 md:gap-16 items-start">
