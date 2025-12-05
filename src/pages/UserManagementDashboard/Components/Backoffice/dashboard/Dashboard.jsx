@@ -3,14 +3,37 @@ import React, { useState, useEffect, useCallback, useMemo, startTransition, useR
 import { Link, useOutletContext } from 'react-router-dom';
 import axios from 'axios';
 import {
-  FiRefreshCw, FiFileText, FiCheckCircle, FiUsers,
-  FiMessageCircle, FiShare2, FiDownload, FiUserPlus, FiEye,
-  FiTrendingUp, FiTrendingDown, FiAlertTriangle, FiExternalLink, FiLock
+  FiRefreshCw,
+  FiFileText,
+  FiCheckCircle,
+  FiUsers,
+  FiMessageCircle,
+  FiShare2,
+  FiDownload,
+  FiUserPlus,
+  FiEye,
+  FiTrendingUp,
+  FiTrendingDown,
+  FiAlertTriangle,
+  FiExternalLink,
+  FiLock,
+  FiMail,
+  FiHome,
+  FiMapPin,
 } from 'react-icons/fi';
 import { FaThLarge, FaTable } from 'react-icons/fa';
 import {
-  ResponsiveContainer, AreaChart, Area, BarChart, Bar,
-  CartesianGrid, XAxis, YAxis, Tooltip, LineChart, Line
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  LineChart,
+  Line,
 } from 'recharts';
 import { FiSearch, FiChevronUp, FiChevronDown } from 'react-icons/fi';
 
@@ -19,10 +42,10 @@ import { FiSearch, FiChevronUp, FiChevronDown } from 'react-icons/fi';
 ========================= */
 axios.defaults.baseURL = axios.defaults.baseURL || '/api';
 axios.defaults.withCredentials = true;
-
+axios.defaults.timeout = 15000;
 // 🔐 Auth + anti-cache
 axios.interceptors.request.use((config) => {
-  const t = (typeof window !== 'undefined') ? localStorage.getItem('tokenGuard') : null;
+  const t = typeof window !== 'undefined' ? localStorage.getItem('tokenGuard') : null;
   if (t && !config.headers?.Authorization) {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${t}`;
@@ -43,7 +66,7 @@ axios.interceptors.response.use(
     }
     if (status === 429 && !retrying) {
       retrying = true;
-      await new Promise(res => setTimeout(res, 800));
+      await new Promise((res) => setTimeout(res, 800));
       retrying = false;
       return axios.request(err.config);
     }
@@ -54,9 +77,11 @@ axios.interceptors.response.use(
 const PAGE_SIZE = 100;
 const nf = (n) => new Intl.NumberFormat('fr-FR').format(Number(n || 0));
 const kfmt = (n) =>
-  n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M`
-  : n >= 1_000 ? `${(n / 1_000).toFixed(1)}k`
-  : String(n);
+  n >= 1_000_000
+    ? `${(n / 1_000_000).toFixed(1)}M`
+    : n >= 1_000
+    ? `${(n / 1_000).toFixed(1)}k`
+    : String(n);
 
 /* Palette minimaliste */
 const COLORS = {
@@ -67,7 +92,7 @@ const COLORS = {
   danger: '#ef4444',
   info: '#06b6d4',
   grid: '#f1f5f9',
-  text: '#1e293b'
+  text: '#1e293b',
 };
 
 const TABS = [
@@ -85,19 +110,21 @@ const Skeleton = ({ className = '' }) => <div className={`animate-pulse rounded-
 
 const Toasts = React.memo(({ toasts, onHide }) => (
   <div className="fixed right-6 bottom-6 z-[60] space-y-3">
-    {toasts.map(t => (
+    {toasts.map((t) => (
       <div
         key={t.id}
         className={`px-4 py-3 rounded-xl shadow-lg backdrop-blur-sm border text-sm font-medium ${
-          t.type === 'error' 
-            ? 'bg-red-50/90 border-red-200 text-red-900' 
+          t.type === 'error'
+            ? 'bg-red-50/90 border-red-200 text-red-900'
             : 'bg-emerald-50/90 border-emerald-200 text-emerald-900'
         }`}
         role="status"
       >
         <div className="flex items-center gap-3">
           <span>{t.message}</span>
-          <button onClick={() => onHide(t.id)} className="text-xs opacity-60 hover:opacity-100">✕</button>
+          <button onClick={() => onHide(t.id)} className="text-xs opacity-60 hover:opacity-100">
+            ✕
+          </button>
         </div>
       </div>
     ))}
@@ -112,8 +139,8 @@ const ErrorBanner = ({ error, onRetry }) => {
         <FiAlertTriangle className="text-lg" />
         <span className="text-sm font-medium">{error}</span>
       </div>
-      <button 
-        onClick={onRetry} 
+      <button
+        onClick={onRetry}
         className="px-4 py-2 text-sm font-medium rounded-lg border border-red-200 bg-white text-red-900 hover:bg-red-50 transition"
       >
         Réessayer
@@ -145,7 +172,7 @@ const PageHeader = ({ title, subtitle, right, onRefresh }) => (
 const TabsBar = ({ active, onChange }) => {
   const tabs = TABS;
   const count = Math.max(1, tabs.length);
-  const activeIndex = Math.max(0, tabs.findIndex(t => t.key === active));
+  const activeIndex = Math.max(0, tabs.findIndex((t) => t.key === active));
 
   const containerRef = useRef(null);
   const [dragging, setDragging] = useState(false);
@@ -249,6 +276,7 @@ const TabsBar = ({ active, onChange }) => {
     }
   };
 
+
   return (
     <div className="w-full overflow-x-auto">
       <div
@@ -272,8 +300,7 @@ const TabsBar = ({ active, onChange }) => {
           style={{
             width: `calc(100% / ${count} - 2px)`,
             left: `calc(${knobLeftPercent}% + 1px)`,
-            background:
-              'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(59,130,246,0.05))',
+            background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(59,130,246,0.05))',
             backdropFilter: 'blur(8px)',
             WebkitBackdropFilter: 'blur(8px)',
             border: '1px solid rgba(59,130,246,0.20)',
@@ -331,7 +358,10 @@ const Delta = ({ value }) => {
   return (
     <span className={`inline-flex items-center gap-1.5 text-sm font-medium ${colorClass}`}>
       <Icon className="text-base" />
-      <span>{sign}{abs.toFixed(1)}%</span>
+      <span>
+        {sign}
+        {abs.toFixed(1)}%
+      </span>
     </span>
   );
 };
@@ -345,19 +375,15 @@ const KpiCard = ({ icon, label, value, hint, delta, color = 'blue' }) => {
     amber: 'text-amber-600 bg-amber-50',
     cyan: 'text-cyan-600 bg-cyan-50',
     rose: 'text-rose-600 bg-rose-50',
-    gray: 'text-gray-600 bg-gray-50'
+    gray: 'text-gray-600 bg-gray-50',
   };
 
   return (
     <div className="group rounded-xl bg-white border border-gray-200 p-6 hover:shadow-lg hover:border-gray-300 transition">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
-          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-            {label}
-          </div>
-          <div className="text-3xl font-bold text-gray-900 mb-3">
-            {nf(value)}
-          </div>
+          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">{label}</div>
+          <div className="text-3xl font-bold text-gray-900 mb-3">{nf(value)}</div>
           <div className="flex items-center gap-3 flex-wrap">
             {typeof delta === 'number' && <Delta value={delta} />}
             {hint && <div className="text-xs text-gray-400">{hint}</div>}
@@ -379,12 +405,12 @@ const SparklineCard = ({ title, data, dataKey, color = COLORS.primary }) => (
         <LineChart data={data}>
           <XAxis dataKey="day" hide />
           <YAxis hide />
-          <Tooltip 
-            contentStyle={{ 
-              background: 'white', 
+          <Tooltip
+            contentStyle={{
+              background: 'white',
               border: '1px solid #e5e7eb',
               borderRadius: '8px',
-              fontSize: '12px'
+              fontSize: '12px',
             }}
           />
           <Line type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2.5} dot={false} />
@@ -417,18 +443,33 @@ const authorNameFrom = (a) => {
 /* =========================
    Downloads: fallbacks
 ========================= */
-const DOWNLOAD_METRIC_CANDIDATES = ['downloads','file_downloads','media_downloads','article_media_downloads'];
+const DOWNLOAD_METRIC_CANDIDATES = ['downloads', 'file_downloads', 'media_downloads', 'article_media_downloads'];
 const DOWNLOAD_SERIES_ENDPOINTS = [
   { url: '/stats/downloads/time-series', param: null },
   { url: '/article-media/stats/time-series', param: null },
 ];
 
 const tryGet = async (fn) => {
-  try { return await fn(); } catch (e) {
-    if (![404, 422].includes(e?.response?.status)) console.warn('downloads series probe:', e);
+  try {
+    return await fn();
+  } catch (e) {
+    // On ignore complètement les erreurs d'annulation / timeout
+    if (isAbortError(e)) {
+      // Si tu veux vraiment zéro bruit, enlève même ce console.warn :
+      // console.warn('[Dashboard] Downloads: requête annulée (abort), ignorée');
+      return null;
+    }
+
+    const status = e?.response?.status;
+    // On log seulement les vraies erreurs inattendues (pas 404/422)
+    if (![404, 422].includes(status)) {
+      console.warn('downloads series probe:', e);
+    }
     return null;
   }
 };
+
+
 
 /* =========================
    Export CSV
@@ -436,12 +477,16 @@ const tryGet = async (fn) => {
 function downloadCSV(filename, rows, headers) {
   const escape = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
   const head = headers?.length ? headers.join(',') : Object.keys(rows[0] || {}).join(',');
-  const body = rows.map(r => (headers || Object.keys(r)).map(k => escape(r[k])).join(',')).join('\n');
+  const body = rows
+    .map((r) => (headers || Object.keys(r)).map((k) => escape(r[k])).join(','))
+    .join('\n');
   const csv = `${head}\n${body}`;
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = filename; a.click();
+  a.href = url;
+  a.download = filename;
+  a.click();
   URL.revokeObjectURL(url);
 }
 
@@ -450,10 +495,15 @@ function downloadCSV(filename, rows, headers) {
 ========================= */
 export default function Dashboard() {
   const { setTitle } = useOutletContext();
-  useEffect(() => { setTitle?.('Tableau de bord'); }, [setTitle]);
+  useEffect(() => {
+    setTitle?.('Tableau de bord');
+  }, [setTitle]);
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('tokenGuard') : null;
-  if (!token) { window.location.href = '/auth'; return null; }
+  if (!token) {
+    window.location.href = '/auth';
+    return null;
+  }
 
   // 🛡️ Sanctum CSRF cookie (si sessions)
   useEffect(() => {
@@ -470,12 +520,12 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const [toasts, setToasts] = useState([]);
 
-  const pushToast = useCallback((message, type='success') => {
+  const pushToast = useCallback((message, type = 'success') => {
     const id = Date.now();
     setToasts((t) => [...t, { id, message, type }]);
-    setTimeout(() => setToasts((t) => t.filter(x => x.id !== id)), 3000);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3000);
   }, []);
-  const hideToast = useCallback((id) => setToasts((t) => t.filter(x => x.id !== id)), []);
+  const hideToast = useCallback((id) => setToasts((t) => t.filter((x) => x.id !== id)), []);
 
   const [rangeDays, setRangeDays] = useState(() => Number(localStorage.getItem('dash.range') || 30));
   const onChangeRange = (d) => {
@@ -495,6 +545,11 @@ export default function Dashboard() {
 
   const [pendingCommentsCount, setPendingCommentsCount] = useState(0);
   const [pendingPreview, setPendingPreview] = useState([]);
+
+  // Messages de contact
+  const [contactMessages, setContactMessages] = useState([]);
+  const [contactMessagesTotal, setContactMessagesTotal] = useState(0);
+  const [contactMessagesUnread, setContactMessagesUnread] = useState(0);
 
   const [viewsSeries, setViewsSeries] = useState([]);
   const [commentsSeries, setCommentsSeries] = useState([]);
@@ -518,6 +573,11 @@ export default function Dashboard() {
   const [topAuthors, setTopAuthors] = useState([]);
   const [trending, setTrending] = useState([]);
 
+  // Backoffice structures & abonnés
+  const [societesCount, setSocietesCount] = useState(0);
+  const [bureauxCount, setBureauxCount] = useState(0);
+  const [newsletterSubscribers, setNewsletterSubscribers] = useState(0);
+
   // ===== FICHIERS: recherche, filtre, tri =====
   const [filesQuery, setFilesQuery] = useState('');
   const [filesSort, setFilesSort] = useState({ key: 'download_count', dir: 'desc' });
@@ -534,10 +594,10 @@ export default function Dashboard() {
     let arr = Array.isArray(filesList) ? [...filesList] : [];
     if (filesQuery) {
       const q = filesQuery.toLowerCase();
-      arr = arr.filter(f => (f.name || '').toLowerCase().includes(q));
+      arr = arr.filter((f) => (f.name || '').toLowerCase().includes(q));
     }
     if (filesOnlyProtected !== null) {
-      arr = arr.filter(f => Boolean(f.protected) === filesOnlyProtected);
+      arr = arr.filter((f) => Boolean(f.protected) === filesOnlyProtected);
     }
     const { key, dir } = filesSort;
     arr.sort((a, b) => {
@@ -564,15 +624,17 @@ export default function Dashboard() {
   /* ================= fetchers ================= */
   const normalizeList = (payload, fallbackPerPage = 24) => {
     const p0 = payload || {};
-    const p = (p0.data && !Array.isArray(p0.data) && (Array.isArray(p0.data.data) || p0.data.current_page !== undefined))
-      ? p0.data : p0;
+    const p =
+      p0.data && !Array.isArray(p0.data) && (Array.isArray(p0.data.data) || p0.data.current_page !== undefined)
+        ? p0.data
+        : p0;
 
     const items =
       (Array.isArray(p?.data) ? p.data : null) ??
       (Array.isArray(p?.items) ? p.items : null) ??
       (Array.isArray(p0) ? p0 : []);
 
-    const rawMeta = (p?.meta && typeof p.meta === 'object') ? p.meta : p || {};
+    const rawMeta = p?.meta && typeof p.meta === 'object' ? p.meta : p || {};
     const perPage = Number(rawMeta.per_page ?? p.per_page ?? fallbackPerPage) || fallbackPerPage;
     const currentPage = Number(rawMeta.current_page ?? p.current_page ?? p.page ?? 1) || 1;
     const lastPage = Number(rawMeta.last_page ?? p.last_page ?? 1) || 1;
@@ -582,28 +644,52 @@ export default function Dashboard() {
       total = items.length;
     }
 
-    const links = (p?.links && typeof p.links === 'object') ? p.links : {};
-    const hasNext = Boolean(links?.next) || (currentPage < lastPage);
+    const links = p?.links && typeof p.links === 'object' ? p.links : {};
+    const hasNext = Boolean(links?.next) || currentPage < lastPage;
 
-    return { items, meta: { total: Number(total) || 0, per_page: perPage, current_page: currentPage, last_page: lastPage, has_next: hasNext } };
+    return {
+      items,
+      meta: {
+        total: Number(total) || 0,
+        per_page: perPage,
+        current_page: currentPage,
+        last_page: lastPage,
+        has_next: hasNext,
+      },
+    };
   };
 
   const fetchArticlesCount = async () => {
-    const total = await axios.get('/stats/articles-count').then(r => Number(r?.data?.count || 0)).catch(() => 0);
-    const statuses = ['published','draft','pending'];
-    const res = await Promise.all(statuses.map(s =>
-      axios.get('/articles', { params: { per_page: 1, status: s } })
-        .then(r => normalizeList(r.data, 1).meta.total)
-        .catch(() => 0)
-    ));
+    const total = await axios
+      .get('/stats/articles-count')
+      .then((r) => Number(r?.data?.count || 0))
+      .catch(() => 0);
+    const statuses = ['published', 'draft', 'pending'];
+    const res = await Promise.all(
+      statuses.map((s) =>
+        axios
+          .get('/articles', { params: { per_page: 1, status: s } })
+          .then((r) => normalizeList(r.data, 1).meta.total)
+          .catch(() => 0)
+      )
+    );
     return { total, published: res[0], draft: res[1], pending: res[2] };
   };
 
   const fetchUsersKPIs = async () => {
     const [total, news, active] = await Promise.all([
-      axios.get('/stats/users-count').then(r => Number(r?.data?.count || 0)).catch(() => 0),
-      axios.get('/stats/users-new', { params: { days: 30 }}).then(r => Number(r?.data?.count || 0)).catch(() => 0),
-      axios.get('/stats/active-users', { params: { days: 7 }}).then(r => Number(r?.data?.count || 0)).catch(() => 0),
+      axios
+        .get('/stats/users-count')
+        .then((r) => Number(r?.data?.count || 0))
+        .catch(() => 0),
+      axios
+        .get('/stats/users-new', { params: { days: 30 } })
+        .then((r) => Number(r?.data?.count || 0))
+        .catch(() => 0),
+      axios
+        .get('/stats/active-users', { params: { days: 7 } })
+        .then((r) => Number(r?.data?.count || 0))
+        .catch(() => 0),
     ]);
     return { total, news, active };
   };
@@ -622,8 +708,7 @@ export default function Dashboard() {
     }
   };
 
-  const transformSeries = (rows, key) =>
-    (rows || []).map(d => ({ day: d.day, [key]: Number(d.count || d[key] || 0) }));
+  const transformSeries = (rows, key) => (rows || []).map((d) => ({ day: d.day, [key]: Number(d.count || d[key] || 0) }));
 
   const fetchTimeSeries = async (metric, days, extraParams = {}) => {
     const { data } = await axios.get('/stats/time-series', { params: { metric, days, ...extraParams } });
@@ -670,7 +755,7 @@ export default function Dashboard() {
   const fetchTrending = async (metric, days = 30, limit = 6) => {
     const { data } = await axios.get('/stats/trending', { params: { metric, days, limit } });
     const arr = Array.isArray(data?.data) ? data.data : [];
-    return arr.map(it => ({
+    return arr.map((it) => ({
       id: it.article_id,
       title: it.title ?? `#${it.article_id}`,
       slug: it.slug ?? String(it.article_id),
@@ -679,24 +764,29 @@ export default function Dashboard() {
   };
 
   const fetchRecentArticles = async () => {
-    const { items } = await axios.get('/articles', {
-      params: { per_page: 9, sort_by: 'published_at', sort_direction: 'desc' }
-    }).then(res => normalizeList(res.data, 9));
+    const { items } = await axios
+      .get('/articles', {
+        params: { per_page: 9, sort_by: 'published_at', sort_direction: 'desc' },
+      })
+      .then((res) => normalizeList(res.data, 9));
     return items;
   };
 
   const fetchArticlesWithinRange = async (cap = 400, days = 30) => {
     try {
-      const since = new Date(); since.setDate(since.getDate() - (days - 1));
+      const since = new Date();
+      since.setDate(since.getDate() - (days - 1));
       const date_from = since.toISOString().slice(0, 10);
-      let page = 1, all = [], hasNext = true;
+      let page = 1,
+        all = [],
+        hasNext = true;
       while (hasNext && all.length < cap) {
         const { data } = await axios.get('/articles', {
-          params: { per_page: PAGE_SIZE, page, sort_by: 'published_at', sort_direction: 'desc', date_from }
+          params: { per_page: PAGE_SIZE, page, sort_by: 'published_at', sort_direction: 'desc', date_from },
         });
         const { items, meta } = normalizeList(data, PAGE_SIZE);
         all = [...all, ...(items || [])];
-        hasNext = Boolean(meta?.has_next) && (page < (meta?.last_page || page));
+        hasNext = Boolean(meta?.has_next) && page < (meta?.last_page || page);
         page += 1;
       }
       return all.slice(0, cap);
@@ -707,47 +797,127 @@ export default function Dashboard() {
 
   const fetchAllFiles = async (cap = 1000) => {
     try {
-      let page = 1, all = [], hasNext = true;
+      let page = 1,
+        all = [],
+        hasNext = true;
       while (hasNext && all.length < cap) {
         const { data } = await axios.get('/article-media', { params: { per_page: PAGE_SIZE, page } });
         const { items, meta } = normalizeList(data, PAGE_SIZE);
         all = [...all, ...(items || [])];
-        hasNext = Boolean(meta?.has_next) && (page < (meta?.last_page || page));
+        hasNext = Boolean(meta?.has_next) && page < (meta?.last_page || page);
         page += 1;
       }
-      const mapped = all.map(f => {
-        const name = f.name || f.title || f.filename || `Fichier #${f.id}`;
-        const downloads = Number(f.download_count || f.downloads || 0);
+      const mapped = all
+        .map((f) => {
+          const name = f.name || f.title || f.filename || `Fichier #${f.id}`;
+          const downloads = Number(f.download_count || f.downloads || 0);
 
-        // ——— Vérifs côté FICHIER ———
-        const fileStatus = String(f.visibility ?? f.status ?? '').toLowerCase();
-        const fileProtected =
-          !!(f.is_protected ?? f.is_private ?? f.is_password_protected ?? f.protected ?? f.password ?? f.password_hash) ||
-          fileStatus.includes('private') || fileStatus.includes('protect');
+          // ——— Vérifs côté FICHIER ———
+          const fileStatus = String(f.visibility ?? f.status ?? '').toLowerCase();
+          const fileProtected =
+            !!(f.is_protected ??
+              f.is_private ??
+              f.is_password_protected ??
+              f.protected ??
+              f.password ??
+              f.password_hash) ||
+            fileStatus.includes('private') ||
+            fileStatus.includes('protect');
 
-        // ——— Vérifs côté ARTICLE parent ———
-        const a = f.article || {};
-        const artStatus = String(a.visibility ?? a.status ?? '').toLowerCase();
-        const articleProtected =
-          !!(a.is_protected ?? a.is_private ?? a.password) ||
-          artStatus.includes('private') || artStatus.includes('protect');
+          // ——— Vérifs côté ARTICLE parent ———
+          const a = f.article || {};
+          const artStatus = String(a.visibility ?? a.status ?? '').toLowerCase();
+          const articleProtected =
+            !!(a.is_protected ?? a.is_private ?? a.password) ||
+            artStatus.includes('private') ||
+            artStatus.includes('protect');
 
-        const isProtected = fileProtected || articleProtected;
+          const isProtected = fileProtected || articleProtected;
 
-        return { id: f.id, name, download_count: downloads, protected: isProtected };
-      }).sort((a, b) => b.download_count - a.download_count);
+          return { id: f.id, name, download_count: downloads, protected: isProtected };
+        })
+        .sort((a, b) => b.download_count - a.download_count);
 
       const total = mapped.reduce((s, f) => s + f.download_count, 0);
-      const protTotal = mapped.filter(x => x.protected).reduce((s, f) => s + f.download_count, 0);
+      const protTotal = mapped.filter((x) => x.protected).reduce((s, f) => s + f.download_count, 0);
       const pubTotal = total - protTotal;
-      const protCount = mapped.filter(x => x.protected).length;
+      const protCount = mapped.filter((x) => x.protected).length;
       const pubCount = mapped.length - protCount;
 
-      return { list: mapped, total, protectedTotal: protTotal, publicTotal: pubTotal, protectedCount: protCount, publicCount: pubCount };
+      return {
+        list: mapped,
+        total,
+        protectedTotal: protTotal,
+        publicTotal: pubTotal,
+        protectedCount: protCount,
+        publicCount: pubCount,
+      };
     } catch {
       return { list: [], total: 0, protectedTotal: 0, publicTotal: 0, protectedCount: 0, publicCount: 0 };
     }
   };
+
+  // Messages de contact (backoffice)
+ const fetchContactMessages = async () => {
+  try {
+    const { data } = await axios.get('/contact-messages', { params: { per_page: 8 } });
+    const { items, meta } = normalizeList(data, 8);
+
+    const unread = items.filter((m) => {
+      const status = String(m.status || '').toLowerCase();
+      // On considère "non lu" = pas lu ET pas encore traité
+      return !m.read_at && status !== 'processed';
+    }).length;
+
+    return { items, total: meta.total || items.length, unread };
+  } catch {
+    return { items: [], total: 0, unread: 0 };
+  }
+};
+
+
+  // Sociétés / Bureaux
+  const fetchSocietesBureaux = async () => {
+    const [societes, bureaux] = await Promise.all([
+      axios
+        .get('/societes', { params: { per_page: 1 } })
+        .then((r) => normalizeList(r.data, 1).meta.total)
+        .catch(() => 0),
+      axios
+        .get('/bureaux', { params: { per_page: 1 } })
+        .then((r) => normalizeList(r.data, 1).meta.total)
+        .catch(() => 0),
+    ]);
+    return { societes, bureaux };
+  };
+
+  // ✅ Abonnés newsletter via /newsletter/subscribers
+  const fetchNewsletterSubscribers = async () => {
+    try {
+      const { data } = await axios.get('/newsletter/subscribers', { params: { per_page: 1 } });
+      const { meta } = normalizeList(data, 1);
+      return { total: meta.total || 0 };
+    } catch {
+      return { total: 0 };
+    }
+  };
+// Helper: détecter les erreurs d'annulation / timeout qu'on veut ignorer
+const isAbortError = (err) => {
+  if (!err) return false;
+
+  if (err.name === 'CanceledError') return true;
+  if (err.code === 'ECONNABORTED') return true;
+
+  const msg = String(err.message || '').toLowerCase();
+
+  if (msg.includes('request aborted') || msg.includes('aborted')) return true;
+  if (msg.includes('canceled') || msg.includes('cancelled')) return true;
+
+  if (!err.response && err.request && msg.includes('abort')) return true;
+
+  return false;
+};
+
 
   /* ================= load ================= */
   const loadData = useCallback(async () => {
@@ -755,24 +925,40 @@ export default function Dashboard() {
       setError('');
       setLoading(true);
 
-      const [{ total, published, draft, pending }, users] = await Promise.all([
+      // KPIs principaux + backoffice
+      const [{ total, published, draft, pending }, users, sb, contact, subs] = await Promise.all([
         fetchArticlesCount(),
-        fetchUsersKPIs()
+        fetchUsersKPIs(),
+        fetchSocietesBureaux(),
+        fetchContactMessages(),
+        fetchNewsletterSubscribers(), // 🔁 nouveau fetch abonnés
       ]);
+
+      // Articles
       setTotalDbArticles(total);
       setTotalArticles(total);
       setPublishedCount(published);
       setDraftCount(draft);
       setPendingArticlesCount(pending);
 
+      // Utilisateurs
       setTotalUsersDb(users.total);
       setNewUsers30d(users.news);
       setActiveUsers7d(users.active);
 
-      const [pendingComments, pendingList] = await Promise.all([
-        fetchPendingCounts(),
-        fetchPendingPreview()
-      ]);
+      // Backoffice structures
+      setSocietesCount(sb.societes);
+      setBureauxCount(sb.bureaux);
+
+      // Messages de contact
+      setContactMessages(contact.items);
+      setContactMessagesTotal(contact.total);
+      setContactMessagesUnread(contact.unread);
+
+      // Newsletter abonnés (total via /newsletter/subscribers)
+      setNewsletterSubscribers(subs.total || 0);
+
+      const [pendingComments, pendingList] = await Promise.all([fetchPendingCounts(), fetchPendingPreview()]);
       setPendingCommentsCount(pendingComments);
       setPendingPreview(pendingList);
 
@@ -782,7 +968,7 @@ export default function Dashboard() {
         fetchTimeSeries('comments', rangeDays, { status: 'approved' }),
         fetchTimeSeries('comments', rangeDays, { status: 'pending' }),
         fetchTimeSeries('shares', rangeDays),
-        fetchDownloadsSeries(rangeDays)
+        fetchDownloadsSeries(rangeDays),
       ]);
       const mergedComments = mergeSeries(commentsApproved, commentsPending);
 
@@ -819,26 +1005,28 @@ export default function Dashboard() {
 
       const [recent, withinRange] = await Promise.all([
         fetchRecentArticles(),
-        fetchArticlesWithinRange(400, rangeDays)
+        fetchArticlesWithinRange(400, rangeDays),
       ]);
       setRecentArticles(recent);
 
       const byAuthor = new Map();
-      withinRange.forEach(a => {
+      withinRange.forEach((a) => {
         const name = authorNameFrom(a);
         byAuthor.set(name, (byAuthor.get(name) || 0) + 1);
       });
-      const topA = Array.from(byAuthor.entries()).map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count).slice(0, 5);
+      const topA = Array.from(byAuthor.entries())
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
       setTopAuthors(topA);
 
       const trendingNow = await fetchTrending('views', rangeDays, 6);
       setTrending(
-        trendingNow.map(a => ({
+        trendingNow.map((a) => ({
           id: a.id,
           title: a.title || `#${a.id}`,
           views: a.count || 0,
-          slug: a.slug || a.id
+          slug: a.slug || a.id,
         }))
       );
 
@@ -852,22 +1040,42 @@ export default function Dashboard() {
 
       pushToast('Données actualisées', 'success');
     } catch (e) {
-      console.error(e);
-      setError('Impossible de charger les données');
-      pushToast('Erreur de chargement', 'error');
+     // Si la requête a été annulée (navigation, HMR, onglet fermé, timeout court...), on ignore
+    if (isAbortError(e)) {
+      // console.warn('[Dashboard] Requête annulée / abort détecté, aucune action', e);
+      return; // on ne met pas d'erreur, pas de toast
+    }
+
+    // console.error(e);
+    setError('Impossible de charger les données');
+    pushToast('Erreur de chargement', 'error');
     } finally {
       setLoading(false);
     }
   }, [rangeDays, pushToast]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-  const totalViews = useMemo(() => viewsSeries.reduce((s, d) => s + (d.vues || 0), 0), [viewsSeries]);
-  const totalComments = useMemo(() => commentsSeries.reduce((s, d) => s + (d.comments || 0), 0), [commentsSeries]);
-  const totalShares = useMemo(() => sharesSeries.reduce((s, d) => s + (d.shares || 0), 0), [sharesSeries]);
-  const totalDownloadsWindow = useMemo(() => downloadsSeries.reduce((s, d) => s + (d.downloads || d.count || 0), 0), [downloadsSeries]);
+  const totalViews = useMemo(
+    () => viewsSeries.reduce((s, d) => s + (d.vues || 0), 0),
+    [viewsSeries]
+  );
+  const totalComments = useMemo(
+    () => commentsSeries.reduce((s, d) => s + (d.comments || 0), 0),
+    [commentsSeries]
+  );
+  const totalShares = useMemo(
+    () => sharesSeries.reduce((s, d) => s + (d.shares || 0), 0),
+    [sharesSeries]
+  );
+  const totalDownloadsWindow = useMemo(
+    () => downloadsSeries.reduce((s, d) => s + (d.downloads || d.count || 0), 0),
+    [downloadsSeries]
+  );
 
-  const spark7 = (series, key) => series.slice(-7).map(d => ({ day: d.day, [key]: d[key] }));
+  const spark7 = (series, key) => series.slice(-7).map((d) => ({ day: d.day, [key]: d[key] }));
 
   const exportAudienceCSV = () => {
     const rows = (viewsSeries || []).map((r, i) => ({
@@ -875,67 +1083,94 @@ export default function Dashboard() {
       vues: r.vues,
       comments: commentsSeries[i]?.comments ?? '',
       shares: sharesSeries[i]?.shares ?? '',
-      downloads: downloadsSeries[i]?.downloads ?? ''
+      downloads: downloadsSeries[i]?.downloads ?? '',
     }));
     downloadCSV(`audience_${rangeDays}j.csv`, rows, ['day', 'vues', 'comments', 'shares', 'downloads']);
   };
-  
+
   const exportRecentCSV = () => {
-    const rows = recentArticles.map(a => ({
+    const rows = recentArticles.map((a) => ({
       id: a.id,
       title: a.title,
       slug: a.slug,
       views: a.view_count || 0,
       rating: a.rating_average || 0,
-      status: a.status
+      status: a.status,
     }));
-    downloadCSV('articles_recents.csv', rows, ['id','title','slug','views','rating','status']);
+    downloadCSV('articles_recents.csv', rows, ['id', 'title', 'slug', 'views', 'rating', 'status']);
   };
 
   const headerRight = (
     <div className="flex items-center gap-3">
-  {/* Range selector – même look que le filter */}
-  <div className="flex items-center gap-1 rounded-2xl border border-slate-200/60 bg-white/60 backdrop-blur-sm px-1.5 py-1 shadow-sm">
-    {[7, 30, 60, 90].map((d) => (
-      <button
-        key={d}
-        onClick={() => onChangeRange(d)}
-        className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-xl transition-all
-          ${
-            rangeDays === d
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500 hover:text-slate-900 hover:bg-white/60"
-          }`}
-      >
-        {d}j
-      </button>
-    ))}
-  </div>
+      {/* Range selector */}
+      <div className="flex items-center gap-1 rounded-2xl border border-slate-200/60 bg-white/60 backdrop-blur-sm px-1.5 py-1 shadow-sm">
+        {[7, 30, 60, 90].map((d) => (
+          <button
+            key={d}
+            onClick={() => onChangeRange(d)}
+            className={`px-3 py-1.5 text-xs sm:text-sm font-medium rounded-xl transition-all ${
+              rangeDays === d
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-900 hover:bg-white/60'
+            }`}
+          >
+            {d}j
+          </button>
+        ))}
+      </div>
 
-  {/* Export – même style que les filtres, bouton glass */}
-  {(activeTab === "audience" || activeTab === "resume") && (
-    <button
-      onClick={exportAudienceCSV}
-      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200/60 bg-white/60 backdrop-blur-sm px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-700 shadow-sm hover:bg-white hover:shadow-md transition-all"
-    >
-      <FiDownload className="h-4 w-4" />
-      <span className="hidden sm:inline">Export</span>
-    </button>
-  )}
+      {/* Export */}
+      {(activeTab === 'audience' || activeTab === 'resume') && (
+        <button
+          onClick={exportAudienceCSV}
+          className="inline-flex items-center gap-2 rounded-2xl border border-slate-200/60 bg-white/60 backdrop-blur-sm px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-700 shadow-sm hover:bg-white hover:shadow-md transition-all"
+        >
+          <FiDownload className="h-4 w-4" />
+          <span className="hidden sm:inline">Export</span>
+        </button>
+      )}
 
-  {activeTab === "contenu" && (
-    <button
-      onClick={exportRecentCSV}
-      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200/60 bg-white/60 backdrop-blur-sm px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-700 shadow-sm hover:bg-white hover:shadow-md transition-all"
-    >
-      <FiDownload className="h-4 w-4" />
-      <span className="hidden sm:inline">Export</span>
-    </button>
-  )}
-</div>
-
+      {activeTab === 'contenu' && (
+        <button
+          onClick={exportRecentCSV}
+          className="inline-flex items-center gap-2 rounded-2xl border border-slate-200/60 bg-white/60 backdrop-blur-sm px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-700 shadow-sm hover:bg-white hover:shadow-md transition-all"
+        >
+          <FiDownload className="h-4 w-4" />
+          <span className="hidden sm:inline">Export</span>
+        </button>
+      )}
+    </div>
   );
+  // statuts des message, helpers pour afiicher les statuts des messages de contact
+const getContactStatusMeta = (m) => {
+  const status = String(m.status || '').toLowerCase();
+  const isUnread = !m.read_at && status !== 'processed';
 
+  // Valeurs par défaut
+  let label = 'Traité';
+  let className = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+
+  if (status === 'new') {
+    label = isUnread ? 'Nouveau' : 'Nouveau (lu)';
+    className = isUnread
+      ? 'bg-amber-50 text-amber-700 border-amber-200'
+      : 'bg-amber-50 text-amber-800 border-amber-300';
+  } else if (status === 'in_progress') {
+    label = 'En cours';
+    className = 'bg-blue-50 text-blue-700 border-blue-200';
+  } else if (status === 'processed') {
+    label = 'Traité';
+    className = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  }
+
+  // Si pas de statut mais non lu → on force "Nouveau"
+  if (!status && isUnread) {
+    label = 'Nouveau';
+    className = 'bg-amber-50 text-amber-700 border-amber-200';
+  }
+
+  return { label, className };
+};
   return (
     <div className="min-h-screen bg-gray-50 -m-4 p-6 space-y-6">
       <PageHeader
@@ -953,7 +1188,10 @@ export default function Dashboard() {
       {activeTab === 'resume' && (
         <div className="space-y-6  min-h-screen h-[380px] overflow-y-auto pb-72 ">
           {/* Audience */}
-          <Section title="Audience" right={!loading && <span className="text-xs">vs période précédente</span>}>
+          <Section
+            title="Audience"
+            right={!loading && <span className="text-xs">vs période précédente</span>}
+          >
             {loading ? (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                 <Skeleton className="h-32" />
@@ -963,37 +1201,37 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                <KpiCard 
-                  label={`Vues (${rangeDays}j)`} 
-                  value={totalViews} 
-                  icon={<FiEye />} 
-                  delta={viewsDelta} 
-                  hint="évolution" 
-                  color="blue" 
+                <KpiCard
+                  label={`Vues (${rangeDays}j)`}
+                  value={totalViews}
+                  icon={<FiEye />}
+                  delta={viewsDelta}
+                  hint="évolution"
+                  color="blue"
                 />
-                <KpiCard 
-                  label={`Commentaires (${rangeDays}j)`} 
-                  value={totalComments} 
-                  icon={<FiMessageCircle />} 
-                  delta={commentsDelta} 
-                  hint="évolution" 
-                  color="cyan" 
+                <KpiCard
+                  label={`Commentaires (${rangeDays}j)`}
+                  value={totalComments}
+                  icon={<FiMessageCircle />}
+                  delta={commentsDelta}
+                  hint="évolution"
+                  color="cyan"
                 />
-                <KpiCard 
-                  label={`Partages (${rangeDays}j)`} 
-                  value={totalShares} 
-                  icon={<FiShare2 />} 
-                  delta={sharesDelta} 
-                  hint="évolution" 
-                  color="amber" 
+                <KpiCard
+                  label={`Partages (${rangeDays}j)`}
+                  value={totalShares}
+                  icon={<FiShare2 />}
+                  delta={sharesDelta}
+                  hint="évolution"
+                  color="amber"
                 />
-                <KpiCard 
-                  label={`Téléchargements (${rangeDays}j)`} 
-                  value={totalDownloadsWindow} 
-                  icon={<FiDownload />} 
-                  delta={typeof downloadsDelta === 'number' ? downloadsDelta : undefined} 
-                  hint="évolution" 
-                  color="purple" 
+                <KpiCard
+                  label={`Téléchargements (${rangeDays}j)`}
+                  value={totalDownloadsWindow}
+                  icon={<FiDownload />}
+                  delta={typeof downloadsDelta === 'number' ? downloadsDelta : undefined}
+                  hint="évolution"
+                  color="purple"
                 />
               </div>
             )}
@@ -1011,33 +1249,33 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-4">
-                  <KpiCard 
-                    label="Total" 
-                    value={totalDbArticles ?? totalArticles} 
-                    icon={<FiFileText />} 
-                    hint="articles" 
-                    color="purple" 
+                  <KpiCard
+                    label="Total"
+                    value={totalDbArticles ?? totalArticles}
+                    icon={<FiFileText />}
+                    hint="articles"
+                    color="purple"
                   />
-                  <KpiCard 
-                    label="Publiés" 
-                    value={publishedCount} 
-                    icon={<FiCheckCircle />} 
-                    hint="en ligne" 
-                    color="emerald" 
+                  <KpiCard
+                    label="Publiés"
+                    value={publishedCount}
+                    icon={<FiCheckCircle />}
+                    hint="en ligne"
+                    color="emerald"
                   />
-                  <KpiCard 
-                    label="Brouillons" 
-                    value={draftCount} 
-                    icon={<FiFileText />} 
-                    hint="en cours" 
-                    color="gray" 
+                  <KpiCard
+                    label="Brouillons"
+                    value={draftCount}
+                    icon={<FiFileText />}
+                    hint="en cours"
+                    color="gray"
                   />
-                  <KpiCard 
-                    label="En attente" 
-                    value={pendingArticlesCount} 
-                    icon={<FiMessageCircle />} 
-                    hint="validation" 
-                    color="rose" 
+                  <KpiCard
+                    label="En attente"
+                    value={pendingArticlesCount}
+                    icon={<FiMessageCircle />}
+                    hint="validation"
+                    color="rose"
                   />
                 </div>
               )}
@@ -1052,31 +1290,74 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <KpiCard 
-                    label="Total" 
-                    value={totalUsersDb ?? 0} 
-                    icon={<FiUsers />} 
-                    hint="comptes" 
-                    color="purple" 
+                  <KpiCard
+                    label="Total"
+                    value={totalUsersDb ?? 0}
+                    icon={<FiUsers />}
+                    hint="comptes"
+                    color="purple"
                   />
-                  <KpiCard 
-                    label="Nouveaux (30j)" 
-                    value={newUsers30d} 
-                    icon={<FiUserPlus />} 
-                    hint="inscriptions" 
-                    color="blue" 
+                  <KpiCard
+                    label="Nouveaux (30j)"
+                    value={newUsers30d}
+                    icon={<FiUserPlus />}
+                    hint="inscriptions"
+                    color="blue"
                   />
-                  <KpiCard 
-                    label="Actifs (7j)" 
-                    value={activeUsers7d} 
-                    icon={<FiRefreshCw />} 
-                    hint="connectés" 
-                    color="emerald" 
+                  <KpiCard
+                    label="Actifs (7j)"
+                    value={activeUsers7d}
+                    icon={<FiRefreshCw />}
+                    hint="connectés"
+                    color="emerald"
                   />
                 </div>
               )}
             </Section>
           </div>
+
+          {/* Backoffice structures & messages */}
+          <Section title="Backoffice & CRM">
+            {loading ? (
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <Skeleton className="h-32" />
+                <Skeleton className="h-32" />
+                <Skeleton className="h-32" />
+                <Skeleton className="h-32" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <KpiCard
+                  label="Sociétés"
+                  value={societesCount}
+                  icon={<FiHome />}
+                  hint="enregistrées"
+                  color="gray"
+                />
+                <KpiCard
+                  label="Bureaux"
+                  value={bureauxCount}
+                  icon={<FiMapPin />}
+                  hint="points de contact"
+                  color="cyan"
+                />
+                <KpiCard
+                  label="Messages de contact"
+                  value={contactMessagesTotal}
+                  icon={<FiMail />}
+                  hint={contactMessagesUnread ? `${contactMessagesUnread} non lus` : 'boîte de réception'}
+                  color="amber"
+                />
+                <KpiCard
+                  label="Abonnés newsletter"
+                  value={newsletterSubscribers}
+                  icon={<FiUsers />}
+                  hint="audience engagée"
+                  color="purple"
+                />
+              </div>
+            )}
+          </Section>
 
           {/* Classements */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -1096,8 +1377,8 @@ export default function Dashboard() {
                         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-semibold text-sm flex items-center justify-center">
                           {idx + 1}
                         </div>
-                        <Link 
-                          to={`/articles/${a.slug}`} 
+                        <Link
+                          to={`/articles/${a.slug}`}
                           className="text-sm font-medium text-gray-900 hover:text-blue-600 truncate transition"
                         >
                           {a.title}
@@ -1105,9 +1386,9 @@ export default function Dashboard() {
                       </div>
                       <div className="flex items-center gap-3 flex-shrink-0">
                         <div className="text-sm font-semibold text-gray-900">{kfmt(a.views)}</div>
-                        <a 
-                          href={`/articles/${a.slug}`} 
-                          target="_blank" 
+                        <a
+                          href={`/articles/${a.slug}`}
+                          target="_blank"
                           rel="noreferrer"
                           className="text-blue-600 hover:text-blue-700 transition"
                         >
@@ -1163,45 +1444,45 @@ export default function Dashboard() {
               </>
             ) : (
               <>
-                <KpiCard 
-                  label={`Vues (${rangeDays}j)`} 
-                  value={totalViews} 
-                  icon={<FiEye />} 
-                  delta={viewsDelta} 
-                  hint="vs période précédente" 
-                  color="blue" 
+                <KpiCard
+                  label={`Vues (${rangeDays}j)`}
+                  value={totalViews}
+                  icon={<FiEye />}
+                  delta={viewsDelta}
+                  hint="vs période précédente"
+                  color="blue"
                 />
-                <KpiCard 
-                  label={`Commentaires (${rangeDays}j)`} 
-                  value={totalComments} 
-                  icon={<FiMessageCircle />} 
-                  delta={commentsDelta} 
-                  hint="vs période précédente" 
-                  color="cyan" 
+                <KpiCard
+                  label={`Commentaires (${rangeDays}j)`}
+                  value={totalComments}
+                  icon={<FiMessageCircle />}
+                  delta={commentsDelta}
+                  hint="vs période précédente"
+                  color="cyan"
                 />
-                <KpiCard 
-                  label={`Partages (${rangeDays}j)`} 
-                  value={totalShares} 
-                  icon={<FiShare2 />} 
-                  delta={sharesDelta} 
-                  hint="vs période précédente" 
-                  color="amber" 
+                <KpiCard
+                  label={`Partages (${rangeDays}j)`}
+                  value={totalShares}
+                  icon={<FiShare2 />}
+                  delta={sharesDelta}
+                  hint="vs période précédente"
+                  color="amber"
                 />
-                <KpiCard 
-                  label={`Téléchargements (${rangeDays}j)`} 
-                  value={totalDownloadsWindow} 
-                  icon={<FiDownload />} 
-                  delta={typeof downloadsDelta === 'number' ? downloadsDelta : undefined} 
-                  hint="vs période précédente" 
-                  color="purple" 
+                <KpiCard
+                  label={`Téléchargements (${rangeDays}j)`}
+                  value={totalDownloadsWindow}
+                  icon={<FiDownload />}
+                  delta={typeof downloadsDelta === 'number' ? downloadsDelta : undefined}
+                  hint="vs période précédente"
+                  color="purple"
                 />
               </>
             )}
           </div>
 
           <div className="grid gap-6 lg:grid-cols-4">
-            <Section 
-              title="Vues" 
+            <Section
+              title="Vues"
               right={!loading && <span className="text-sm font-semibold text-gray-900">{nf(totalViews)}</span>}
             >
               {loading ? (
@@ -1222,32 +1503,32 @@ export default function Dashboard() {
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis 
-                        dataKey="day" 
-                        tick={{ fontSize: 11, fill: '#64748b' }} 
+                      <XAxis
+                        dataKey="day"
+                        tick={{ fontSize: 11, fill: '#64748b' }}
                         tickLine={false}
                         axisLine={{ stroke: '#e2e8f0' }}
                       />
-                      <YAxis 
-                        tick={{ fontSize: 11, fill: '#64748b' }} 
+                      <YAxis
+                        tick={{ fontSize: 11, fill: '#64748b' }}
                         tickLine={false}
                         axisLine={{ stroke: '#e2e8f0' }}
                       />
-                      <Tooltip 
-                        contentStyle={{ 
+                      <Tooltip
+                        contentStyle={{
                           background: 'white',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '8px',
-                          fontSize: '12px'
+                          border: "1px solid #e5e7eb",
+                          borderRadius: "8px",
+                          fontSize: '12px',
                         }}
                       />
-                      <Area 
-                        type="monotone" 
-                        dataKey="vues" 
-                        name="Vues" 
-                        stroke={COLORS.primary} 
-                        strokeWidth={2} 
-                        fill="url(#gradViews)" 
+                      <Area
+                        type="monotone"
+                        dataKey="vues"
+                        name="Vues"
+                        stroke={COLORS.primary}
+                        strokeWidth={2}
+                        fill="url(#gradViews)"
                       />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -1255,8 +1536,8 @@ export default function Dashboard() {
               )}
             </Section>
 
-            <Section 
-              title="Commentaires" 
+            <Section
+              title="Commentaires"
               right={!loading && <span className="text-sm font-semibold text-gray-900">{nf(totalComments)}</span>}
             >
               {loading ? (
@@ -1271,30 +1552,30 @@ export default function Dashboard() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={commentsSeries}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis 
-                        dataKey="day" 
-                        tick={{ fontSize: 11, fill: '#64748b' }} 
+                      <XAxis
+                        dataKey="day"
+                        tick={{ fontSize: 11, fill: '#64748b' }}
                         tickLine={false}
                         axisLine={{ stroke: '#e2e8f0' }}
                       />
-                      <YAxis 
-                        tick={{ fontSize: 11, fill: '#64748b' }} 
+                      <YAxis
+                        tick={{ fontSize: 11, fill: '#64748b' }}
                         tickLine={false}
                         axisLine={{ stroke: '#e2e8f0' }}
                       />
-                      <Tooltip 
-                        contentStyle={{ 
+                      <Tooltip
+                        contentStyle={{
                           background: 'white',
                           border: '1px solid #e5e7eb',
                           borderRadius: '8px',
-                          fontSize: '12px'
+                          fontSize: '12px',
                         }}
                       />
-                      <Bar 
-                        dataKey="comments" 
-                        name="Commentaires (approuvés + en attente)" 
-                        fill={COLORS.info} 
-                        radius={[8, 8, 0, 0]} 
+                      <Bar
+                        dataKey="comments"
+                        name="Commentaires (approuvés + en attente)"
+                        fill={COLORS.info}
+                        radius={[8, 8, 0, 0]}
                       />
                     </BarChart>
                   </ResponsiveContainer>
@@ -1302,8 +1583,8 @@ export default function Dashboard() {
               )}
             </Section>
 
-            <Section 
-              title="Partages" 
+            <Section
+              title="Partages"
               right={!loading && <span className="text-sm font-semibold text-gray-900">{nf(totalShares)}</span>}
             >
               {loading ? (
@@ -1318,30 +1599,30 @@ export default function Dashboard() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={sharesSeries}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis 
-                        dataKey="day" 
-                        tick={{ fontSize: 11, fill: '#64748b' }} 
+                      <XAxis
+                        dataKey="day"
+                        tick={{ fontSize: 11, fill: '#64748b' }}
                         tickLine={false}
                         axisLine={{ stroke: '#e2e8f0' }}
                       />
-                      <YAxis 
-                        tick={{ fontSize: 11, fill: '#64748b' }} 
+                      <YAxis
+                        tick={{ fontSize: 11, fill: '#64748b' }}
                         tickLine={false}
                         axisLine={{ stroke: '#e2e8f0' }}
                       />
-                      <Tooltip 
-                        contentStyle={{ 
+                      <Tooltip
+                        contentStyle={{
                           background: 'white',
                           border: '1px solid #e5e7eb',
                           borderRadius: '8px',
-                          fontSize: '12px'
+                          fontSize: '12px',
                         }}
                       />
-                      <Bar 
-                        dataKey="shares" 
-                        name="Partages" 
-                        fill={COLORS.warning} 
-                        radius={[8, 8, 0, 0]} 
+                      <Bar
+                        dataKey="shares"
+                        name="Partages"
+                        fill={COLORS.warning}
+                        radius={[8, 8, 0, 0]}
                       />
                     </BarChart>
                   </ResponsiveContainer>
@@ -1349,9 +1630,15 @@ export default function Dashboard() {
               )}
             </Section>
 
-            <Section 
-              title="Téléchargements" 
-              right={!loading && <span className="text-sm font-semibold text-gray-900">{nf(totalDownloadsWindow)}</span>}
+            <Section
+              title="Téléchargements"
+              right={
+                !loading && (
+                  <span className="text-sm font-semibold text-gray-900">
+                    {nf(totalDownloadsWindow)}
+                  </span>
+                )
+              }
             >
               {loading ? (
                 <Skeleton className="h-64" />
@@ -1371,32 +1658,32 @@ export default function Dashboard() {
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis 
-                        dataKey="day" 
-                        tick={{ fontSize: 11, fill: '#64748b' }} 
+                      <XAxis
+                        dataKey="day"
+                        tick={{ fontSize: 11, fill: '#64748b' }}
                         tickLine={false}
                         axisLine={{ stroke: '#e2e8f0' }}
                       />
-                      <YAxis 
-                        tick={{ fontSize: 11, fill: '#64748b' }} 
+                      <YAxis
+                        tick={{ fontSize: 11, fill: '#64748b' }}
                         tickLine={false}
                         axisLine={{ stroke: '#e2e8f0' }}
                       />
-                      <Tooltip 
-                        contentStyle={{ 
+                      <Tooltip
+                        contentStyle={{
                           background: 'white',
                           border: '1px solid #e5e7eb',
                           borderRadius: '8px',
-                          fontSize: '12px'
+                          fontSize: '12px',
                         }}
                       />
-                      <Area 
-                        type="monotone" 
-                        dataKey="downloads" 
-                        name="Téléchargements" 
-                        stroke={COLORS.secondary} 
-                        strokeWidth={2} 
-                        fill="url(#gradDls)" 
+                      <Area
+                        type="monotone"
+                        dataKey="downloads"
+                        name="Téléchargements"
+                        stroke={COLORS.secondary}
+                        strokeWidth={2}
+                        fill="url(#gradDls)"
                       />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -1416,29 +1703,29 @@ export default function Dashboard() {
               </>
             ) : (
               <>
-                <SparklineCard 
-                  title="Tendance 7 jours — Vues" 
-                  data={spark7(viewsSeries, 'vues')} 
-                  dataKey="vues" 
-                  color={COLORS.primary} 
+                <SparklineCard
+                  title="Tendance 7 jours — Vues"
+                  data={spark7(viewsSeries, 'vues')}
+                  dataKey="vues"
+                  color={COLORS.primary}
                 />
-                <SparklineCard 
-                  title="Tendance 7 jours — Commentaires" 
-                  data={spark7(commentsSeries, 'comments')} 
-                  dataKey="comments" 
-                  color={COLORS.info} 
+                <SparklineCard
+                  title="Tendance 7 jours — Commentaires"
+                  data={spark7(commentsSeries, 'comments')}
+                  dataKey="comments"
+                  color={COLORS.info}
                 />
-                <SparklineCard 
-                  title="Tendance 7 jours — Partages" 
-                  data={spark7(sharesSeries, 'shares')} 
-                  dataKey="shares" 
-                  color={COLORS.warning} 
+                <SparklineCard
+                  title="Tendance 7 jours — Partages"
+                  data={spark7(sharesSeries, 'shares')}
+                  dataKey="shares"
+                  color={COLORS.warning}
                 />
-                <SparklineCard 
-                  title="Tendance 7 jours — Téléchargements" 
-                  data={spark7(downloadsSeries, 'downloads')} 
-                  dataKey="downloads" 
-                  color={COLORS.secondary} 
+                <SparklineCard
+                  title="Tendance 7 jours — Téléchargements"
+                  data={spark7(downloadsSeries, 'downloads')}
+                  dataKey="downloads"
+                  color={COLORS.secondary}
                 />
               </>
             )}
@@ -1459,33 +1746,33 @@ export default function Dashboard() {
               </>
             ) : (
               <>
-                <KpiCard 
-                  label="Total" 
-                  value={totalDbArticles ?? totalArticles} 
-                  icon={<FiFileText />} 
-                  hint="articles" 
-                  color="purple" 
+                <KpiCard
+                  label="Total"
+                  value={totalDbArticles ?? totalArticles}
+                  icon={<FiFileText />}
+                  hint="articles"
+                  color="purple"
                 />
-                <KpiCard 
-                  label="Publiés" 
-                  value={publishedCount} 
-                  icon={<FiCheckCircle />} 
-                  hint="en ligne" 
-                  color="emerald" 
+                <KpiCard
+                  label="Publiés"
+                  value={publishedCount}
+                  icon={<FiCheckCircle />}
+                  hint="en ligne"
+                  color="emerald"
                 />
-                <KpiCard 
-                  label="Brouillons" 
-                  value={draftCount} 
-                  icon={<FiFileText />} 
-                  hint="en cours" 
-                  color="gray" 
+                <KpiCard
+                  label="Brouillons"
+                  value={draftCount}
+                  icon={<FiFileText />}
+                  hint="en cours"
+                  color="gray"
                 />
-                <KpiCard 
-                  label="En attente" 
-                  value={pendingArticlesCount} 
-                  icon={<FiMessageCircle />} 
-                  hint="validation" 
-                  color="rose" 
+                <KpiCard
+                  label="En attente"
+                  value={pendingArticlesCount}
+                  icon={<FiMessageCircle />}
+                  hint="validation"
+                  color="rose"
                 />
               </>
             )}
@@ -1496,7 +1783,7 @@ export default function Dashboard() {
             right={
               <div className="flex items-center gap-2">
                 <div className="flex rounded-lg bg-gray-100 p-1">
-                  <button 
+                  <button
                     onClick={() => setIsGridMode(true)}
                     className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
                       isGridMode ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
@@ -1504,7 +1791,7 @@ export default function Dashboard() {
                   >
                     <FaThLarge className="inline" />
                   </button>
-                  <button 
+                  <button
                     onClick={() => setIsGridMode(false)}
                     className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
                       !isGridMode ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
@@ -1530,16 +1817,16 @@ export default function Dashboard() {
             ) : isGridMode ? (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {recentArticles.map((article) => (
-                  <div 
-                    key={article.id} 
+                  <div
+                    key={article.id}
                     className="group rounded-xl bg-white border border-gray-200 overflow-hidden hover:shadow-lg hover:border-gray-300 transition"
                   >
                     <div className="aspect-[16/9] w-full overflow-hidden bg-gray-100">
                       {article.featured_image_url || article.featured_image ? (
-                        <img 
-                          src={article.featured_image_url || article.featured_image} 
-                          alt={article.title} 
-                          className="h-full w-full object-cover group-hover:scale-105 transition duration-300" 
+                        <img
+                          src={article.featured_image_url || article.featured_image}
+                          alt={article.title}
+                          className="h-full w-full object-cover group-hover:scale-105 transition duration-300"
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-4xl text-gray-300">
@@ -1548,9 +1835,9 @@ export default function Dashboard() {
                       )}
                     </div>
                     <div className="p-4">
-                      <Link 
-                        to={`/articles/${article.slug || article.id}`} 
-                        className="block line-clamp-2 text-sm font-semibold text-gray-900 hover:text-blue-600 transition mb-3" 
+                      <Link
+                        to={`/articles/${article.slug || article.id}`}
+                        className="block line-clamp-2 text-sm font-semibold text-gray-900 hover:text-blue-600 transition mb-3"
                         title={article.title}
                       >
                         {article.title || <i className="text-gray-400">Sans titre</i>}
@@ -1560,7 +1847,10 @@ export default function Dashboard() {
                           <FiEye className="text-sm" />
                           {kfmt(article.view_count || 0)}
                         </span>
-                        <span>⭐ {article.rating_average ? Number(article.rating_average).toFixed(1) : '—'}</span>
+                        <span>
+                          ⭐{' '}
+                          {article.rating_average ? Number(article.rating_average).toFixed(1) : '—'}
+                        </span>
                         <span className="ml-auto px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 font-medium">
                           {article.status || 'draft'}
                         </span>
@@ -1573,9 +1863,9 @@ export default function Dashboard() {
               <ul className="divide-y divide-gray-100">
                 {recentArticles.map((article) => (
                   <li key={article.id} className="flex items-center justify-between gap-4 py-4">
-                    <Link 
-                      to={`/articles/${article.slug || article.id}`} 
-                      className="flex-1 truncate text-sm font-medium text-gray-900 hover:text-blue-600 transition" 
+                    <Link
+                      to={`/articles/${article.slug || article.id}`}
+                      className="flex-1 truncate text-sm font-medium text-gray-900 hover:text-blue-600 transition"
                       title={article.title}
                     >
                       {article.title || `#${article.id}`}
@@ -1585,7 +1875,10 @@ export default function Dashboard() {
                         <FiEye />
                         {kfmt(article.view_count || 0)}
                       </span>
-                      <span>⭐ {article.rating_average ? Number(article.rating_average).toFixed(1) : '—'}</span>
+                      <span>
+                        ⭐{' '}
+                        {article.rating_average ? Number(article.rating_average).toFixed(1) : '—'}
+                      </span>
                       <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 font-medium">
                         {article.status || 'draft'}
                       </span>
@@ -1613,8 +1906,8 @@ export default function Dashboard() {
                         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-semibold text-sm flex items-center justify-center">
                           {idx + 1}
                         </div>
-                        <Link 
-                          to={`/articles/${a.slug}`} 
+                        <Link
+                          to={`/articles/${a.slug}`}
                           className="text-sm font-medium text-gray-900 hover:text-blue-600 truncate transition"
                         >
                           {a.title}
@@ -1622,9 +1915,9 @@ export default function Dashboard() {
                       </div>
                       <div className="flex items-center gap-3 flex-shrink-0">
                         <div className="text-sm font-semibold text-gray-900">{kfmt(a.views)}</div>
-                        <a 
-                          href={`/articles/${a.slug}`} 
-                          target="_blank" 
+                        <a
+                          href={`/articles/${a.slug}`}
+                          target="_blank"
                           rel="noreferrer"
                           className="text-blue-600 hover:text-blue-700 transition"
                         >
@@ -1679,34 +1972,34 @@ export default function Dashboard() {
               </>
             ) : (
               <>
-                <KpiCard 
-                  label="Commentaires en attente" 
-                  value={pendingCommentsCount} 
-                  icon={<FiMessageCircle />} 
-                  hint="à traiter" 
-                  color="rose" 
+                <KpiCard
+                  label="Commentaires en attente"
+                  value={pendingCommentsCount}
+                  icon={<FiMessageCircle />}
+                  hint="à traiter"
+                  color="rose"
                 />
-                <KpiCard 
-                  label="Articles en attente" 
-                  value={pendingArticlesCount} 
-                  icon={<FiFileText />} 
-                  hint="validation" 
-                  color="amber" 
+                <KpiCard
+                  label="Articles en attente"
+                  value={pendingArticlesCount}
+                  icon={<FiFileText />}
+                  hint="validation"
+                  color="amber"
                 />
-                <KpiCard 
-                  label={`Commentaires (${rangeDays}j)`} 
-                  value={totalComments} 
-                  icon={<FiMessageCircle />} 
-                  delta={commentsDelta} 
-                  hint="activité" 
-                  color="cyan" 
+                <KpiCard
+                  label={`Commentaires (${rangeDays}j)`}
+                  value={totalComments}
+                  icon={<FiMessageCircle />}
+                  delta={commentsDelta}
+                  hint="activité"
+                  color="cyan"
                 />
               </>
             )}
           </div>
 
-          <Section 
-            title="Commentaires à modérer" 
+          <Section
+            title="Commentaires à modérer"
             right={!loading && <span className="text-sm">{pendingPreview.length} éléments</span>}
           >
             {loading ? (
@@ -1723,10 +2016,10 @@ export default function Dashboard() {
                     <div className="text-sm font-semibold text-gray-900 mb-1">{c.title}</div>
                     <div className="text-xs text-gray-500 mb-2">{c.subtitle}</div>
                     {c.url && (
-                      <a 
-                        href={c.url} 
-                        target="_blank" 
-                        rel="noreferrer" 
+                      <a
+                        href={c.url}
+                        target="_blank"
+                        rel="noreferrer"
                         className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium transition"
                       >
                         Ouvrir
@@ -1738,187 +2031,281 @@ export default function Dashboard() {
               </ul>
             )}
           </Section>
+
+          {/* Messages de contact */}
+         <Section
+          title="Messages de contact"
+          right={
+            !loading && (
+              <span className="text-sm">
+                {contactMessagesTotal} messages
+                {contactMessagesUnread ? ` • ${contactMessagesUnread} non lus` : ''}
+              </span>
+            )
+          }
+        >
+
+            {loading ? (
+              <Skeleton className="h-64" />
+            ) : contactMessages.length === 0 ? (
+              <div className="py-12 text-center text-gray-400">
+                <div className="text-4xl mb-3">📬</div>
+                <div className="text-sm">Aucun message reçu pour le moment</div>
+              </div>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+               {contactMessages.map((m) => {
+                    const { label, className } = getContactStatusMeta(m);
+
+                    return (
+                      <li key={m.id} className="py-4 space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm font-semibold text-gray-900 truncate">
+                            {m.subject || m.title || '(Sans objet)'}
+                          </div>
+                          <span
+                            className={`text-[11px] px-2 py-0.5 rounded-full border ${className}`}
+                          >
+                            {label}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500 flex items-center gap-2">
+                          {(m.name || m.full_name) && (
+                            <span className="font-medium truncate">
+                              {m.name || m.full_name}
+                            </span>
+                          )}
+                          {m.email && (
+                            <>
+                              <span>•</span>
+                              <span className="truncate">{m.email}</span>
+                            </>
+                          )}
+                        </div>
+                        {m.message && (
+                          <p className="mt-1 text-xs text-gray-600 line-clamp-2">{m.message}</p>
+                        )}
+                      </li>
+                    );
+                  })}
+              </ul>
+            )}
+          </Section>
         </div>
       )}
 
       {/* ============ ONGLET: FICHIERS ============ */}
       {activeTab === 'fichiers' && (
         <div className="space-y-6  min-h-screen h-[380px] overflow-y-auto pb-72">
-          <Section 
-              title="Fichiers les plus téléchargés" 
-              right={
-                !loading && (
-                  <div className="flex items-center gap-3 text-sm font-semibold text-gray-900">
-                    <span>{nf(downloadsTotal)} téléchargements</span>
-                    <span className="text-gray-400">•</span>
-                    <span title="Téléchargements sur fichiers protégés">
-                      <FiLock className="inline mr-1 opacity-70" /> {nf(downloadsTotalProtected)}
-                    </span>
-                    <span className="text-gray-400">•</span>
-                    <span title="Téléchargements sur fichiers publics">{nf(downloadsTotalPublic)}</span>
-                  </div>
-                )
-              }
-            >
-              {loading ? (
-                <Skeleton className="h-96" />
-              ) : filesList.length === 0 ? (
-                <div className="py-12 text-center text-gray-400">
-                  <div className="text-4xl mb-3">📁</div>
-                  <div className="text-sm">Aucun fichier trouvé</div>
+          <Section
+            title="Fichiers les plus téléchargés"
+            right={
+              !loading && (
+                <div className="flex items-center gap-3 text-sm font-semibold text-gray-900">
+                  <span>{nf(downloadsTotal)} téléchargements</span>
+                  <span className="text-gray-400">•</span>
+                  <span title="Téléchargements sur fichiers protégés">
+                    <FiLock className="inline mr-1 opacity-70" /> {nf(downloadsTotalProtected)}
+                  </span>
+                  <span className="text-gray-400">•</span>
+                  <span title="Téléchargements sur fichiers publics">
+                    {nf(downloadsTotalPublic)}
+                  </span>
                 </div>
-              ) : (
-                <>
-                  {/* Barre d'actions (recherche, filtre, tri) */}
-                  <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between mb-4">
-                    <div className="relative">
-                      <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="text"
-                        value={filesQuery}
-                        onChange={(e) => setFilesQuery(e.target.value)}
-                        placeholder="Rechercher un fichier…"
-                        className="pl-9 pr-3 py-2.5 w-72 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                      />
+              )
+            }
+          >
+            {loading ? (
+              <Skeleton className="h-96" />
+            ) : filesList.length === 0 ? (
+              <div className="py-12 text-center text-gray-400">
+                <div className="text-4xl mb-3">📁</div>
+                <div className="text-sm">Aucun fichier trouvé</div>
+              </div>
+            ) : (
+              <>
+                {/* Barre d'actions (recherche, filtre, tri) */}
+                <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between mb-4">
+                  <div className="relative">
+                    <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={filesQuery}
+                      onChange={(e) => setFilesQuery(e.target.value)}
+                      placeholder="Rechercher un fichier…"
+                      className="pl-9 pr-3 py-2.5 w-72 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="flex rounded-lg bg-gray-100 p-1">
+                      <button
+                        onClick={() => setFilesOnlyProtected(null)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
+                          filesOnlyProtected === null
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600'
+                        }`}
+                        title="Tous les fichiers"
+                      >
+                        Tous
+                      </button>
+                      <button
+                        onClick={() => setFilesOnlyProtected(true)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
+                          filesOnlyProtected === true
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600'
+                        }`}
+                        title="Protégés"
+                      >
+                        <FiLock className="inline -mt-0.5 mr-1" /> Protégés
+                      </button>
+                      <button
+                        onClick={() => setFilesOnlyProtected(false)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
+                          filesOnlyProtected === false
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600'
+                        }`}
+                        title="Publics"
+                      >
+                        Publics
+                      </button>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="hidden sm:flex items-center text-xs text-gray-500">
+                      <span className="mr-2">Trier par :</span>
                       <div className="flex rounded-lg bg-gray-100 p-1">
                         <button
-                          onClick={() => setFilesOnlyProtected(null)}
-                          className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
-                            filesOnlyProtected === null ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
+                          onClick={() => toggleSort('download_count')}
+                          className={`px-3 py-1.5 font-medium rounded-md transition ${
+                            filesSort.key === 'download_count'
+                              ? 'bg-white text-gray-900 shadow-sm'
+                              : 'text-gray-600'
                           }`}
-                          title="Tous les fichiers"
+                          title="Tri sur téléchargements"
                         >
-                          Tous
+                          Téléchargements{' '}
+                          <SortIcon
+                            active={filesSort.key === 'download_count'}
+                            dir={filesSort.dir}
+                          />
                         </button>
                         <button
-                          onClick={() => setFilesOnlyProtected(true)}
-                          className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
-                            filesOnlyProtected === true ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
+                          onClick={() => toggleSort('name')}
+                          className={`px-3 py-1.5 font-medium rounded-md transition ${
+                            filesSort.key === 'name'
+                              ? 'bg-white text-gray-900 shadow-sm'
+                              : 'text-gray-600'
                           }`}
-                          title="Protégés"
+                          title="Tri alphabétique"
                         >
-                          <FiLock className="inline -mt-0.5 mr-1" /> Protégés
+                          Nom{' '}
+                          <SortIcon active={filesSort.key === 'name'} dir={filesSort.dir} />
                         </button>
-                        <button
-                          onClick={() => setFilesOnlyProtected(false)}
-                          className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
-                            filesOnlyProtected === false ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
-                          }`}
-                          title="Publics"
-                        >
-                          Publics
-                        </button>
-                      </div>
-
-                      <div className="hidden sm:flex items-center text-xs text-gray-500">
-                        <span className="mr-2">Trier par :</span>
-                        <div className="flex rounded-lg bg-gray-100 p-1">
-                          <button
-                            onClick={() => toggleSort('download_count')}
-                            className={`px-3 py-1.5 font-medium rounded-md transition ${
-                              filesSort.key === 'download_count' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
-                            }`}
-                            title="Tri sur téléchargements"
-                          >
-                            Téléchargements <SortIcon active={filesSort.key === 'download_count'} dir={filesSort.dir} />
-                          </button>
-                          <button
-                            onClick={() => toggleSort('name')}
-                            className={`px-3 py-1.5 font-medium rounded-md transition ${
-                              filesSort.key === 'name' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
-                            }`}
-                            title="Tri alphabétique"
-                          >
-                            Nom <SortIcon active={filesSort.key === 'name'} dir={filesSort.dir} />
-                          </button>
-                        </div>
                       </div>
                     </div>
                   </div>
+                </div>
 
-                  {/* Tableau lisible */}
-                  <div className="max-h-[32rem] overflow-auto rounded-lg border border-gray-200">
-                    <table className="min-w-full text-sm">
-                      <thead className="sticky top-0 bg-white border-b border-gray-200 z-10">
-                        <tr className="text-left text-gray-500">
-                          <th className="px-4 py-3 w-12">#</th>
-                          <th className="px-4 py-3">
-                            <button
-                              onClick={() => toggleSort('name')}
-                              className="inline-flex items-center gap-1 font-medium hover:text-gray-900"
-                              title="Trier par nom"
-                            >
-                              Fichier <SortIcon active={filesSort.key === 'name'} dir={filesSort.dir} />
-                            </button>
-                          </th>
-                          <th className="px-4 py-3 text-right whitespace-nowrap">
-                            <button
-                              onClick={() => toggleSort('download_count')}
-                              className="inline-flex items-center gap-1 font-medium hover:text-gray-900"
-                              title="Trier par téléchargements"
-                            >
-                              Téléchargements <SortIcon active={filesSort.key === 'download_count'} dir={filesSort.dir} />
-                            </button>
-                          </th>
-                          <th className="px-4 py-3 w-64">Part du total</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {visibleFiles.map((file, idx) => {
-                          const share = downloadsTotal > 0 ? (file.download_count / downloadsTotal) * 100 : 0;
-                          return (
-                            <tr
-                              key={file.id}
-                              className={`odd:bg-gray-50/60 ${file.protected ? 'border-l-4 border-amber-400/60' : ''}`}
-                            >
-                              <td className="px-4 py-3 text-gray-500">{idx + 1}</td>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                  <div className="truncate font-medium text-gray-900">{file.name}</div>
-                                  {file.protected && (
-                                    <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">
-                                      <FiLock /> Protégé
-                                    </span>
-                                  )}
+                {/* Tableau lisible */}
+                <div className="max-h-[32rem] overflow-auto rounded-lg border border-gray-200">
+                  <table className="min-w-full text-sm">
+                    <thead className="sticky top-0 bg-white border-b border-gray-200 z-10">
+                      <tr className="text-left text-gray-500">
+                        <th className="px-4 py-3 w-12">#</th>
+                        <th className="px-4 py-3">
+                          <button
+                            onClick={() => toggleSort('name')}
+                            className="inline-flex items-center gap-1 font-medium hover:text-gray-900"
+                            title="Trier par nom"
+                          >
+                            Fichier{' '}
+                            <SortIcon
+                              active={filesSort.key === 'name'}
+                              dir={filesSort.dir}
+                            />
+                          </button>
+                        </th>
+                        <th className="px-4 py-3 text-right whitespace-nowrap">
+                          <button
+                            onClick={() => toggleSort('download_count')}
+                            className="inline-flex items-center gap-1 font-medium hover:text-gray-900"
+                            title="Trier par téléchargements"
+                          >
+                            Téléchargements{' '}
+                            <SortIcon
+                              active={filesSort.key === 'download_count'}
+                              dir={filesSort.dir}
+                            />
+                          </button>
+                        </th>
+                        <th className="px-4 py-3 w-64">Part du total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {visibleFiles.map((file, idx) => {
+                        const share =
+                          downloadsTotal > 0 ? (file.download_count / downloadsTotal) * 100 : 0;
+                        return (
+                          <tr
+                            key={file.id}
+                            className={`odd:bg-gray-50/60 ${
+                              file.protected ? 'border-l-4 border-amber-400/60' : ''
+                            }`}
+                          >
+                            <td className="px-4 py-3 text-gray-500">{idx + 1}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="truncate font-medium text-gray-900">
+                                  {file.name}
                                 </div>
-                              </td>
-                              <td className="px-4 py-3 text-right font-semibold text-gray-900">
-                                {nf(file.download_count)}
-                              </td>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-3">
-                                  <div className="flex-1 h-2 rounded-full bg-gray-100">
-                                    <div
-                                      className="h-2 rounded-full bg-blue-500"
-                                      style={{ width: `${Math.min(100, share).toFixed(2)}%` }}
-                                    />
-                                  </div>
-                                  <div className="w-16 text-right tabular-nums text-gray-600">
-                                    {share.toFixed(1)}%
-                                  </div>
+                                {file.protected && (
+                                  <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">
+                                    <FiLock /> Protégé
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-right font-semibold text-gray-900">
+                              {nf(file.download_count)}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex-1 h-2 rounded-full bg-gray-100">
+                                  <div
+                                    className="h-2 rounded-full bg-blue-500"
+                                    style={{
+                                      width: `${Math.min(100, share).toFixed(2)}%`,
+                                    }}
+                                  />
                                 </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                                <div className="w-16 text-right tabular-nums text-gray-600">
+                                  {share.toFixed(1)}%
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
 
-                  {/* Légende */}
-                  <div className="mt-3 text-xs text-gray-500">
-                    <span className="inline-flex items-center gap-1 mr-4">
-                      <span className="inline-block h-3 w-3 rounded bg-blue-500" /> Part relative des téléchargements
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                      <span className="inline-block h-3 w-3 rounded border-2 border-amber-400/60" /> Bande latérale = fichier protégé
-                    </span>
-                  </div>
-                </>
-              )}
+                {/* Légende */}
+                <div className="mt-3 text-xs text-gray-500">
+                  <span className="inline-flex items-center gap-1 mr-4">
+                    <span className="inline-block h-3 w-3 rounded bg-blue-500" /> Part relative des
+                    téléchargements
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="inline-block h-3 w-3 rounded border-2 border-amber-400/60" />{' '}
+                    Bande latérale = fichier protégé
+                  </span>
+                </div>
+              </>
+            )}
           </Section>
         </div>
       )}

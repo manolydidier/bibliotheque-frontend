@@ -1,17 +1,35 @@
 // TabsBar.jsx
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 
 /**
  * Props:
  * - active: string (key actif)
  * - onChange: (key) => void
- * - tabs?: Array<{ key: string; label: string; icon?: ReactNode }>
+ * - tabs?: Array<{
+ *      key: string;
+ *      label: string;
+ *      icon?: ReactNode;
+ *      badge?: number | string;      // ✅ compteur (ex: 3, "99+")
+ *      badgeTone?: "primary" | "danger" | "muted"; // ✅ couleur badge
+ *      dot?: boolean;                // ✅ simple pastille
+ *      disabled?: boolean;           // optionnel
+ *   }>
  *    (facultatif) sinon tentera d'utiliser la constante globale TABS
  */
 export default function TabsBar({ active, onChange, tabs }) {
   // Source des tabs: prop > globale TABS > vide
   const sourceTabs =
-    (Array.isArray(tabs) && tabs.length ? tabs : (typeof TABS !== "undefined" ? TABS : [])) || [];
+    (Array.isArray(tabs) && tabs.length
+      ? tabs
+      : typeof TABS !== "undefined"
+      ? TABS
+      : []) || [];
 
   const count = Math.max(1, sourceTabs.length);
   const activeIndex = Math.max(
@@ -27,24 +45,29 @@ export default function TabsBar({ active, onChange, tabs }) {
   const [containerLeft, setContainerLeft] = useState(0);
   const suppressClickRef = useRef(false); // évite le clic juste après un drag
 
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
   // Mesure (width & left) via ResizeObserver + fallback
   const measure = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
     setContainerLeft(rect.left);
-    setSegmentWidth(rect.width / count);
+    setSegmentWidth(rect.width / count || 0);
   }, [count]);
 
   useEffect(() => {
     measure();
     const ro =
-      "ResizeObserver" in window
+      typeof window !== "undefined" && "ResizeObserver" in window
         ? new ResizeObserver(() => measure())
         : null;
+
     if (ro && containerRef.current) ro.observe(containerRef.current);
+
     const onResize = () => measure();
     window.addEventListener("resize", onResize);
+
     return () => {
       window.removeEventListener("resize", onResize);
       if (ro && containerRef.current) ro.unobserve(containerRef.current);
@@ -56,23 +79,36 @@ export default function TabsBar({ active, onChange, tabs }) {
     if (!dragging) setDragIndexFloat(activeIndex);
   }, [activeIndex, dragging]);
 
-  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-
   // Convertit un clientX en index flottant dans [0, count-1]
   const xToFloatIndex = useCallback(
     (clientX) => {
+      if (!segmentWidth) return activeIndex;
       const rel = clientX - containerLeft; // px depuis bord gauche
       const floatIdx = rel / Math.max(1, segmentWidth);
       return clamp(floatIdx, 0, count - 1);
     },
-    [containerLeft, segmentWidth, count]
+    [containerLeft, segmentWidth, count, activeIndex]
   );
 
   // Démarrage drag n'importe où sur la barre
   const onPointerDownContainer = (e) => {
     // Si clic sur un bouton, on laissera aussi le clic fonctionner si pas de drag
     suppressClickRef.current = false;
-    const x = e.clientX ?? e.touches?.[0]?.clientX;
+
+    // Ne pas initier de drag si on clique sur un bouton désactivé
+    const target = e.target;
+    if (
+      target &&
+      typeof target.closest === "function" &&
+      target.closest("button[aria-disabled='true']")
+    ) {
+      return;
+    }
+
+    const x =
+      e.clientX ??
+      (e.touches && e.touches[0] && e.touches[0].clientX) ??
+      undefined;
     if (typeof x !== "number") return;
     setDragging(true);
     setDragIndexFloat(xToFloatIndex(x));
@@ -85,7 +121,10 @@ export default function TabsBar({ active, onChange, tabs }) {
     const onMove = (e) => {
       // Empêche le scroll pendant glisser sur mobile
       if (e.cancelable) e.preventDefault?.();
-      const x = e.clientX ?? e.touches?.[0]?.clientX;
+      const x =
+        e.clientX ??
+        (e.touches && e.touches[0] && e.touches[0].clientX) ??
+        undefined;
       if (typeof x !== "number") return;
       setDragIndexFloat(xToFloatIndex(x));
       suppressClickRef.current = true; // on a bien bougé => éviter le clic
@@ -97,7 +136,9 @@ export default function TabsBar({ active, onChange, tabs }) {
       setDragging(false);
       if (nextKey) onChange?.(nextKey);
       // Laisse suppressClickRef.current = true pour ignorer un clic immédiat
-      setTimeout(() => (suppressClickRef.current = false), 0);
+      setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
     };
 
     window.addEventListener("pointermove", onMove, { passive: false });
@@ -119,9 +160,10 @@ export default function TabsBar({ active, onChange, tabs }) {
   }, [dragging, dragIndexFloat, activeIndex, count]);
 
   // Clic sur une option (ignoré si on vient de drag)
-  const onOptionClick = (key) => {
+  const onOptionClick = (tab) => {
     if (suppressClickRef.current) return;
-    onChange?.(key);
+    if (tab.disabled) return;
+    onChange?.(tab.key);
   };
 
   // Navigation clavier
@@ -137,8 +179,26 @@ export default function TabsBar({ active, onChange, tabs }) {
     }
   };
 
+  // palette de tons pour les badges
+  const badgeToneClass = (tone, isActive) => {
+    if (tone === "danger") {
+      return isActive
+        ? "bg-red-600 text-white"
+        : "bg-red-100 text-red-700";
+    }
+    if (tone === "muted") {
+      return isActive
+        ? "bg-slate-600 text-white"
+        : "bg-slate-100 text-slate-600";
+    }
+    // primary par défaut
+    return isActive
+      ? "bg-blue-600 text-white"
+      : "bg-blue-100 text-blue-700";
+  };
+
   return (
-    <div className="w-full overflow-x-auto">
+    <div className="w-full overflow-x-auto bg-red-800">
       <div
         ref={containerRef}
         onPointerDown={onPointerDownContainer}
@@ -175,23 +235,61 @@ export default function TabsBar({ active, onChange, tabs }) {
         <div className="relative z-10 flex">
           {sourceTabs.map((t) => {
             const isActive = active === t.key;
+            const hasBadge =
+              typeof t.badge === "number" ||
+              (typeof t.badge === "string" && t.badge.length > 0);
+            const tone = t.badgeTone || "primary";
+
             return (
               <button
                 key={t.key}
                 type="button"
                 role="tab"
                 aria-selected={isActive}
+                aria-disabled={t.disabled ? "true" : undefined}
+                disabled={t.disabled}
                 tabIndex={isActive ? 0 : -1}
-                onClick={() => onOptionClick(t.key)}
-                className={`text-sm px-5 py-2.5 font-medium transition-all duration-200 rounded whitespace-nowrap flex items-center justify-center gap-2 ${
-                  isActive
-                    ? "text-blue-600 font-semibold"
-                    : "text-gray-600 hover:text-gray-800"
-                }`}
+                onClick={() => onOptionClick(t)}
+                className={`text-sm px-5 py-2.5 font-medium transition-all duration-200 rounded whitespace-nowrap flex items-center justify-center gap-2
+                  ${
+                    isActive
+                      ? "text-blue-600 font-semibold"
+                      : "text-gray-600 hover:text-gray-800"
+                  }
+                  ${t.disabled ? "opacity-60 cursor-not-allowed" : ""}
+                `}
                 style={{ width: `${100 / count}%` }}
               >
-                {t.icon && <span className="text-base">{t.icon}</span>}
-                <span>{t.label}</span>
+                {t.icon && (
+                  <span className="text-base flex items-center justify-center">
+                    {t.icon}
+                  </span>
+                )}
+
+                <span className="flex items-center gap-1">
+                  <span>{t.label}</span>
+
+                  {/* pastille "dot" (style notif) */}
+                  {t.dot && !hasBadge && (
+                    <span
+                      className={`inline-block w-2 h-2 rounded-full ${
+                        isActive ? "bg-red-500" : "bg-red-400"
+                      }`}
+                    />
+                  )}
+
+                  {/* badge numérique (ex: 3, 12, 99+) */}
+                  {hasBadge && (
+                    <span
+                      className={`inline-flex items-center justify-center text-[10px] font-semibold min-w-[1.25rem] h-4 px-1 rounded-full ${badgeToneClass(
+                        tone,
+                        isActive
+                      )}`}
+                    >
+                      {t.badge}
+                    </span>
+                  )}
+                </span>
               </button>
             );
           })}

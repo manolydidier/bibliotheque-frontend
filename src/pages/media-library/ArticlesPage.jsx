@@ -2,42 +2,13 @@
 // File: src/pages/ArticlesPage.jsx
 // - Charge la liste initiale d’articles (affichage rapide)
 // - Fournit fetchArticlesWithFilters au composant ArticleLibrary
-// - Normalise toujours "filters" pour éviter toute erreur
+// - Normalise toujours "filters" via le module partagé
 // ------------------------------
 import { useState, useEffect, useMemo, useCallback } from "react";
-import ArticleLibrary from "../media-library/index"; // adapte ce chemin si besoin
 import axios from "axios";
 
-/** Forme par défaut des filtres */
-const DEFAULT_FILTERS = {
-  categories: [],
-  tags: [],
-  authors: [],
-  featuredOnly: false,
-  stickyOnly: false,
-  unreadOnly: false, // côté client seulement
-  dateFrom: "",
-  dateTo: "",
-  ratingMin: 0,
-  ratingMax: 5,
-};
-
-/** Force n’importe quelle valeur en filtre “propre” et jamais undefined */
-function toSafeFilters(maybe) {
-  const f = maybe && typeof maybe === "object" ? maybe : {};
-  return {
-    categories: Array.isArray(f.categories) ? f.categories : [],
-    tags: Array.isArray(f.tags) ? f.tags : [],
-    authors: Array.isArray(f.authors) ? f.authors : [],
-    featuredOnly: !!f.featuredOnly,
-    stickyOnly: !!f.stickyOnly,
-    unreadOnly: !!f.unreadOnly,
-    dateFrom: typeof f.dateFrom === "string" ? f.dateFrom : "",
-    dateTo: typeof f.dateTo === "string" ? f.dateTo : "",
-    ratingMin: Number.isFinite(f.ratingMin) ? f.ratingMin : 0,
-    ratingMax: Number.isFinite(f.ratingMax) ? f.ratingMax : 5,
-  };
-}
+import ArticleLibrary from "./index"; // adapte si besoin
+import { toSafeFilters } from "../media-library/shared/filters";
 
 /** Test “entier-like” (ex: 12 ou "12") */
 const isIntegerLike = (v) => {
@@ -107,7 +78,7 @@ function ArticlesPage() {
   const fetchArticlesWithFilters = useCallback(
     async ({ page, perPage, search, filters, sort }) => {
       try {
-        const f = toSafeFilters(filters); // ← NE PEUT PLUS ÊTRE undefined
+        const f = toSafeFilters(filters); // ← via module partagé
 
         // Construit les paramètres selon ton contrôleur Laravel
         const params = new URLSearchParams({
@@ -214,6 +185,7 @@ function ArticlesPage() {
         defaultLoadMode="pagination"  // tu peux mettre "infinite" si tu veux le mode infini par défaut
         perPageOptions={[12, 24, 48, 96]}
       />
+      
     </div>
   );
 }

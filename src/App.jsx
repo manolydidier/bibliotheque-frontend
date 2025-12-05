@@ -49,6 +49,7 @@ import SocieteEditCreate from './pages/UserManagementDashboard/Components/Backof
 import BureauxIndex from './pages/UserManagementDashboard/Components/Backoffice/TenantId/Bureau/BureauxIndex';
 import BureauEditCreate from './pages/UserManagementDashboard/Components/Backoffice/TenantId/Bureau/BureauEditCreate';
 import BureauPublicShow from './pages/UserManagementDashboard/Components/Backoffice/TenantId/Bureau/BureauPublicShow';
+import ContactMessagesIndex from './pages/UserManagementDashboard/Components/Backoffice/TenantId/Messagerie/ContactMessagesIndex';
 
 function BootScreen() {
   return (
@@ -243,7 +244,14 @@ export default function App() {
                         </AdminRoute>
                       }
                     />
-  
+                    <Route
+                      path="/messageries"
+                      element={
+                        <AdminRoute>
+                          <ContactMessagesIndex />
+                        </AdminRoute>
+                      }
+                    />
                   </Route>
                 </Route>
 

@@ -1,6 +1,6 @@
 // src/media-library/ArticleLibrary.jsx
 // Container de la lib articles (grid/list + filtres + pagination/infinite)
-// - Sécurise "filters" (jamais undefined)
+// - Sécurise "filters" (jamais undefined) via module partagé
 // - Facettes optionnelles (authors/categories/tags) pour alimenter FiltersPanel
 // - Fix: évite boucle "Maximum update depth" (stable applyFilters)
 
@@ -14,6 +14,12 @@ import { parseSearch } from "./shared/utils/query";
 import { getStore } from "./shared/store/prefs";
 import { isFav, isRead } from "./shared/store/markers";
 
+import {
+  DEFAULT_FILTERS,
+  toSafeFilters,
+  filtersShallowEqual,
+} from "./shared/filters";
+import Footer from "../UserManagementDashboard/Components/Accueil/Footer";
 // --- helpers ---
 const PREF_KEY = "articlelib:prefs";
 
@@ -25,58 +31,6 @@ function getCategoryFromTitle(title = "") {
   if (t.includes("marketing")) return "Business";
   if (t.includes("technologie")) return "Mobile";
   return "Article";
-}
-
-// Forme par défaut du filtre (ne JAMAIS changer les clés)
-const DEFAULT_FILTERS = {
-  categories: [],
-  tags: [],
-  authors: [],
-  featuredOnly: false,
-  stickyOnly: false,
-  unreadOnly: false, // client-side only
-  dateFrom: "",
-  dateTo: "",
-  ratingMin: 0,
-  ratingMax: 5,
-};
-
-// Force n’importe quelle valeur en filtre "propre"
-const toSafeFilters = (maybe) => {
-  const f = maybe && typeof maybe === "object" ? maybe : {};
-  return {
-    categories: Array.isArray(f.categories) ? f.categories.map(String) : [],
-    tags: Array.isArray(f.tags) ? f.tags.map(String) : [],
-    authors: Array.isArray(f.authors) ? f.authors.map(String) : [],
-    featuredOnly: !!f.featuredOnly,
-    stickyOnly: !!f.stickyOnly,
-    unreadOnly: !!f.unreadOnly,
-    dateFrom: typeof f.dateFrom === "string" ? f.dateFrom : "",
-    dateTo: typeof f.dateTo === "string" ? f.dateTo : "",
-    ratingMin: Number.isFinite(f.ratingMin) ? f.ratingMin : 0,
-    ratingMax: Number.isFinite(f.ratingMax) ? f.ratingMax : 5,
-  };
-};
-
-// Shallow equality for filters (strings/arrays/booleans/numbers)
-function filtersShallowEqual(a = {}, b = {}) {
-  const arrEqual = (x = [], y = []) => {
-    if (x.length !== y.length) return false;
-    for (let i = 0; i < x.length; i++) if (String(x[i]) !== String(y[i])) return false;
-    return true;
-  };
-  return (
-    arrEqual(a.categories, b.categories) &&
-    arrEqual(a.tags, b.tags) &&
-    arrEqual(a.authors, b.authors) &&
-    Boolean(a.featuredOnly) === Boolean(b.featuredOnly) &&
-    Boolean(a.stickyOnly) === Boolean(b.stickyOnly) &&
-    Boolean(a.unreadOnly) === Boolean(b.unreadOnly) &&
-    String(a.dateFrom || "") === String(b.dateFrom || "") &&
-    String(a.dateTo || "") === String(b.dateTo || "") &&
-    Number(a.ratingMin || 0) === Number(b.ratingMin || 0) &&
-    Number(a.ratingMax || 5) === Number(b.ratingMax || 5)
-  );
 }
 
 // Helper: get author id/name string(s)
@@ -134,8 +88,9 @@ export default function ArticleLibrary({
   const debouncedSearch = useDebouncedValue(search);
 
   // IMPORTANT : filters ne peut jamais être undefined
-  // rename internal setter to avoid shadowing with prop name
-  const [filters, setFiltersState] = useState(toSafeFilters(persisted.filters || DEFAULT_FILTERS));
+  const [filters, setFiltersState] = useState(
+    toSafeFilters(persisted.filters || DEFAULT_FILTERS)
+  );
 
   const [sort, setSort]       = useState([{ key: "published_at", dir: "desc" }]);
   const [loadMode, setLoadMode] = useState(
@@ -245,7 +200,6 @@ export default function ArticleLibrary({
   }, [rows]);
 
   // --- Loading (serveur si fetchArticles) ---
-  // Effet dédié AU MODE SERVEUR (fetchArticles fourni)
   useEffect(() => {
     if (!fetchArticles) return;
     let cancelled = false;
@@ -422,7 +376,15 @@ export default function ArticleLibrary({
   // Persist prefs (view, perPage, filters, loadMode)
   useEffect(() => {
     try {
-      localStorage.setItem(PREF_KEY, JSON.stringify({ view, perPage, filters: toSafeFilters(filters), loadMode }));
+      localStorage.setItem(
+        PREF_KEY,
+        JSON.stringify({
+          view,
+          perPage,
+          filters: toSafeFilters(filters),
+          loadMode,
+        })
+      );
     } catch (e) {
       // ignore localStorage errors
     }
@@ -434,6 +396,7 @@ export default function ArticleLibrary({
   // Infinite scroll
   const sentinelRef = useRef(null);
   const [infiniteRows, setInfiniteRows] = useState([]);
+
   useEffect(() => {
     if (loadMode === "infinite") setInfiniteRows([]);
   }, [debouncedSearch, filters, sort, perPage, loadMode]);
@@ -465,6 +428,7 @@ export default function ArticleLibrary({
   const viewRows = loadMode === "infinite" ? infiniteRows : rows;
 
   return (
+    <>
     <div className="p-4 md:p-6 mt-8 w-full max-w-[1600px] mx-auto flex flex-col gap-6">
       <FiltersPanel
         search={search}
@@ -508,7 +472,7 @@ export default function ArticleLibrary({
           <button
             onClick={() => {
               setSearch("");
-              // reset to default structure (not the same object instance to trigger controlled updates)
+              // reset to default structure (nouvel objet pour déclencher la mise à jour contrôlée)
               const empty = toSafeFilters(DEFAULT_FILTERS);
               setFiltersState(empty);
             }}
@@ -548,5 +512,7 @@ export default function ArticleLibrary({
         )}
       </div> */}
     </div>
+      <Footer/>
+    </>
   );
 }

@@ -30,6 +30,7 @@ import {
   FaChevronDown,
   FaBuilding,
   FaSitemap,
+  FaEnvelope,
 } from 'react-icons/fa';
 import { FaUsersGear } from 'react-icons/fa6';
 import { useTranslation } from 'react-i18next';
@@ -133,6 +134,8 @@ const typeIconName = (type) => {
       return '📰';
     case 'comment_approved':
       return '💬';
+    case 'contact_message_new': // ✅ nouveaux messages de contact
+      return '✉️';
     default:
       return '🔔';
   }
@@ -140,6 +143,12 @@ const typeIconName = (type) => {
 
 const buildActivityLink = (a) => {
   const articleSlug = a.article_slug || a.slug;
+
+  // ✅ contact_message_new → messageries (boîte de réception admin)
+  if (a.type === 'contact_message_new') {
+    return '/messageries';
+  }
+
   switch (a.type) {
     case 'article_created':
       return articleSlug ? `/articles/${articleSlug}` : null;
@@ -582,6 +591,13 @@ const DashboardLayout = () => {
             link: '/bureauxcontroler',
             accent: 'emerald',
           },
+          {
+            id: 'messageriesBo',
+            tKey: 'layout.menu.messageriesBo',
+            icon: <FaEnvelope />,
+            link: '/messageries',
+            accent: 'blue',
+          },
         ],
       },
       {
@@ -992,13 +1008,13 @@ const DashboardLayout = () => {
         token
       );
       const items = Array.isArray(resp?.data) ? resp.data : [];
-      setNews({
-        items: replace ? items : [...(replace ? [] : news.items), ...items],
+      setNews((prev) => ({
+        items: replace ? items : [...(replace ? [] : prev.items), ...items],
         page: resp?.meta?.current_page || page,
         last: resp?.meta?.last_page || page,
         loading: false,
         error: null,
-      });
+      }));
     } catch (e) {
       setNews((s) => ({
         ...s,
@@ -1020,13 +1036,13 @@ const DashboardLayout = () => {
       );
       const raw = Array.isArray(resp?.data) ? resp.data : [];
       const items = raw.map((x) => ({ ...x }));
-      setPending({
-        items: replace ? items : [...(replace ? [] : pending.items), ...items],
+      setPending((prev) => ({
+        items: replace ? items : [...(replace ? [] : prev.items), ...items],
         page: resp?.meta?.current_page || page,
         last: resp?.meta?.last_page || page,
         loading: false,
         error: null,
-      });
+      }));
     } catch (e) {
       setPending((s) => ({
         ...s,
@@ -1223,7 +1239,9 @@ const DashboardLayout = () => {
                             fallback={
                               item.id === 'categoriesTags'
                                 ? 'Catégories & Tags'
-                                : undefined
+                              : item.id === 'messageriesBo'
+                              ? 'Messagerie'
+                              : undefined
                             }
                             t={t}
                             accentKey={accentKey}
@@ -1603,10 +1621,19 @@ const DashboardLayout = () => {
                                 buildActivityLink(a) || a.url || a.link
                               ) || '/settings';
                             const isRel = String(href).startsWith('/');
+
+                            const isContact = a.type === 'contact_message_new';
+                            const bubbleBg = isContact
+                              ? 'bg-emerald-50'
+                              : 'bg-blue-50';
+                            const bubbleText = isContact
+                              ? 'text-emerald-600'
+                              : 'text-blue-600';
+
                             const Row = (
                               <div className="flex items-start gap-3 p-4 hover:bg-gray-50 transition-colors duration-300 ease-[cubic-bezier(.22,1,.36,1)]">
-                                <div className="flex-shrink-0 w-9 h-9 bg-blue-50 rounded-full flex items-center justify-center">
-                                  <span className="text-blue-600">
+                                <div className={`flex-shrink-0 w-9 h-9 ${bubbleBg} rounded-full flex items-center justify-center`}>
+                                  <span className={bubbleText}>
                                     {typeIconName(a.type)}
                                   </span>
                                 </div>

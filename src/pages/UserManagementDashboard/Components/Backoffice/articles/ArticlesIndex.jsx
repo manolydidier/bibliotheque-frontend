@@ -8,16 +8,18 @@ import {
   FaEye, FaCalendarAlt, FaTag, FaUser, FaEdit, FaTrashAlt, FaTrash,
   FaExternalLinkAlt, FaThumbsUp, FaFilter, FaUndo, FaCheckSquare, FaSquare,
   FaSort, FaSortUp, FaSortDown, FaTimes, FaSpinner, FaCheck, FaColumns,
+  FaBuilding,   // 👈 NEW pour l’icône de société
 } from 'react-icons/fa';
 import {
   FiRefreshCw, FiPlus, FiTrash2, FiFilter as FiFilterIcon,
   FiChevronDown as FiChevronDownFi, FiChevronUp as FiChevronUpFi,
-  FiGrid as FiGridIcon, FiList as FiListIcon, FiSave, FiTrash as FiTrashFeather
+  FiGrid as FiGridIcon, FiList as FiListIcon, FiSave, FiTrash as FiTrashFeather,
+  FiCheck as FiCheckIcon, // 👈 NEW check dans le chip
 } from 'react-icons/fi';
 
 import FiltersBar from './FiltersBar';
 
-/* ===== NEW: FontAwesome pour icônes de catégories ===== */
+/* ===== FontAwesome pour icônes de catégories ===== */
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faStar as faFaStar, faBook, faLeaf, faHeart as faFaHeart, faCoffee, faCamera,
@@ -122,7 +124,7 @@ function buildQuery({ page, per_page, search, filters, sortBy, sortDir }) {
     sort_by: sortBy || 'published_at',
     sort_direction: (sortDir || 'desc'),
     include_facets: 1,
-    facet_fields: 'categories,tags,authors',
+    facet_fields: 'categories,tags,authors,tenants',
   };
 
   if (filters?.categories?.length) {
@@ -159,6 +161,11 @@ function buildQuery({ page, per_page, search, filters, sortBy, sortDir }) {
   // ⚠️ status (published par défaut)
   if (filters?.status) q.status = filters.status;
   if (filters?.visibility) q.visibility = filters.visibility;
+
+  // Tenant (côté backend) – on garde
+  if (filters?.tenantId) {
+    q.tenant_id = filters.tenantId;
+  }
 
   return q;
 }
@@ -250,7 +257,7 @@ const Portal = ({ children }) => {
 };
 
 /* =======================================================
-   NEW: Couleurs & Icônes de catégories (discret, dominant)
+   Couleurs & Icônes de catégories
 ======================================================= */
 const ICON_MAP = {
   "fa-star": faFaStar, "fa-book": faBook, "fa-leaf": faLeaf, "fa-heart": faFaHeart,
@@ -291,7 +298,7 @@ function deriveCategoryMeta(article) {
 }
 
 /* =========
-   GLOBAL: toggle “couleur des cards” partagé avec FiltersBar / Grid / List
+   GLOBAL: toggle “couleur des cards”
 ========== */
 const COLOR_PREF_KEY = 'gridcard-color-enabled';
 
@@ -325,13 +332,14 @@ const ArticlesIndex = () => {
     };
   }, [restoredIds]);
 
-  // Recherche & filtres (⚠️ status par défaut = 'published')
+  // Recherche & filtres
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState({
     categories: [], tags: [], authors: [],
     featuredOnly: false, stickyOnly: false, unreadOnly: false,
     dateFrom: '', dateTo: '', ratingMin: 0, ratingMax: 5,
-    status: 'published', visibility: undefined
+    status: 'published', visibility: undefined,
+    tenantId: '',
   });
 
   // Vue & pagination
@@ -356,69 +364,52 @@ const ArticlesIndex = () => {
   const SortIcon = ({ col }) => (sortBy !== col ? <FaSort className="opacity-40" /> : (sortDir === 'asc' ? <FaSortUp /> : <FaSortDown />));
 
   // Données + facettes
-  const [data, setData] = useState({ items: [], meta: { total: 0, current_page: 1, last_page: 1, per_page: 24, facets: { categories: [], tags: [], authors: [] }, has_next: false, has_prev: false } });
+  const [data, setData] = useState({
+    items: [],
+    meta: {
+      total: 0,
+      current_page: 1,
+      last_page: 1,
+      per_page: 24,
+      facets: { categories: [], tags: [], authors: [] },
+      has_next: false,
+      has_prev: false,
+    }
+  });
 
+  // 🔁 Liste des sociétés (tenants)
+  const [tenants, setTenants] = useState([]);
+  const [loadingTenants, setLoadingTenants] = useState(false);
+
+  useEffect(() => {
+    const fetchTenants = async () => {
+      setLoadingTenants(true);
+      try {
+        const { data } = await axios.get('/societes', { params: { per_page: 100 } });
+        const list = Array.isArray(data?.data)
+          ? data.data
+          : (Array.isArray(data) ? data : []);
+        setTenants(list);
+      } catch (e) {
+        console.error('Erreur chargement tenants', e);
+      } finally {
+        setLoadingTenants(false);
+      }
+    };
+    fetchTenants();
+  }, []);
+
+  // 🔎 Société sélectionnée (pour l’affichage en badge)
+  const selectedTenant = useMemo(() => {
+    if (!filters.tenantId) return null;
+    const idStr = String(filters.tenantId);
+    return tenants.find(t => String(t.id) === idStr) || null;
+  }, [filters.tenantId, tenants]);
+
+  // Chargement backend
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // Compteur corbeille
-  const [trashCount, setTrashCount] = useState(0);
-
-  // Modal suppression
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(null); // { id|ids, mode, title }
-
-  // Drag & Drop
-  const [overSoft, setOverSoft] = useState(false);
-  const [overHard, setOverHard] = useState(false);
-  const [shakeHard, setShakeHard] = useState(false);
-
-  // Sélection multiple
-  const [selectedIds, setSelectedIds] = useState(new Set());
-  const allSelectedOnPage = useMemo(() => {
-    const ids = (data.items || []).map(a => a.id);
-    return ids.length > 0 && ids.every(id => selectedIds.has(id));
-  }, [selectedIds, data.items]);
-
-  // Undo (restore)
-  const [lastSoftDeletedIds, setLastSoftDeletedIds] = useState([]);
-
-  /* ===== Accordéon Filtres — état persistant ===== */
-  const [showFilters, setShowFilters] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    const urlFlag = params.get('filters_open'); // '1' | '0' | null
-    if (urlFlag === '1') return true;
-    if (urlFlag === '0') return false;
-    try { return localStorage.getItem('articles_filters_open') === '1'; } catch { return false; }
-  });
-  useEffect(() => {
-    try { localStorage.setItem('articles_filters_open', showFilters ? '1' : '0'); } catch {}
-  }, [showFilters]);
-
-  const activeFiltersCount = useMemo(() => {
-    let c = 0;
-    if (search?.trim()) c++;
-    if (filters.categories?.length) c++;
-    if (filters.tags?.length) c++;
-    if (filters.authors?.length) c++;
-    if (filters.featuredOnly) c++;
-    if (filters.stickyOnly) c++;
-    if (filters.dateFrom) c++;
-    if (filters.dateTo) c++;
-    if ((filters.ratingMin ?? 0) > 0) c++;
-    if ((filters.ratingMax ?? 5) < 5) c++;
-    if (filters.status) c++;
-    if (filters.visibility) c++;
-    return c;
-  }, [filters, search]);
-
-  useEffect(() => {
-    const onKey = (e) => { if (e.key.toLowerCase() === 'f' && e.shiftKey) { e.preventDefault(); setShowFilters(v => !v); } };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  // Chargement
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -434,7 +425,24 @@ const ArticlesIndex = () => {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPage(1); }, [search, filters, sortBy, sortDir]);
 
-  // === Compteur corbeille ===
+  /* ✅ Filtrage React pur sur tenantId */
+  const filteredItems = useMemo(() => {
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!filters.tenantId) return items;
+    return items.filter((article) => {
+      if (article.tenant_id != null) {
+        return String(article.tenant_id) === String(filters.tenantId);
+      }
+      if (article.tenant && article.tenant.id != null) {
+        return String(article.tenant.id) === String(filters.tenantId);
+      }
+      return false;
+    });
+  }, [data.items, filters.tenantId]);
+
+  // Compteur corbeille
+  const [trashCount, setTrashCount] = useState(0);
+
   async function fetchTrashCount() {
     try {
       const { data } = await axios.get('/corbeille', { params: { per_page: 1 } });
@@ -450,11 +458,12 @@ const ArticlesIndex = () => {
   }
   useEffect(() => { fetchTrashCount(); }, []);
 
-  const handleExport = () => exportRowsToCSV(data.items || []);
+  const handleExport = () => exportRowsToCSV(filteredItems || []);
 
-  /* ============
-     Modal logic
-  ============ */
+  // Modal suppression
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+
   const openConfirm = (mode, articleOrIds) => {
     if (Array.isArray(articleOrIds)) setConfirmDelete({ mode, ids: articleOrIds });
     else setConfirmDelete({ id: articleOrIds.id, mode, title: articleOrIds.title });
@@ -489,6 +498,7 @@ const ArticlesIndex = () => {
         const ids = confirmDelete.ids || [];
         const results = await Promise.allSettled(ids.map(id => apiForceDelete(id)));
         const ok = results.filter(r => r.status === 'fulfilled').length;
+        setLastSoftDeletedIds(ids);
         setToast({ type: 'success', message: `Supprimé(s) : ${ok}/${ids.length} article(s)` });
         setShakeHard(true); setTimeout(()=> setShakeHard(false), 500);
         await fetchTrashCount();
@@ -503,9 +513,11 @@ const ArticlesIndex = () => {
     }
   };
 
-  /* ===================
-     Drag & Drop events
-  =================== */
+  // Drag & Drop
+  const [overSoft, setOverSoft] = useState(false);
+  const [overHard, setOverHard] = useState(false);
+  const [shakeHard, setShakeHard] = useState(false);
+
   const onDragStartRow = (e, article) => {
     e.dataTransfer.setData('text/plain', JSON.stringify({ id: article.id, title: article.title }));
     e.dataTransfer.effectAllowed = 'move';
@@ -519,7 +531,9 @@ const ArticlesIndex = () => {
       setLastSoftDeletedIds([payload.id]);
       setToast({ type: 'success', message: `Article "${payload.title || payload.id}" → corbeille` });
       await load(); await fetchTrashCount();
-    } catch { setToast({ type: 'error', message: 'Erreur lors de l’envoi à la corbeille' }); }
+    } catch {
+      setToast({ type: 'error', message: 'Erreur lors de l’envoi à la corbeille' });
+    }
   };
   const onDropHard = async (e) => {
     e.preventDefault(); setOverHard(false);
@@ -527,11 +541,59 @@ const ArticlesIndex = () => {
       const payload = JSON.parse(e.dataTransfer.getData('text/plain') || '{}');
       if (!payload?.id) return;
       openConfirm('hard', { id: payload.id, title: payload.title });
-    } catch { setToast({ type: 'error', message: 'Erreur lors de la suppression' }); }
+    } catch {
+      setToast({ type: 'error', message: 'Erreur lors de la suppression' });
+    }
   };
 
+  // Sélection multiple
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const allSelectedOnPage = useMemo(() => {
+    const ids = (filteredItems || []).map(a => a.id);
+    return ids.length > 0 && ids.every(id => selectedIds.has(id));
+  }, [selectedIds, filteredItems]);
+
+  // Undo (restore)
+  const [lastSoftDeletedIds, setLastSoftDeletedIds] = useState([]);
+
+  /* ===== Accordéon Filtres — état persistant ===== */
+  const [showFilters, setShowFilters] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlFlag = params.get('filters_open');
+    if (urlFlag === '1') return true;
+    if (urlFlag === '0') return false;
+    try { return localStorage.getItem('articles_filters_open') === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('articles_filters_open', showFilters ? '1' : '0'); } catch {}
+  }, [showFilters]);
+
+  const activeFiltersCount = useMemo(() => {
+    let c = 0;
+    if (search?.trim()) c++;
+    if (filters.categories?.length) c++;
+    if (filters.tags?.length) c++;
+    if (filters.authors?.length) c++;
+    if (filters.featuredOnly) c++;
+    if (filters.stickyOnly) c++;
+    if (filters.dateFrom) c++;
+    if (filters.dateTo) c++;
+    if ((filters.ratingMin ?? 0) > 0) c++;
+    if ((filters.ratingMax ?? 5) < 5) c++;
+    if (filters.status) c++;
+    if (filters.visibility) c++;
+    if (filters.tenantId) c++; // ✅ compte aussi
+    return c;
+  }, [filters, search]);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key.toLowerCase() === 'f' && e.shiftKey) { e.preventDefault(); setShowFilters(v => !v); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   /* =========================
-     Filtres ↔ URL (shareable)
+     Filtres ↔ URL
   ========================= */
   useEffect(() => {
     const params = new URLSearchParams();
@@ -547,6 +609,7 @@ const ArticlesIndex = () => {
     if ((filters.ratingMax ?? 5) < 5) params.set('rmax', String(filters.ratingMax));
     if (filters.status) params.set('status', String(filters.status));
     if (filters.visibility) params.set('visibility', String(filters.visibility));
+    if (filters.tenantId) params.set('tenant', String(filters.tenantId));
     params.set('filters_open', showFilters ? '1' : '0');
     params.set('sort', sortBy);
     params.set('dir', sortDir);
@@ -574,6 +637,7 @@ const ArticlesIndex = () => {
       ratingMax: Number(params.get('rmax') ?? 5) || 5,
       status: params.get('status') || 'published',
       visibility: params.get('visibility') || undefined,
+      tenantId: params.get('tenant') || '',
     };
     setSearch(q);
     setFilters(next);
@@ -671,7 +735,7 @@ const ArticlesIndex = () => {
   const visibleColCount = useMemo(() => Object.values(visibleCols).filter(Boolean).length, [visibleCols]);
 
   /* =========================
-     Toggle global "couleur des cards" (synchro FiltersBar)
+     Toggle global "couleur des cards"
   ========================= */
   const [colorEnabled, setColorEnabled] = useState(() => {
     try {
@@ -716,6 +780,41 @@ const ArticlesIndex = () => {
           <div className="min-w-0">
             <h2 className="text-xl font-semibold tracking-tight">Articles</h2>
             <p className="text-sm text-white/90 mt-1">Gestion des articles du backoffice</p>
+
+            {/* 👇 Badge société active sous le titre */}
+            {selectedTenant && (
+              <div className="mt-2 inline-flex items-center gap-2 text-xs text-white/90">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 border border-white/20">
+                  <FaBuilding className="opacity-90" />
+                  <span className="font-semibold">Société active :</span>
+                </span>
+                <span className="inline-flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-700/40 border border-white/30">
+                  <div className="w-6 h-6 rounded-full bg-white/90 flex items-center justify-center overflow-hidden border border-white/40">
+                    {selectedTenant.logo_url || selectedTenant.logo || selectedTenant.avatar_url || selectedTenant.avatar ? (
+                      <img
+                        src={selectedTenant.logo_url || selectedTenant.logo || selectedTenant.avatar_url || selectedTenant.avatar}
+                        alt={selectedTenant.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-[10px] font-bold text-blue-700">
+                        {selectedTenant.name?.slice(0, 2)?.toUpperCase() || '??'}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-xs font-medium truncate max-w-[180px]">
+                    {selectedTenant.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setFilters(f => ({ ...f, tenantId: '' }))}
+                    className="text-[11px] underline underline-offset-2 text-white/80 hover:text-white"
+                  >
+                    Effacer
+                  </button>
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -816,6 +915,87 @@ const ArticlesIndex = () => {
               </select>
             </div>
 
+            {/* ✅ Sélecteur de société (tenant) avec affichage plus intuitif */}
+            <div className="ml-2 max-w-xs">
+              <div className="flex items-center gap-2 text-[11px] text-white/80 mb-1">
+                <span className="inline-flex items-center gap-1">
+                  <FaBuilding className="opacity-80" />
+                  <span>Filtrer par société</span>
+                </span>
+                {filters.tenantId && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-white/15 text-[10px] font-semibold">
+                    1 filtre actif
+                  </span>
+                )}
+                {loadingTenants && <FaSpinner className="animate-spin" size={10} />}
+              </div>
+
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {/* Bouton "Toutes" */}
+                <button
+                  type="button"
+                  onClick={() => setFilters(f => ({ ...f, tenantId: '' }))}
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-full border text-xs font-medium transition
+                    ${!filters.tenantId
+                      ? 'bg-white text-blue-700 border-white shadow-sm'
+                      : 'bg-white/10 text-white hover:bg-white/20 border-white/30'
+                    }`}
+                  title="Afficher toutes les sociétés"
+                >
+                  Toutes
+                </button>
+
+                {tenants.map((tenant) => {
+                  const isActive = String(filters.tenantId || '') === String(tenant.id);
+                  const logo =
+                    tenant.logo_url ||
+                    tenant.logo ||
+                    tenant.avatar_url ||
+                    tenant.avatar ||
+                    null;
+
+                  return (
+                    <button
+                      key={tenant.id}
+                      type="button"
+                      onClick={() =>
+                        setFilters(f => ({
+                          ...f,
+                          tenantId: isActive ? '' : String(tenant.id),
+                        }))
+                      }
+                      className={`flex-shrink-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs transition
+                        ${isActive
+                          ? 'bg-white text-blue-700 border-white shadow-sm'
+                          : 'bg-white/10 text-white hover:bg-white/20 border-white/30'
+                        }`}
+                      title={`Afficher uniquement : ${tenant.name}`}
+                    >
+                      <div className="w-6 h-6 rounded-full bg-white/90 flex items-center justify-center overflow-hidden border border-white/40">
+                        {logo ? (
+                          <img
+                            src={logo}
+                            alt={tenant.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-[10px] font-semibold text-blue-700">
+                            {tenant.name?.slice(0, 2)?.toUpperCase() || '??'}
+                          </span>
+                        )}
+                      </div>
+                      <span className="truncate max-w-[120px] text-left">
+                        {tenant.name}
+                      </span>
+                      {isActive && (
+                        <FiCheckIcon className="text-blue-700 text-sm" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="ml-2 inline-flex rounded-xl bg-white/10 p-1 border border-white/20 backdrop-blur-sm">
               <button className={`px-3 py-2 rounded-lg flex items-center gap-2 transition ${viewMode === 'table' ? 'bg-white text-blue-700 shadow-sm' : 'text-white/90 hover:bg-white/10'}`} onClick={() => setViewMode('table')} title="Vue table"><FiListIcon /> Table</button>
               <button className={`px-3 py-2 rounded-lg flex items-center gap-2 transition ${viewMode === 'grid' ? 'bg-white text-blue-700 shadow-sm' : 'text-white/90 hover:bg-white/10'}`} onClick={() => setViewMode('grid')} title="Vue grid"><FiGridIcon /> Grid</button>
@@ -873,7 +1053,7 @@ const ArticlesIndex = () => {
                       <button
                         className="inline-flex items-center gap-2 select-none"
                         onClick={()=>{
-                          const ids = (data.items || []).map(a => a.id);
+                          const ids = (filteredItems || []).map(a => a.id);
                           setSelectedIds(prev => {
                             const next = new Set(prev);
                             if (ids.length && ids.every(id => next.has(id))) ids.forEach(id => next.delete(id));
@@ -897,7 +1077,7 @@ const ArticlesIndex = () => {
                     </th>
                   )}
 
-                  {visibleCols.author && <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">Auteur</th>}
+                  {visibleCols.author && <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">Auteur / Société</th>}
                   {visibleCols.category && <th className="px-3 py-3 text-left text-xs font-medium text-slate-600">Catégorie</th>}
 
                   {visibleCols.published_at && (
@@ -937,7 +1117,7 @@ const ArticlesIndex = () => {
               </thead>
 
               <tbody className="divide-y divide-slate-100 bg-white">
-                {(data.items || []).map((article) => {
+                {(filteredItems || []).map((article) => {
                   const publicTo = buildPublicPath(article);
                   const { name: catName, color: catColorFromMeta, iconKey: catIconKey } = deriveCategoryMeta(article);
                   const CatIcon = ICON_MAP[catIconKey] || faFolder;
@@ -961,9 +1141,15 @@ const ArticlesIndex = () => {
                     : (article.deleted_at ? 'archived' : String(article.status || 'draft').toLowerCase());
                   const isArchived = uiStatus === 'archived';
 
-                  // Teinte dominante très légère pour la ligne (onHover un peu plus marqué)
                   const rowBgBase  = rgba(tone, 0.04);
                   const rowBgHover = rgba(tone, 0.08);
+
+                  // 👇 Société de l’article (si présente)
+                  const tenantName =
+                    article.tenant_name ||
+                    article.tenant?.name ||
+                    article.societe_name ||
+                    '';
 
                   return (
                     <tr
@@ -1014,12 +1200,28 @@ const ArticlesIndex = () => {
                       )}
 
                       {visibleCols.author && (
-                        <td className="px-3 py-4 text-sm">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"><FaUser className="text-slate-500" size={12} /></div>
-                            <div>
-                              <div className="font-medium text-slate-900">{article.author_name || `Auteur #${article.author_id || '—'}`}</div>
-                              {article.author_id && (<div className="text-xs text-slate-500">ID: {article.author_id}</div>)}
+                        <td className="px-3 py-4 text-sm align-top">
+                          <div className="flex items-start gap-2">
+                            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center mt-0.5">
+                              <FaUser className="text-slate-500" size={12} />
+                            </div>
+                            <div className="space-y-0.5">
+                              <div className="font-medium text-slate-900">
+                                {article.author_name || `Auteur #${article.author_id || '—'}`}
+                              </div>
+                              {article.author_id && (
+                                <div className="text-xs text-slate-500">
+                                  ID: {article.author_id}
+                                </div>
+                              )}
+                              {tenantName && (
+                                <div className="inline-flex items-center gap-1 text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-full px-2 py-0.5 mt-1">
+                                  <FaBuilding className="text-slate-500" size={10} />
+                                  <span className="truncate max-w-[140px]">
+                                    {tenantName}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -1120,7 +1322,7 @@ const ArticlesIndex = () => {
                   );
                 })}
 
-                {(!loading && (data.items || []).length === 0) && (
+                {(!loading && (filteredItems || []).length === 0) && (
                   <tr>
                     <td className="p-10 text-center text-slate-500" colSpan={visibleColCount}>
                       <div className="inline-flex flex-col items-center gap-2">
@@ -1140,12 +1342,11 @@ const ArticlesIndex = () => {
         {viewMode === 'grid' && (
           <div className="p-4">
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {(data.items || []).map((article) => {
+              {(filteredItems || []).map((article) => {
                 const publicTo = buildPublicPath(article);
                 const { name: catName, color: catColorFromMeta, iconKey: catIconKey } = deriveCategoryMeta(article);
                 const CatIcon = ICON_MAP[catIconKey] || faFolder;
 
-                // ✅ respect du toggle global
                 const tone = colorEnabled ? catColorFromMeta : '#64748b';
 
                 const formattedViewCount = Number(article.view_count || 0) > 1000 ? `${(Number(article.view_count) / 1000).toFixed(1)}k` : `${article.view_count ?? 0}`;
@@ -1159,6 +1360,12 @@ const ArticlesIndex = () => {
                   : (article.deleted_at ? 'archived' : String(article.status || 'draft').toLowerCase());
                 const isArchived = uiStatus === 'archived';
 
+                const tenantName =
+                  article.tenant_name ||
+                  article.tenant?.name ||
+                  article.societe_name ||
+                  '';
+
                 return (
                   <div
                     key={article.id}
@@ -1171,7 +1378,7 @@ const ArticlesIndex = () => {
                     }}
                   >
                     {/* Badge Catégorie en haut à gauche */}
-                    <div className="absolute top-2 left-2 z-10">
+                    <div className="absolute top-2 left-2 z-10 space-y-1">
                       <span
                         className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold"
                         style={{ backgroundColor: rgba(tone, 0.18), border: `1px solid ${rgba(tone, 0.32)}`, color: '#0f172a' }}
@@ -1183,6 +1390,19 @@ const ArticlesIndex = () => {
                         </span>
                         {catName}
                       </span>
+
+                      {/* 👇 Badge société dans la card grid */}
+                      {tenantName && (
+                        <span
+                          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/80 border border-slate-200 text-slate-700"
+                          title={`Société : ${tenantName}`}
+                        >
+                          <FaBuilding className="mr-1" size={10} />
+                          <span className="truncate max-w-[120px]">
+                            {tenantName}
+                          </span>
+                        </span>
+                      )}
                     </div>
 
                     <label className="absolute top-2 right-2 inline-flex items-center gap-2 cursor-pointer select-none z-10">
@@ -1239,7 +1459,7 @@ const ArticlesIndex = () => {
                 );
               })}
 
-              {(!loading && (data.items || []).length === 0) && (
+              {(!loading && (filteredItems || []).length === 0) && (
                 <div className="col-span-full py-16 text-center text-slate-500">
                   <div className="text-6xl mb-2">📝</div>
                   <p className="text-lg">Aucun article</p>
@@ -1254,7 +1474,7 @@ const ArticlesIndex = () => {
       {/* Pagination sticky */}
       <div className="absolute w-full bottom-0 z-20 flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-50/95 backdrop-blur border-t rounded-b-xl shadow-[0_-4px_12px_rgba(0,0,0,0.03)]">
         <div className="text-sm text-slate-600">
-          Total : <b>{data.meta.total || 0}</b> • Page <b>{data.meta.current_page || 1}</b> / <b>{data.meta.last_page || 1}</b>
+          Total : <b>{filteredItems.length}</b> • Page <b>{data.meta.current_page || 1}</b> / <b>{data.meta.last_page || 1}</b>
         </div>
         <div className="flex items-center gap-2">
           <button className="px-3 py-1.5 border rounded-lg hover:bg-white disabled:opacity-50" disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Préc.</button>

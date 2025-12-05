@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   FaFilter, FaEraser, FaDownload,
   FaCalendarAlt, FaThumbsUp, FaTimes, FaSearch, FaStar, FaThumbtack,
-  FaUser, FaTag
+  FaUser, FaTag, FaBuilding
 } from "react-icons/fa";
 
 /* ===== Helpers ===== */
@@ -37,7 +37,8 @@ const toArrayCsv = (v) =>
     .map((s) => s.trim())
     .filter(Boolean);
 
-const isNumLike = (v) => Number.isFinite(Number(v)) && String(Number(v)) === String(v);
+const isNumLike = (v) =>
+  Number.isFinite(Number(v)) && String(Number(v)) === String(v);
 
 /* ===== Component ===== */
 export default function FiltersBar({
@@ -50,11 +51,12 @@ export default function FiltersBar({
   facets = {},
   onExportClick = () => {}
 }) {
-  // on garde un "local" pour les champs texte afin d’avoir un debounce propre
+  // local state pour debounce et contrôle
   const [local, setLocal] = useState({
     categories: [],
     tags: [],
     authors: [],
+    tenantIds: [], // 🔹 nouveau : filtres tenants (IDs)
     featuredOnly: false,
     stickyOnly: false,
     unreadOnly: false,
@@ -72,7 +74,7 @@ export default function FiltersBar({
   const typingTimeout = useRef(null);
   const DEBOUNCE_MS = 450;
 
-  // IMPORTANT : synchroniser quand le parent change (sans écraser la saisie en cours)
+  // Synchroniser quand le parent change
   useEffect(() => {
     setLocal((prev) => ({ ...prev, ...filters }));
   }, [filters]);
@@ -146,6 +148,7 @@ export default function FiltersBar({
       categories: [],
       tags: [],
       authors: [],
+      tenantIds: [], // 🔹 on réinitialise aussi les tenants
       featuredOnly: false,
       stickyOnly: false,
       unreadOnly: false,
@@ -162,7 +165,13 @@ export default function FiltersBar({
     setFilters(base);
   };
 
-  // ===== Chips actifs
+  // ===== Facets (y compris tenants)
+  const fCats = Array.isArray(facets?.categories) ? facets.categories : [];
+  const fTags = Array.isArray(facets?.tags) ? facets.tags : [];
+  const fAuth = Array.isArray(facets?.authors) ? facets.authors : [];
+  const fTenants = Array.isArray(facets?.tenants) ? facets.tenants : []; // 🔹 facettes tenants
+
+  // ===== Chips actifs (en incluant tenantIds)
   const activeChips = [];
   if (local.featuredOnly) activeChips.push({ k: "featuredOnly", label: "Vedettes" });
   if (local.stickyOnly)   activeChips.push({ k: "stickyOnly", label: "Épinglés" });
@@ -172,23 +181,39 @@ export default function FiltersBar({
   if (local.dateTo)       activeChips.push({ k: "dateTo", label: `Au ${local.dateTo}` });
   if (Number(local.ratingMin) > 0) activeChips.push({ k: "ratingMin", label: `Note ≥ ${local.ratingMin}` });
   if (Number(local.ratingMax) < 5) activeChips.push({ k: "ratingMax", label: `Note ≤ ${local.ratingMax}` });
-  (local.categories || []).forEach((v) => activeChips.push({ k: "categories", label: `Cat: ${v}`, value: v }));
-  (local.tags || []).forEach((v) => activeChips.push({ k: "tags", label: `Tag: ${v}`, value: v }));
-  (local.authors || []).forEach((v) => activeChips.push({ k: "authors", label: `Auteur #${v}`, value: v }));
+
+  (local.categories || []).forEach((v) =>
+    activeChips.push({ k: "categories", label: `Cat: ${v}`, value: v })
+  );
+  (local.tags || []).forEach((v) =>
+    activeChips.push({ k: "tags", label: `Tag: ${v}`, value: v })
+  );
+  (local.authors || []).forEach((v) =>
+    activeChips.push({ k: "authors", label: `Auteur #${v}`, value: v })
+  );
+
+  // 🔹 Chips pour tenants, avec label basé sur facets.tenants si dispo
+  (local.tenantIds || []).forEach((id) => {
+    const t = fTenants.find((it) => String(it.id) === String(id));
+    const label = t
+      ? `${t.nom || t.name || "Société"} (ID ${t.id})`
+      : `Tenant #${id}`;
+    activeChips.push({ k: "tenantIds", label, value: id });
+  });
 
   const removeChip = (chip) => {
-    if (["categories", "tags", "authors"].includes(chip.k)) {
+    if (["categories", "tags", "authors", "tenantIds"].includes(chip.k)) {
       removeToken(chip.k, chip.value);
     } else {
-      const fallback = chip.k === "ratingMin" ? 0 : chip.k === "ratingMax" ? 5 : "";
+      const fallback =
+        chip.k === "ratingMin"
+          ? 0
+          : chip.k === "ratingMax"
+          ? 5
+          : "";
       setField(chip.k, fallback);
     }
   };
-
-  // ===== Facets
-  const fCats = Array.isArray(facets?.categories) ? facets.categories : [];
-  const fTags = Array.isArray(facets?.tags) ? facets.tags : [];
-  const fAuth = Array.isArray(facets?.authors) ? facets.authors : [];
 
   const FacetPill = ({ active, onClick, children }) => (
     <button
@@ -236,7 +261,9 @@ export default function FiltersBar({
 
           {/* Par page */}
           <div className="flex items-center gap-2">
-            <label className="text-sm text-slate-600" htmlFor="perPageSel">Par page</label>
+            <label className="text-sm text-slate-600" htmlFor="perPageSel">
+              Par page
+            </label>
             <select
               id="perPageSel"
               value={perPage}
@@ -281,49 +308,73 @@ export default function FiltersBar({
               <FaFilter className="text-slate-400" /> Filtres rapides
             </span>
 
-            <label className={`inline-flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-lg border cursor-pointer ${
-              local.featuredOnly ? "bg-amber-50 border-amber-300 text-amber-800" : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
-            }`}>
+            <label
+              className={`inline-flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-lg border cursor-pointer ${
+                local.featuredOnly
+                  ? "bg-amber-50 border-amber-300 text-amber-800"
+                  : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
+              }`}
+            >
               <input
                 type="checkbox"
                 className="hidden"
                 checked={!!local.featuredOnly}
                 onChange={() => toggle("featuredOnly")}
               />
-              <FaStar className={local.featuredOnly ? "text-amber-500" : "text-slate-500"} />
+              <FaStar
+                className={
+                  local.featuredOnly ? "text-amber-500" : "text-slate-500"
+                }
+              />
               Vedettes
             </label>
 
-            <label className={`inline-flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-lg border cursor-pointer ${
-              local.stickyOnly ? "bg-indigo-50 border-indigo-300 text-indigo-800" : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
-            }`}>
+            <label
+              className={`inline-flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-lg border cursor-pointer ${
+                local.stickyOnly
+                  ? "bg-indigo-50 border-indigo-300 text-indigo-800"
+                  : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
+              }`}
+            >
               <input
                 type="checkbox"
                 className="hidden"
                 checked={!!local.stickyOnly}
                 onChange={() => toggle("stickyOnly")}
               />
-              <FaThumbtack className={local.stickyOnly ? "text-indigo-600 rotate-12" : "text-slate-500"} />
+              <FaThumbtack
+                className={
+                  local.stickyOnly
+                    ? "text-indigo-600 rotate-12"
+                    : "text-slate-500"
+                }
+              />
               Épinglés
             </label>
           </div>
 
           {/* Status / Visibility */}
           <div className="flex items-center gap-3 flex-wrap">
-           
+            {/* (Status a été retiré dans l'extrait donné, on ne le remet pas si tu ne l'utilises pas) */}
 
             <div className="flex items-center gap-2">
-              <label htmlFor="visSel" className="text-sm text-slate-600">Visibilité</label>
+              <label htmlFor="visSel" className="text-sm text-slate-600">
+                Visibilité
+              </label>
               <select
                 id="visSel"
                 value={local.visibility || ""}
-                onChange={(e) => setField("visibility", e.target.value || undefined)}
+                onChange={(e) =>
+                  setField("visibility", e.target.value || undefined)
+                }
                 className="h-10 px-3 rounded-lg border border-slate-300 bg-white text-sm focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
               >
                 <option value="">(toutes)</option>
                 <option value="public">public</option>
                 <option value="private">private</option>
-                <option value="password_protected">password_protected</option>
+                <option value="password_protected">
+                  password_protected
+                </option>
               </select>
             </div>
           </div>
@@ -386,11 +437,13 @@ export default function FiltersBar({
           </div>
         </div>
 
-        {/* Row 3: Cat / Tags / Authors + facets */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Row 3: Cat / Tags / Authors / Tenants + facets */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
           {/* Categories */}
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Catégories</label>
+            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+              Catégories
+            </label>
             <input
               type="text"
               value={(local.categories || []).join(", ")}
@@ -398,13 +451,15 @@ export default function FiltersBar({
               className="h-10 px-3 rounded-lg border border-slate-300 bg-white text-sm shadow-sm focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
               placeholder="Ex: 1, IA, Mobile"
             />
-            {Array.isArray(facets?.categories) && facets.categories.length > 0 && (
+            {fCats.length > 0 && (
               <FacetList
-                items={facets.categories}
+                items={fCats}
                 current={local.categories}
                 icon={<FaTag />}
                 onToggle={(token, active) =>
-                  active ? removeToken("categories", token) : addToken("categories", token)
+                  active
+                    ? removeToken("categories", token)
+                    : addToken("categories", token)
                 }
               />
             )}
@@ -412,7 +467,9 @@ export default function FiltersBar({
 
           {/* Tags */}
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Tags</label>
+            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+              Tags
+            </label>
             <input
               type="text"
               value={(local.tags || []).join(", ")}
@@ -420,13 +477,15 @@ export default function FiltersBar({
               className="h-10 px-3 rounded-lg border border-slate-300 bg-white text-sm shadow-sm focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
               placeholder="Ex: 3, startup, dev"
             />
-            {Array.isArray(facets?.tags) && facets.tags.length > 0 && (
+            {fTags.length > 0 && (
               <FacetList
-                items={facets.tags}
+                items={fTags}
                 current={local.tags}
                 icon={<FaTag />}
                 onToggle={(token, active) =>
-                  active ? removeToken("tags", token) : addToken("tags", token)
+                  active
+                    ? removeToken("tags", token)
+                    : addToken("tags", token)
                 }
               />
             )}
@@ -434,7 +493,9 @@ export default function FiltersBar({
 
           {/* Authors */}
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Auteurs</label>
+            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+              Auteurs
+            </label>
             <input
               type="text"
               value={(local.authors || []).join(", ")}
@@ -442,14 +503,45 @@ export default function FiltersBar({
               className="h-10 px-3 rounded-lg border border-slate-300 bg-white text-sm shadow-sm focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
               placeholder="Ex: 12, 27"
             />
-            {Array.isArray(facets?.authors) && facets.authors.length > 0 && (
+            {fAuth.length > 0 && (
               <FacetList
-                items={facets.authors}
+                items={fAuth}
                 current={local.authors}
                 icon={<FaUser />}
                 displayName={(u) => u.name ?? `Auteur #${u.id}`}
                 onToggle={(token, active) =>
-                  active ? removeToken("authors", token) : addToken("authors", token)
+                  active
+                    ? removeToken("authors", token)
+                    : addToken("authors", token)
+                }
+              />
+            )}
+          </div>
+
+          {/* 🔹 Tenants / Sociétés */}
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+              Tenants / Sociétés
+            </label>
+            <input
+              type="text"
+              value={(local.tenantIds || []).join(", ")}
+              onChange={(e) => setCsvField("tenantIds", e.target.value)}
+              className="h-10 px-3 rounded-lg border border-slate-300 bg-white text-sm shadow-sm focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+              placeholder="Ex: 1, 5, 12"
+            />
+            {fTenants.length > 0 && (
+              <FacetList
+                items={fTenants}
+                current={local.tenantIds}
+                icon={<FaBuilding />}
+                displayName={(t) =>
+                  `${t.nom || t.name || "Société"} (ID ${t.id})`
+                }
+                onToggle={(token, active) =>
+                  active
+                    ? removeToken("tenantIds", token)
+                    : addToken("tenantIds", token)
                 }
               />
             )}
@@ -464,11 +556,17 @@ export default function FiltersBar({
             </span>
 
             {activeChips.length === 0 && (
-              <span className="text-sm text-slate-500">Aucun filtre appliqué</span>
+              <span className="text-sm text-slate-500">
+                Aucun filtre appliqué
+              </span>
             )}
 
             {activeChips.map((chip, idx) => (
-              <Chip key={`${chip.k}-${chip.value ?? "x"}-${idx}`} onRemove={() => removeChip(chip)} title="Supprimer ce filtre">
+              <Chip
+                key={`${chip.k}-${chip.value ?? "x"}-${idx}`}
+                onRemove={() => removeChip(chip)}
+                title="Supprimer ce filtre"
+              >
                 {chip.label}
               </Chip>
             ))}
@@ -504,12 +602,16 @@ function FacetList({ items, current = [], icon, onToggle, displayName }) {
             type="button"
             onClick={() => onToggle(token, active)}
             className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full border text-xs transition ${
-              active ? "bg-blue-600 border-blue-600 text-white"
-                     : "bg-white hover:bg-slate-50 border-slate-300 text-slate-700"
+              active
+                ? "bg-blue-600 border-blue-600 text-white"
+                : "bg-white hover:bg-slate-50 border-slate-300 text-slate-700"
             }`}
           >
-            {icon} {displayName ? displayName(it) : (it.name ?? it.id)}
-            {typeof it.count === "number" && <span className="opacity-80">({it.count})</span>}
+            {icon}{" "}
+            {displayName ? displayName(it) : (it.name ?? it.id)}
+            {typeof it.count === "number" && (
+              <span className="opacity-80">({it.count})</span>
+            )}
           </button>
         );
       })}

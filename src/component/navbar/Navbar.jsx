@@ -66,11 +66,12 @@ const fetchJson = async (url, params = {}, token) => {
 
 const typeIcon = (type) => {
   switch (type) {
-    case 'permission_changed': return faKey;
-    case 'role_assigned':      return faUserShield;
-    case 'article_created':    return faNewspaper;
-    case 'comment_approved':   return faCommentDots;
-    default:                   return faBell;
+    case 'contact_message_new': return faEnvelope;
+    case 'permission_changed':  return faKey;
+    case 'role_assigned':       return faUserShield;
+    case 'article_created':     return faNewspaper;
+    case 'comment_approved':    return faCommentDots;
+    default:                    return faBell;
   }
 };
 
@@ -91,6 +92,9 @@ const buildActivityLink = (a) => {
     case 'role_assigned':
     case 'permission_changed':
       return '/settings';
+    case 'contact_message_new':
+      // le backend met déjà /messageries dans url, mais on sécurise
+      return '/messageries';
     default:
       if (a.url && isAbsoluteUrl(a.url)) {
         try { const u = new URL(a.url); return `${u.pathname}${u.hash || ''}`; } catch {}
@@ -276,6 +280,13 @@ const Navbar = () => {
   const location = useLocation();
   const { t, i18n } = useTranslation();
 
+  // 🔍 On lit le query param "tab" pour distinguer Plateform vs Genre
+  const searchParams = useMemo(
+    () => new URLSearchParams(location.search),
+    [location.search]
+  );
+  const currentTab = searchParams.get('tab'); // "summary" | "video" | "audio" | "genre" | null
+
   const onAuth = location.pathname.startsWith('/auth');
 
   const API_BASE_STORAGE = import.meta.env.VITE_API_BASE_STORAGE;
@@ -334,6 +345,7 @@ const Navbar = () => {
   /* Badges */
   const [newCount, setNewCount] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
+  const [newMessageCount, setNewMessageCount] = useState(0); // 🔹 nouveaux messages contact
 
   // Utilitaire permissions
   const toStrArr = (x) => Array.isArray(x) ? x.map(String) : [];
@@ -346,28 +358,60 @@ const Navbar = () => {
     hasSome(user?.permissions, 'moderate','comments.moderate','comments:moderate','comment.moderate','moderation.view');
 
   const recomputeNewCount = useCallback(async () => {
-    if (!isAuthenticated || !userId) { setNewCount(0); return; }
+    if (!isAuthenticated || !userId) {
+      setNewCount(0);
+      setNewMessageCount(0);
+      return;
+    }
     const token = getTokenGuard();
     const lastSeen = getLastSeenTs(userId);
-    if (!lastSeen) { setLastSeenNow(userId); setNewCount(0); return; }
+    if (!lastSeen) {
+      setLastSeenNow(userId);
+      setNewCount(0);
+      setNewMessageCount(0);
+      return;
+    }
     try {
       const head = await fetchJson(`${API_BASE_URL}/users/${userId}/activities`, { per_page: 1, page: 1 }, token);
       const latest = head?.data?.[0];
-      if (!latest?.created_at) { setNewCount(0); return; }
+      if (!latest?.created_at) {
+        setNewCount(0);
+        setNewMessageCount(0);
+        return;
+      }
       const latestTs = Date.parse(latest.created_at);
       const lastSeenTs = Date.parse(lastSeen);
-      if (isNaN(latestTs) || isNaN(lastSeenTs) || latestTs <= lastSeenTs) { setNewCount(0); return; }
+      if (isNaN(latestTs) || isNaN(lastSeenTs) || latestTs <= lastSeenTs) {
+        setNewCount(0);
+        setNewMessageCount(0);
+        return;
+      }
       const day = new Date(lastSeenTs);
       const fromStr = `${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`;
       const page1 = await fetchJson(`${API_BASE_URL}/users/${userId}/activities`, { per_page: 100, page: 1, from: fromStr }, token);
+
       const items = Array.isArray(page1?.data) ? page1.data : [];
-      const precise = items.filter(it => {
-        const ts = Date.parse(it?.created_at); return !isNaN(ts) && ts > lastSeenTs;
-      }).length;
+
+      let activities = 0;
+      let messages = 0;
+
+      items.forEach((it) => {
+        const ts = Date.parse(it?.created_at);
+        if (Number.isNaN(ts) || ts <= lastSeenTs) return;
+        if (it?.type === 'contact_message_new') {
+          messages += 1;
+        } else {
+          activities += 1;
+        }
+      });
+
       const approxMore = (page1?.meta?.total || 0) > 100;
-      setNewCount(approxMore ? 99 : precise);
-    } catch {}
-  }, [API_BASE_URL, isAuthenticated, userId]);
+      setNewCount(approxMore ? 99 : activities);
+      setNewMessageCount(isAdmin ? messages : 0); // 🔐 messages visibles uniquement pour admin
+    } catch {
+      // en cas d'erreur, on ne casse pas l'UI
+    }
+  }, [API_BASE_URL, isAuthenticated, userId, isAdmin]);
 
   // → Indépendant de canModerate (c'est le backend qui tranche)
   const recomputePendingCount = useCallback(async () => {
@@ -394,6 +438,7 @@ const Navbar = () => {
           const data = JSON.parse(ev.data);
           if (data.type === 'activity_count') setNewCount(Math.min(99, Number(data.count || 0)));
           if (data.type === 'pending_count')  setPendingCount(Math.min(99, Number(data.count || 0)));
+          // si tu ajoutes un event SSE "message_count", tu peux ici mettre setNewMessageCount(...)
         } catch {}
       };
       es.onerror = () => { es.close(); };
@@ -444,7 +489,11 @@ const Navbar = () => {
         loadNews(1, true);
         // on essaie toujours; le backend répondra 401/403 si non autorisé
         loadPending(1, true);
-        if (userId) { setLastSeenNow(userId); setNewCount(0); }
+        if (userId) {
+          setLastSeenNow(userId);
+          setNewCount(0);
+          setNewMessageCount(0);
+        }
       }
       return next;
     });
@@ -457,13 +506,14 @@ const Navbar = () => {
     try {
       const resp = await fetchJson(`${API_BASE_URL}/users/${userId}/activities`, { per_page: 10, page }, token);
       const items = Array.isArray(resp?.data) ? resp.data : [];
-      setNews({
-        items: replace ? items : [...(replace ? [] : news.items), ...items],
+      setNews((prev) => ({
+        ...prev,
+        items: replace ? items : [...prev.items, ...items],
         page: resp?.meta?.current_page || page,
         last: resp?.meta?.last_page || page,
         loading: false,
         error: null
-      });
+      }));
     } catch (e) {
       setNews((s) => ({ ...s, loading: false, error: e?.message || 'Load failed' }));
     }
@@ -477,13 +527,14 @@ const Navbar = () => {
     try {
       const resp = await fetchJson(`${API_BASE_URL}${MOD_LIST_EP}`, { per_page: 10, page }, token);
       const raw = Array.isArray(resp?.data) ? resp.data : [];
-      setPending({
-        items: replace ? raw : [...(replace ? [] : pending.items), ...raw],
+      setPending((prev) => ({
+        ...prev,
+        items: replace ? raw : [...prev.items, ...raw],
         page: resp?.meta?.current_page || page,
         last: resp?.meta?.last_page || page,
         loading: false,
         error: null
-      });
+      }));
     } catch (e) {
       setPending((s) => ({ ...s, loading: false, error: null }));
     }
@@ -537,25 +588,77 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', onScroll);
   }, [location.pathname]);
 
+  // Helpers pour les onglets "Plateform" + "Genre"
+  const PLATFORM_BASE = '/articles'; // adapte si ta route réelle est différente
+
+  // Onglets "Résumé / Vidéo / Audio"
+  const buildPlatformTabLink = (tabKey, tagSlug) =>
+    withQuery(PLATFORM_BASE, {
+      tab: tabKey,
+      tags: tagSlug,   // on enverra 1 seul tag dans l'URL
+    });
+
+  // "Genres" (liste, plaidoyer, fundraising, technique)
+  const buildGenreTagLink = (genreSlug) =>
+    withQuery(PLATFORM_BASE, {
+      tab: 'genre',
+      tags: genreSlug,
+    });
+
   const navLinks = [
     { label: t('home'), path: '/', submenu: null },
-    { label: t('platform'), path: '/articles', submenu: [
-      { icon: faFileAlt, label: t('sumary'), path: '/platform/summary' },
-      { icon: faVideo,   label: t('video'), path: '/platform/video' },
-      { icon: faPodcast, label: t('audio'), path: '/platform/audio' }
-    ]},
-    { label: t('genre'), path: '/genre', submenu: [
-      { icon: faFileAlt, label: t('playdoier'), path: '/genre/playdoier' },
-      { icon: faVideo,   label: t('fundraising'), path: '/genre/fundraising' },
-      { icon: faPodcast, label: t('technical'), path: '/genre/technical' }
-    ]},
-    { label: t('about'), path: '/about', submenu: [
-      { icon: faSitemap,  label: t('structure'), path: '/about/structure' },
-      { icon: faBullseye, label: t('goals'), path: '/about/goals' },
-      { icon: faUsers,    label: t('members'), path: '/about/members' },
-      { icon: faEnvelope, label: t('contact'), path: '/about/contact' }
-    ]},
-    canModerate ? { label: t('moderation','Modération'), path: '/moderation', submenu: null } : null
+
+    // 🔹 Plateform : Résumé / Vidéo / Audio
+    {
+      label: t('platform'),
+      path: PLATFORM_BASE,
+      kind: 'platform',     // <<<<<< clé spéciale pour active custom
+      submenu: [
+        {
+          icon: faFileAlt,
+          label: t('sumary'),
+          path: buildPlatformTabLink('summary', 'resume'),
+        },
+        {
+          icon: faVideo,
+          label: t('video'),
+          path: buildPlatformTabLink('video', 'video'),
+        },
+        {
+          icon: faPodcast,
+          label: t('audio'),
+          path: buildPlatformTabLink('audio', 'audio'),
+        },
+      ],
+    },
+
+    // 🔹 Genre : Plaidoyer / Fundraising / Technique
+    {
+      label: t('genre'),
+      path: withQuery(PLATFORM_BASE, { tab: 'genre' }),
+      kind: 'genre',        // <<<<<< idem
+      submenu: [
+        {
+          icon: faFileAlt,
+          label: t('playdoier'),
+          path: buildGenreTagLink('plaidoyer'),
+        },
+        {
+          icon: faVideo,
+          label: t('fundraising'),
+          path: buildGenreTagLink('fundraising'),
+        },
+        {
+          icon: faPodcast,
+          label: t('technical'),
+          path: buildGenreTagLink('technique'),
+        },
+      ],
+    },
+
+    canModerate
+      ? { label: t('moderation', 'Modération'), path: '/moderation', submenu: null }
+      : null,
   ].filter(Boolean);
 
   const goToLogin = () => {
@@ -573,6 +676,8 @@ const Navbar = () => {
   const shadowClass = isCompact ? 'shadow-lg' : 'shadow-md';
 
   const lastSeen = (isAuthenticated && userId) ? (getLastSeenTs(userId) || null) : null;
+
+  const totalBadge = newCount + pendingCount + (isAdmin ? newMessageCount : 0);
 
   return (
     <>
@@ -611,16 +716,36 @@ const Navbar = () => {
                   <li key={i} className="relative group">
                     <NavLink
                       to={link.path}
-                      className={({isActive}) =>
-                        `flex items-center ${isCompact ? 'py-2' : 'py-3'} px-2 whitespace-nowrap rounded-md focus:outline-none transition-colors
-                         ${onAuth
-                            ? `text-gray-800 hover:text-blue-700 focus-visible:ring-2 focus-visible:ring-blue-400 ${isActive ? 'bg-blue-50 text-blue-700' : ''}`
-                            : `text-white/90 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 ${isActive ? 'bg-white/10 text-white' : ''}`}`
-                      }
+                      // 🔥 Active custom pour distinguer Plateform vs Genre
+                      className={({ isActive }) => {
+                        let active = isActive;
+
+                        if (link.kind === 'platform') {
+                          active =
+                            location.pathname.startsWith(PLATFORM_BASE) &&
+                            currentTab !== 'genre';
+                        } else if (link.kind === 'genre') {
+                          active =
+                            location.pathname.startsWith(PLATFORM_BASE) &&
+                            currentTab === 'genre';
+                        }
+
+                        return `flex items-center ${isCompact ? 'py-2' : 'py-3'} px-2 whitespace-nowrap rounded-md focus:outline-none transition-colors
+                          ${
+                            onAuth
+                              ? `text-gray-800 hover:text-blue-700 focus-visible:ring-2 focus-visible:ring-blue-400 ${active ? 'bg-blue-50 text-blue-700' : ''}`
+                              : `text-white/90 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 ${active ? 'bg-white/10 text-white' : ''}`
+                          }`;
+                      }}
                       end
                     >
                       {link.label}
-                      {link.submenu && <FontAwesomeIcon icon={faChevronDown} className={`ml-2 text-xs ${onAuth ? 'text-blue-700' : 'text-white/80'}`} />}
+                      {link.submenu && (
+                        <FontAwesomeIcon
+                          icon={faChevronDown}
+                          className={`ml-2 text-xs ${onAuth ? 'text-blue-700' : 'text-white/80'}`}
+                        />
+                      )}
                     </NavLink>
 
                     {/* Dropdown (desktop) */}
@@ -695,9 +820,9 @@ const Navbar = () => {
                 title={t('notifications','Notifications')}
               >
                 <FontAwesomeIcon icon={faBell} />
-                {(newCount > 0 || pendingCount > 0) && (
+                {totalBadge > 0 && (
                   <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-semibold rounded-full min-w-4 h-4 px-1 flex items-center justify-center">
-                    {(newCount + pendingCount) > 99 ? '99+' : (newCount + pendingCount)}
+                    {totalBadge > 99 ? '99+' : totalBadge}
                   </span>
                 )}
               </button>
@@ -857,6 +982,7 @@ const Navbar = () => {
             t={t}
             onClose={() => setNotifOpen(false)}
             newCount={newCount}
+            newMessageCount={newMessageCount}
             pendingCount={pendingCount}
             news={news}
             pending={pending}
@@ -864,13 +990,20 @@ const Navbar = () => {
             notifTab={notifTab}
             loadNews={loadNews}
             loadPending={loadPending}
-            markAllRead={() => { if (userId) { setLastSeenNow(userId); setNewCount(0); } }}
+            markAllRead={() => {
+              if (userId) {
+                setLastSeenNow(userId);
+                setNewCount(0);
+                setNewMessageCount(0);
+              }
+            }}
             navigate={navigate}
             /* NEW: unread helpers */
             lastSeen={lastSeen}
             getOpenedAt={getOpenedAt}
             setOpenedNow={setOpenedNow}
             isAfter={isAfter}
+            isAdmin={isAdmin} // 🔐 pour conditionner l’onglet Messages
           />
         </Portal>
       )}
@@ -899,10 +1032,11 @@ const Navbar = () => {
 
 /* ========================= Notifications ========================= */
 function NotificationsDialog({
-  t, onClose, newCount, pendingCount,
+  t, onClose, newCount, newMessageCount, pendingCount,
   news, pending, setNotifTab, notifTab,
   loadNews, loadPending, markAllRead, navigate,
-  lastSeen, getOpenedAt, setOpenedNow, isAfter
+  lastSeen, getOpenedAt, setOpenedNow, isAfter,
+  isAdmin
 }) {
   useScrollLock(true);
   const closeBtnRef = useRef(null);
@@ -919,13 +1053,26 @@ function NotificationsDialog({
           role="dialog"
           aria-modal="true"
           aria-label={t('notifications','Notifications')}
-          className="absolute right-2 top=[72px] top-[72px] w-[26rem] max-w-[96vw] bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 overflow-hidden"
+          className="absolute right-2 top-[72px] w-[26rem] max-w-[96vw] bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 overflow-hidden"
         >
           <div className="px-4 py-3 bg-gradient-to-r from-blue-600 via-blue-600 to-blue-700 text-white flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="font-semibold">{t('notifications','Notifications')}</span>
-              {newCount > 0 && <span className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full">{newCount}</span>}
-              {pendingCount > 0 && <span className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full">{pendingCount} {t('to_moderate','à modérer')}</span>}
+              {newCount > 0 && (
+                <span className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full">
+                  {newCount}
+                </span>
+              )}
+              {pendingCount > 0 && (
+                <span className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full">
+                  {pendingCount} {t('to_moderate','à modérer')}
+                </span>
+              )}
+              {isAdmin && newMessageCount > 0 && (
+                <span className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full">
+                  {newMessageCount} {t('messages','messages')}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -959,32 +1106,56 @@ function NotificationsDialog({
             >
               {t('to_moderate','À modérer')}
             </button>
+            {isAdmin && (
+              <button
+                className={`px-3 py-1.5 rounded-full text-sm ${
+                  notifTab==='messages' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+                onClick={()=>setNotifTab('messages')}
+              >
+                {t('messages','Messages')}
+              </button>
+            )}
           </div>
 
           {/* List */}
           <div className="max-h-96 overflow-auto">
-            {notifTab==='news'
-              ? <NewsList
-                  t={t}
-                  news={news}
-                  loadNews={loadNews}
-                  onClose={onClose}
-                  lastSeen={lastSeen}
-                  getOpenedAt={getOpenedAt}
-                  setOpenedNow={setOpenedNow}
-                  isAfter={isAfter}
-                />
-              : <PendingList
-                  t={t}
-                  pending={pending}
-                  loadPending={loadPending}
-                  onClose={onClose}
-                  lastSeen={lastSeen}
-                  getOpenedAt={getOpenedAt}
-                  setOpenedNow={setOpenedNow}
-                  isAfter={isAfter}
-                />
-            }
+            {notifTab==='news' && (
+              <NewsList
+                t={t}
+                news={news}
+                loadNews={loadNews}
+                onClose={onClose}
+                lastSeen={lastSeen}
+                getOpenedAt={getOpenedAt}
+                setOpenedNow={setOpenedNow}
+                isAfter={isAfter}
+              />
+            )}
+            {notifTab==='pending' && (
+              <PendingList
+                t={t}
+                pending={pending}
+                loadPending={loadPending}
+                onClose={onClose}
+                lastSeen={lastSeen}
+                getOpenedAt={getOpenedAt}
+                setOpenedNow={setOpenedNow}
+                isAfter={isAfter}
+              />
+            )}
+            {isAdmin && notifTab==='messages' && (
+              <MessagesList
+                t={t}
+                news={news}
+                loadNews={loadNews}
+                onClose={onClose}
+                lastSeen={lastSeen}
+                getOpenedAt={getOpenedAt}
+                setOpenedNow={setOpenedNow}
+                isAfter={isAfter}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -993,15 +1164,18 @@ function NotificationsDialog({
 }
 
 function NewsList({ t, news, loadNews, onClose, lastSeen, getOpenedAt, setOpenedNow, isAfter }) {
+  // On exclut les messages de contact (qui vont dans l’onglet Messages)
+  const activityItems = (news.items || []).filter((a) => a.type !== 'contact_message_new');
+
   return (
     <>
-      {(news.loading && news.items.length===0) && (<><SkeletonRow/><SkeletonRow/><SkeletonRow/></>)}
-      {news.items.length === 0 && !news.loading && (
+      {(news.loading && activityItems.length===0) && (<><SkeletonRow/><SkeletonRow/><SkeletonRow/></>)}
+      {activityItems.length === 0 && !news.loading && (
         <div className="p-6 text-sm text-gray-500 flex items-center justify-center gap-2">
           <span>🥳</span> <span>{t('no_activity','Aucune activité pour le moment')}</span>
         </div>
       )}
-      {news.items.map((a)=> {
+      {activityItems.map((a)=> {
         const href = toFrontPath(buildActivityLink(a) || a.url || a.link) || '/settings';
         const isRel = String(href).startsWith('/');
 
@@ -1048,6 +1222,89 @@ function NewsList({ t, news, loadNews, onClose, lastSeen, getOpenedAt, setOpened
           className={`text-sm px-3 py-1.5 rounded border ${news.page >= news.last ? 'text-gray-400 border-gray-200' : 'text-gray-700 border-gray-300 hover:bg-gray-50'}`}
         >
           {news.loading ? t('loading','Chargement…') : (news.page < news.last ? t('see_more','Voir plus') : t('no_more','Fin'))}
+        </button>
+      </div>
+    </>
+  );
+}
+
+function MessagesList({ t, news, loadNews, onClose, lastSeen, getOpenedAt, setOpenedNow, isAfter }) {
+  const messageItems = (news.items || []).filter((a) => a.type === 'contact_message_new');
+
+  return (
+    <>
+      {(news.loading && messageItems.length === 0) && (
+        <>
+          <SkeletonRow /><SkeletonRow /><SkeletonRow />
+        </>
+      )}
+
+      {messageItems.length === 0 && !news.loading && (
+        <div className="p-6 text-sm text-gray-500 flex items-center justify-center gap-2">
+          <span>📨</span>
+          <span>{t('no_new_messages','Aucun nouveau message')}</span>
+        </div>
+      )}
+
+      {messageItems.map((a) => {
+        const href = toFrontPath(buildActivityLink(a) || a.url || a.link) || '/messageries';
+        const isRel = String(href).startsWith('/');
+
+        const openedAt = getOpenedAt('message', a.id);
+        const unreadBySeen = lastSeen ? isAfter(a.created_at, lastSeen) : false;
+        const isUnread = !openedAt && unreadBySeen;
+
+        const Row = (
+          <div className="flex items-start gap-3 p-4 hover:bg-gray-50 transition-colors">
+            <div className="relative flex-shrink-0 w-9 h-9 bg-emerald-50 rounded-full flex items-center justify-center">
+              <FontAwesomeIcon icon={faEnvelope} className="text-emerald-600" />
+              {isUnread && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-600 rounded-full"
+                  aria-hidden="true"
+                />
+              )}
+            </div>
+            <div className="min-w-0">
+              <div className={`text-sm text-gray-900 line-clamp-2 ${isUnread ? 'font-semibold' : 'font-normal'}`}>
+                {a.title || t('new_message','Nouveau message')}
+              </div>
+              {a.subtitle && (
+                <div className={`text-xs mt-0.5 line-clamp-2 ${isUnread ? 'text-gray-700' : 'text-gray-500'}`}>
+                  {a.subtitle}
+                </div>
+              )}
+              <div className="text-xs text-gray-400 mt-1">{timeAgo(a.created_at, t)}</div>
+            </div>
+          </div>
+        );
+
+        const markOpened = () => setOpenedNow('message', a.id);
+
+        return isRel ? (
+          <Link key={a.id} to={href} onClick={() => { markOpened(); onClose(); }}>
+            {Row}
+          </Link>
+        ) : (
+          <a key={a.id} href={href} onClick={() => { markOpened(); onClose(); }}>
+            {Row}
+          </a>
+        );
+      })}
+
+      <div className="p-3 border-t flex justify-center">
+        <button
+          disabled={news.loading || news.page >= news.last}
+          onClick={() => loadNews(news.page + 1)}
+          className={`text-sm px-3 py-1.5 rounded border ${
+            news.page >= news.last
+              ? 'text-gray-400 border-gray-200'
+              : 'text-gray-700 border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          {news.loading
+            ? t('loading','Chargement…')
+            : (news.page < news.last ? t('see_more','Voir plus') : t('no_more','Fin'))}
         </button>
       </div>
     </>

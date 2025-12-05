@@ -7,17 +7,47 @@
 // + (NEW) 1) Scroll-shadows sur les pills, 2) badges animés, 3) empty state + skeletons,
 //         4) aperçu “cards” des filtres sauvegardés, 5) sélecteur de thème (neutre / pro / coloré)
 
-import { useEffect, useState, useCallback, useMemo, useRef, useLayoutEffect } from "react";
-import { useTranslation } from 'react-i18next';
 import {
-  FaFilter, FaSearch, FaThLarge, FaTable, FaDownload, FaTimes, FaSave, FaBookmark,
-  FaHistory, FaStar, FaEye, FaChevronDown, FaRocket, FaTag, FaCalendar, FaThumbsUp,
-  FaUser, FaTrash, FaCheck, FaThumbtack, FaEraser, FaBars, FaPalette, FaSyncAlt
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+  useLayoutEffect,
+} from "react";
+import { useTranslation } from "react-i18next";
+import {
+  FaFilter,
+  FaSearch,
+  FaThLarge,
+  FaTable,
+  FaDownload,
+  FaTimes,
+  FaSave,
+  FaBookmark,
+  FaHistory,
+  FaStar,
+  FaEye,
+  FaChevronDown,
+  FaRocket,
+  FaTag,
+  FaCalendar,
+  FaThumbsUp,
+  FaUser,
+  FaTrash,
+  FaCheck,
+  FaThumbtack,
+  FaEraser,
+  FaBars,
+  FaPalette,
+  FaSyncAlt,
 } from "react-icons/fa";
 import { cls } from "../shared/utils/format";
 import "./FiltersPanel.css";
 import api from "../../../services/api";
 import { createPortal } from "react-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+
 // -------------------------------------------
 // Constants & defaults
 // -------------------------------------------
@@ -30,10 +60,11 @@ const ANIMATION_DELAYS = {
   CHIP_STAGGER: 12,
   HISTORY_STAGGER: 15,
 };
-  function normalizeSearchText(text) {
+
+function normalizeSearchText(text) {
   return String(text || "")
-    .replace(/\s+/g, " ") // remplace tous les groupes de blancs par un seul espace
-    .trim();              // enlève espace début/fin
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 const STORAGE_KEYS = {
@@ -43,7 +74,7 @@ const STORAGE_KEYS = {
   THEME: "filters-theme",
 };
 
-const DEFAULT_FILTERS = {
+export const DEFAULT_FILTERS = {
   categories: [],
   tags: [],
   authors: [],
@@ -121,11 +152,16 @@ function shallowFiltersEqual(a = {}, b = {}) {
 }
 
 function useTypewriter(textList, enabled) {
-  const [state, setState] = useState({ text: "", currentIndex: 0, position: 0, direction: 1 });
+  const [state, setState] = useState({
+    text: "",
+    currentIndex: 0,
+    position: 0,
+    direction: 1,
+  });
 
   useEffect(() => {
     if (!enabled || !textList.length) {
-      setState(prev => ({ ...prev, text: "" }));
+      setState((prev) => ({ ...prev, text: "" }));
       return;
     }
     const currentText = textList[state.currentIndex] || "";
@@ -137,23 +173,32 @@ function useTypewriter(textList, enabled) {
     const getDelay = () => {
       if (isAtEnd) return ANIMATION_DELAYS.TYPEWRITER_END;
       if (isAtStart) return ANIMATION_DELAYS.TYPEWRITER_START;
-      return direction === 1 ? ANIMATION_DELAYS.TYPEWRITER_WRITE : ANIMATION_DELAYS.TYPEWRITER_ERASE;
+      return direction === 1
+        ? ANIMATION_DELAYS.TYPEWRITER_WRITE
+        : ANIMATION_DELAYS.TYPEWRITER_ERASE;
     };
 
     const timer = setTimeout(() => {
-      setState(prev => {
+      setState((prev) => {
         if (prev.direction === 1) {
           const nextPos = Math.min(currentText.length, prev.position + 1);
           return {
-            ...prev, position: nextPos, text: currentText.slice(0, nextPos),
+            ...prev,
+            position: nextPos,
+            text: currentText.slice(0, nextPos),
             direction: nextPos === currentText.length ? -1 : 1,
           };
         } else {
           const nextPos = Math.max(0, prev.position - 1);
           return {
-            ...prev, position: nextPos, text: currentText.slice(0, nextPos),
+            ...prev,
+            position: nextPos,
+            text: currentText.slice(0, nextPos),
             direction: nextPos === 0 ? 1 : -1,
-            currentIndex: nextPos === 0 ? (prev.currentIndex + 1) % textList.length : prev.currentIndex,
+            currentIndex:
+              nextPos === 0
+                ? (prev.currentIndex + 1) % textList.length
+                : prev.currentIndex,
           };
         }
       });
@@ -177,12 +222,15 @@ function useLocalStorage(key, defaultValue, validator = null) {
     }
   });
 
-  const updateValue = useCallback((newValue) => {
-    try {
-      setValue(newValue);
-      localStorage.setItem(key, JSON.stringify(newValue));
-    } catch {}
-  }, [key]);
+  const updateValue = useCallback(
+    (newValue) => {
+      try {
+        setValue(newValue);
+        localStorage.setItem(key, JSON.stringify(newValue));
+      } catch {}
+    },
+    [key]
+  );
 
   const removeValue = useCallback(() => {
     try {
@@ -197,24 +245,49 @@ function useLocalStorage(key, defaultValue, validator = null) {
 const useSavedFilters = () => {
   const validateFilters = useCallback((data) => {
     if (!Array.isArray(data)) return [];
-    return data.filter(item =>
-      item && typeof item === 'object' && typeof item.name === 'string' && item.filters && typeof item.id !== 'undefined'
-    ).slice(0, 10);
+    return data
+      .filter(
+        (item) =>
+          item &&
+          typeof item === "object" &&
+          typeof item.name === "string" &&
+          item.filters &&
+          typeof item.id !== "undefined"
+      )
+      .slice(0, 10);
   }, []);
 
-  const [savedFilters, setSavedFilters] = useLocalStorage(STORAGE_KEYS.FILTERS, [], validateFilters);
+  const [savedFilters, setSavedFilters] = useLocalStorage(
+    STORAGE_KEYS.FILTERS,
+    [],
+    validateFilters
+  );
 
-  const saveFilter = useCallback((name, filters) => {
-    if (!name?.trim()) return false;
-    const entry = { id: Date.now(), name: name.trim(), filters, createdAt: new Date().toISOString() };
-    const updated = [entry, ...savedFilters.filter(f => f.name !== name.trim())].slice(0, 10);
-    setSavedFilters(updated);
-    return true;
-  }, [savedFilters, setSavedFilters]);
+  const saveFilter = useCallback(
+    (name, filters) => {
+      if (!name?.trim()) return false;
+      const entry = {
+        id: Date.now(),
+        name: name.trim(),
+        filters,
+        createdAt: new Date().toISOString(),
+      };
+      const updated = [
+        entry,
+        ...savedFilters.filter((f) => f.name !== name.trim()),
+      ].slice(0, 10);
+      setSavedFilters(updated);
+      return true;
+    },
+    [savedFilters, setSavedFilters]
+  );
 
-  const deleteFilter = useCallback((id) => {
-    setSavedFilters(prev => prev.filter(f => f.id !== id));
-  }, [setSavedFilters]);
+  const deleteFilter = useCallback(
+    (id) => {
+      setSavedFilters((prev) => prev.filter((f) => f.id !== id));
+    },
+    [setSavedFilters]
+  );
 
   return { savedFilters, saveFilter, deleteFilter };
 };
@@ -223,12 +296,13 @@ const useSearchHistory = () => {
   const validateHistory = useCallback((data) => {
     if (!Array.isArray(data)) return [];
     return data
-      .filter(item =>
-        item &&
-        typeof item === 'object' &&
-        typeof item.term === 'string' &&
-        normalizeSearchText(item.term) &&           // ✅ on valide un term normalisé non vide
-        typeof item.timestamp === 'number'
+      .filter(
+        (item) =>
+          item &&
+          typeof item === "object" &&
+          typeof item.term === "string" &&
+          normalizeSearchText(item.term) &&
+          typeof item.timestamp === "number"
       )
       .slice(0, 8);
   }, []);
@@ -239,24 +313,33 @@ const useSearchHistory = () => {
     validateHistory
   );
 
-  const addToHistory = useCallback((term) => {
-    const clean = normalizeSearchText(term);        // ✅ normalisation ici aussi
-    if (!clean) return;
-    const entry = { id: Date.now(), term: clean, timestamp: Date.now() };
-    const updated = [entry, ...history.filter(h => h.term !== clean)].slice(0, 8);
-    setHistory(updated);
-  }, [history, setHistory]);
+  const addToHistory = useCallback(
+    (term) => {
+      const clean = normalizeSearchText(term);
+      if (!clean) return;
+      const entry = { id: Date.now(), term: clean, timestamp: Date.now() };
+      const updated = [
+        entry,
+        ...history.filter((h) => h.term !== clean),
+      ].slice(0, 8);
+      setHistory(updated);
+    },
+    [history, setHistory]
+  );
 
   return { history, addToHistory, clearHistory };
 };
-
 
 function useToast() {
   const [toasts, setToasts] = useState([]);
   const show = useCallback((message, type = "success") => {
     const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), ANIMATION_DELAYS.TOAST_DURATION);
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(
+      () =>
+        setToasts((prev) => prev.filter((t) => t.id !== id)),
+      ANIMATION_DELAYS.TOAST_DURATION
+    );
   }, []);
   const toastElements = toasts.map((t, i) => (
     <div
@@ -264,7 +347,9 @@ function useToast() {
       className={cls(
         "fixed right-4 z-[60] px-4 py-2 rounded-lg shadow-lg border text-sm",
         "backdrop-blur bg-white/95 transition-all duration-300",
-        t.type === "success" ? "border-green-200 text-green-800" : "border-red-200 text-red-800",
+        t.type === "success"
+          ? "border-green-200 text-green-800"
+          : "border-red-200 text-red-800",
         "animate-[toast-in_240ms_ease-out]"
       )}
       style={{ bottom: `${16 + i * 60}px` }}
@@ -272,9 +357,14 @@ function useToast() {
       aria-live="polite"
     >
       <div>{t.message}</div>
-      {/* Mini barre de progression */}
       <div className="relative mt-2 h-[2px] w-full bg-slate-200 overflow-hidden rounded">
-        <div className={cls("absolute inset-y-0 left-0 w-full", t.type === "success" ? "bg-green-600" : "bg-rose-600", "animate-[toastbar_1.8s_linear]")} />
+        <div
+          className={cls(
+            "absolute inset-y-0 left-0 w-full",
+            t.type === "success" ? "bg-green-600" : "bg-rose-600",
+            "animate-[toastbar_1.8s_linear]"
+          )}
+        />
       </div>
     </div>
   ));
@@ -307,7 +397,10 @@ function useAutoHeight(isOpen, dependencies = []) {
       const onResize = () => updateHeight();
       window.addEventListener("resize", onResize);
       const it = setInterval(updateHeight, 200);
-      return () => { window.removeEventListener("resize", onResize); clearInterval(it); };
+      return () => {
+        window.removeEventListener("resize", onResize);
+        clearInterval(it);
+      };
     }
   }, [isOpen, updateHeight]);
 
@@ -324,6 +417,7 @@ const extractArray = (src) => {
   if (src && Array.isArray(src.records)) return src.records;
   return [];
 };
+
 // -------------------------------------------
 // Suggestions de recherche (API)
 // -------------------------------------------
@@ -367,27 +461,34 @@ async function fetchSearchSuggestions(term) {
   }
 }
 
+// ✅ on garde maintenant aussi slug
 const normalizeOptionsList = (input, kind) => {
   return extractArray(input)
     .map((o) => {
-      if (typeof o === "string") return { id: String(o), name: o };
+      if (typeof o === "string") {
+        return { id: String(o), name: o, slug: String(o).toLowerCase() };
+      }
       if (!o || typeof o !== "object") return null;
-      const rawId = (o.id ?? o.value ?? o.slug ?? o.code ?? o.key ?? null);
+      const rawId = o.id ?? o.value ?? o.slug ?? o.code ?? o.key ?? null;
       const id = rawId != null ? String(rawId) : null;
+      const slug = o.slug != null ? String(o.slug) : null;
       const displayName =
-        o.name ?? o.title ?? o.label ??
+        o.name ??
+        o.title ??
+        o.label ??
         (kind === "authors"
           ? [o.first_name, o.last_name].filter(Boolean).join(" ").trim()
-          : o.slug) ??
+          : slug) ??
         (id != null ? `#${id}` : null);
       if (id == null || !displayName) return null;
-      return { id: String(id), name: String(displayName) };
+      return { id: String(id), name: String(displayName), slug };
     })
     .filter(Boolean);
 };
 
 const __cache = new Map();
-const mkKey = (url, params) => `${url}?${new URLSearchParams(params || {}).toString()}`;
+const mkKey = (url, params) =>
+  `${url}?${new URLSearchParams(params || {}).toString()}`;
 
 async function getWithCache(url, params = {}) {
   const key = mkKey(url, params);
@@ -436,7 +537,11 @@ const Chip = ({ active, onClick, children, index = 0, disabled = false }) => (
         ? "bg-blue-600 text-white border-blue-600"
         : "bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50"
     )}
-    style={{ transitionDelay: `${Math.min(index, 12) * ANIMATION_DELAYS.CHIP_STAGGER}ms` }}
+    style={{
+      transitionDelay: `${
+        Math.min(index, 12) * ANIMATION_DELAYS.CHIP_STAGGER
+      }ms`,
+    }}
     aria-pressed={active}
   >
     <span className="inline-flex items-center gap-1.5">
@@ -446,7 +551,15 @@ const Chip = ({ active, onClick, children, index = 0, disabled = false }) => (
   </button>
 );
 
-const Pill = ({ label, icon, open, onToggle, disabled = false, badge, theme = THEME_STYLES.neutral }) => (
+const Pill = ({
+  label,
+  icon,
+  open,
+  onToggle,
+  disabled = false,
+  badge,
+  theme = THEME_STYLES.neutral,
+}) => (
   <button
     type="button"
     onClick={onToggle}
@@ -462,9 +575,17 @@ const Pill = ({ label, icon, open, onToggle, disabled = false, badge, theme = TH
       "active:scale-[0.98]"
     )}
   >
-    <span className="text-sm text-slate-700" aria-hidden="true">{icon}</span>
+    <span className="text-sm text-slate-700" aria-hidden="true">
+      {icon}
+    </span>
     <span className="text-sm font-medium">{label}</span>
-    <FaChevronDown className={cls("text-xs opacity-70 transition-transform", open ? "rotate-180" : "")} aria-hidden="true" />
+    <FaChevronDown
+      className={cls(
+        "text-xs opacity-70 transition-transform",
+        open ? "rotate-180" : ""
+      )}
+      aria-hidden="true"
+    />
     {badge > 0 && (
       <span
         className={cls(
@@ -479,7 +600,14 @@ const Pill = ({ label, icon, open, onToggle, disabled = false, badge, theme = TH
   </button>
 );
 
-const ToggleButton = ({ active, onClick, icon, label, disabled = false, theme = THEME_STYLES.neutral }) => (
+const ToggleButton = ({
+  active,
+  onClick,
+  icon,
+  label,
+  disabled = false,
+  theme = THEME_STYLES.neutral,
+}) => (
   <button
     type="button"
     onClick={onClick}
@@ -489,7 +617,9 @@ const ToggleButton = ({ active, onClick, icon, label, disabled = false, theme = 
       "disabled:opacity-50 disabled:cursor-not-allowed",
       "focus:outline-none",
       theme.primaryRing,
-      active ? theme.toggleActive : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+      active
+        ? theme.toggleActive
+        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
     )}
     aria-pressed={active}
   >
@@ -519,24 +649,19 @@ const InputWithIcon = ({ icon, onChange, label, type = "text", ...props }) => (
       type={type}
       onChange={(e) => onChange?.(e.target.value)}
       className={cls(
-        // base
         "w-full h-10 rounded-lg border text-sm",
         "pl-9 pr-3",
         "border-slate-200 bg-white/90",
         "transition-all placeholder:text-slate-400",
         "focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300",
-        // petit effet glass / shadow au focus
         "group-focus-within:shadow-[0_10px_25px_rgba(15,23,42,0.08)]",
-
-        // style spécifique pour les dates
-        type === "date" &&
-          [
-            "pr-10", // plus d’espace pour l’icône calendrier
-            "appearance-none",
-            "[&::-webkit-calendar-picker-indicator]:opacity-0",
-            "[&::-webkit-calendar-picker-indicator]:cursor-pointer",
-            "relative"
-          ]
+        type === "date" && [
+          "pr-10",
+          "appearance-none",
+          "[&::-webkit-calendar-picker-indicator]:opacity-0",
+          "[&::-webkit-calendar-picker-indicator]:cursor-pointer",
+          "relative",
+        ]
       )}
       aria-label={label}
     />
@@ -556,39 +681,87 @@ const InputWithIcon = ({ icon, onChange, label, type = "text", ...props }) => (
   </div>
 );
 
-
 // -------------------------------------------
 // Main component
 // -------------------------------------------
 export default function FiltersPanel({
-  search, setSearch,
+  search,
+  setSearch,
   filters: rawFilters = DEFAULT_FILTERS,
   setFilters,
-  view, setView,
-  perPage, setPerPage,
-  loadMode, setLoadMode,
+  view,
+  setView,
+  perPage,
+  setPerPage,
+  loadMode,
+  setLoadMode,
   authorsOptions = [],
   categoriesOptions = [],
   tagsOptions = [],
 }) {
   const { t } = useTranslation();
+  const location = useLocation(); // ✅ pour lire ?tags=
+const lastTagsFromUrlRef = useRef(null);
 
   const [themeKey, setThemeKey] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.THEME)) || "neutral"; }
-    catch { return "neutral"; }
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEYS.THEME)) || "neutral";
+    } catch {
+      return "neutral";
+    }
   });
   const theme = THEME_STYLES[themeKey] || THEME_STYLES.neutral;
   const saveTheme = useCallback((key) => {
     setThemeKey(key);
-    try { localStorage.setItem(STORAGE_KEYS.THEME, JSON.stringify(key)); } catch {}
+    try {
+      localStorage.setItem(STORAGE_KEYS.THEME, JSON.stringify(key));
+    } catch {}
   }, []);
 
-  const SEARCH_HINTS = useMemo(() => [
-    t('filters.searchHints.example1'),
-    t('filters.searchHints.example2'),
-    t('filters.searchHints.example3'),
-    t('filters.searchHints.tip'),
-  ], [t]);
+  const SEARCH_HINTS = useMemo(
+    () => [
+      t("filters.searchHints.example1"),
+      t("filters.searchHints.example2"),
+      t("filters.searchHints.example3"),
+      t("filters.searchHints.tip"),
+    ],
+    [t]
+  );
+const navigate = useNavigate();
+
+  // ✅ Met à jour l'URL en fonction des filtres (ajoute / supprime ?tags=)
+  const syncUrlWithFilters = useCallback(
+    (filtersToSync) => {
+      try {
+        const params = new URLSearchParams(location.search);
+
+        // On ne touche qu'au paramètre "tags"
+        if (filtersToSync?.tags && filtersToSync.tags.length) {
+          // ici on stocke les IDs (tu peux mettre slug si tu préfères)
+          params.set("tags", filtersToSync.tags.join(","));
+        } else {
+          // aucun tag actif → on supprime "tags" de l'URL
+          params.delete("tags");
+        }
+
+        const searchStr = params.toString();
+
+        navigate(
+          {
+            pathname: location.pathname,
+            search: searchStr ? `?${searchStr}` : "",
+          },
+          {
+            replace: true, // on ne pollue pas l'historique
+          }
+        );
+      } catch (e) {
+        // On ne bloque pas l'UI en cas de souci
+        console.error("Failed to sync URL filters", e);
+      }
+    },
+    [location.pathname, location.search, navigate]
+  );
 
   // FETCH options direct si props vides
   const [catLoading, setCatLoading] = useState(false);
@@ -601,13 +774,13 @@ export default function FiltersPanel({
   const [catQuery, setCatQuery] = useState("");
   const [tagQuery, setTagQuery] = useState("");
 
-
   useEffect(() => {
     let aborted = false;
 
     async function loadCats(q) {
       if (categoriesOptions && categoriesOptions.length) return;
-      setCatLoading(true); setCatError(null);
+      setCatLoading(true);
+      setCatError(null);
       try {
         const items = await fetchCategoriesOptions(q ? { q } : undefined);
         if (!aborted) setDynamicCategories(items);
@@ -620,7 +793,8 @@ export default function FiltersPanel({
 
     async function loadTags(q) {
       if (tagsOptions && tagsOptions.length) return;
-      setTagLoading(true); setTagError(null);
+      setTagLoading(true);
+      setTagError(null);
       try {
         const items = await fetchTagsOptions(q ? { q } : undefined);
         if (!aborted) setDynamicTags(items);
@@ -634,118 +808,171 @@ export default function FiltersPanel({
     loadCats();
     loadTags();
 
-    const catDeb = setTimeout(() => { if (!categoriesOptions?.length) loadCats(catQuery); }, 300);
-    const tagDeb = setTimeout(() => { if (!tagsOptions?.length) loadTags(tagQuery); }, 300);
+    const catDeb = setTimeout(() => {
+      if (!categoriesOptions?.length) loadCats(catQuery);
+    }, 300);
+    const tagDeb = setTimeout(() => {
+      if (!tagsOptions?.length) loadTags(tagQuery);
+    }, 300);
 
-    return () => { aborted = true; clearTimeout(catDeb); clearTimeout(tagDeb); };
+    return () => {
+      aborted = true;
+      clearTimeout(catDeb);
+      clearTimeout(tagDeb);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catQuery, tagQuery, categoriesOptions?.length, tagsOptions?.length]);
 
   // safe lists
-  const safeAuthors    = useMemo(() => normalizeOptionsList(authorsOptions, "authors"), [authorsOptions]);
+  const safeAuthors = useMemo(
+    () => normalizeOptionsList(authorsOptions, "authors"),
+    [authorsOptions]
+  );
   const safeCategories = useMemo(() => {
-    const src = (categoriesOptions && categoriesOptions.length) ? categoriesOptions : dynamicCategories;
+    const src =
+      categoriesOptions && categoriesOptions.length
+        ? categoriesOptions
+        : dynamicCategories;
     return normalizeOptionsList(src, "categories");
   }, [categoriesOptions, dynamicCategories]);
-  const safeTags       = useMemo(() => {
-    const src = (tagsOptions && tagsOptions.length) ? tagsOptions : dynamicTags;
+  const safeTags = useMemo(() => {
+    const src =
+      tagsOptions && tagsOptions.length ? tagsOptions : dynamicTags;
     return normalizeOptionsList(src, "tags");
   }, [tagsOptions, dynamicTags]);
 
   // Filters & UI state
   const normalizeFilters = useMemo(() => {
-    const normalizeArrayToStringIds = (v) => Array.isArray(v) ? v.map(x => x == null ? "" : String(x)).filter(Boolean) : [];
-    const normalizeBool  = (v) => !!v;
-    const normalizeStr   = (v) => (typeof v === "string" ? v : "");
-    const normalizeNum   = (v, min, max) => {
+    const normalizeArrayToStringIds = (v) =>
+      Array.isArray(v)
+        ? v
+            .map((x) => (x == null ? "" : String(x)))
+            .filter(Boolean)
+        : [];
+    const normalizeBool = (v) => !!v;
+    const normalizeStr = (v) => (typeof v === "string" ? v : "");
+    const normalizeNum = (v, min, max) => {
       const n = Number(v);
-      return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : min;
+      return Number.isFinite(n)
+        ? Math.max(min, Math.min(max, n))
+        : min;
     };
     return (f = {}) => ({
       categories: normalizeArrayToStringIds(f.categories),
-      tags:       normalizeArrayToStringIds(f.tags),
-      authors:    normalizeArrayToStringIds(f.authors),
+      tags: normalizeArrayToStringIds(f.tags),
+      authors: normalizeArrayToStringIds(f.authors),
       featuredOnly: normalizeBool(f.featuredOnly),
-      stickyOnly:   normalizeBool(f.stickyOnly),
-      unreadOnly:   normalizeBool(f.unreadOnly),
-      dateFrom:   normalizeStr(f.dateFrom),
-      dateTo:     normalizeStr(f.dateTo),
-      ratingMin:  normalizeNum(f.ratingMin, 0, 5),
-      ratingMax:  normalizeNum(f.ratingMax, 0, 5),
+      stickyOnly: normalizeBool(f.stickyOnly),
+      unreadOnly: normalizeBool(f.unreadOnly),
+      dateFrom: normalizeStr(f.dateFrom),
+      dateTo: normalizeStr(f.dateTo),
+      ratingMin: normalizeNum(f.ratingMin, 0, 5),
+      ratingMax: normalizeNum(f.ratingMax, 0, 5),
     });
   }, []);
 
-  const [localFilters, setLocalFilters] = useState(() => normalizeFilters(rawFilters));
-  const [searchQuery, setSearchQuery]   = useState(String(search || ""));
-  const [isExpanded, setIsExpanded]     = useState(false);
-  const [activeMenu, setActiveMenu]     = useState(null);
+  const [localFilters, setLocalFilters] = useState(() =>
+    normalizeFilters(rawFilters)
+  );
+  const [searchQuery, setSearchQuery] = useState(String(search || ""));
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [activeMenu, setActiveMenu] = useState(null);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveModalName, setSaveModalName] = useState("");
-
+  const initializedFromUrlRef = useRef(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showSearchHistory, setShowSearchHistory] = useState(false);
   const [isHistoryPinned, setIsHistoryPinned] = useState(false);
 
-  // drag & drop mode (page / infinite) pour que ce soit plus "vivant"
   const [dragMode, setDragMode] = useState(null);
 
-  // ✅ Tablet utilise le modal mobile aussi
-  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 1024px)").matches);
+  const [isMobile, setIsMobile] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia &&
+      window.matchMedia("(max-width: 1024px)").matches
+  );
   const [showMobileModal, setShowMobileModal] = useState(false);
   const [prefersReduced, setPrefersReduced] = useState(false);
+
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
     const update = () => setPrefersReduced(!!mq.matches);
     update();
-    mq.addEventListener ? mq.addEventListener("change", update) : mq.addListener(update);
-    return () => mq.removeEventListener ? mq.removeEventListener("change", update) : mq.removeListener(update);
+    mq.addEventListener
+      ? mq.addEventListener("change", update)
+      : mq.addListener(update);
+    return () =>
+      mq.removeEventListener
+        ? mq.removeEventListener("change", update)
+        : mq.removeListener(update);
   }, []);
-
 
   // 🎨 Global card color toggle
   const [cardColorEnabled, setCardColorEnabled] = useState(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.CARD_COLOR_ENABLED);
       return raw == null ? true : JSON.parse(raw);
-    } catch { return true; }
+    } catch {
+      return true;
+    }
   });
   const toggleCardColor = useCallback(() => {
     const next = !cardColorEnabled;
     setCardColorEnabled(next);
-    try { localStorage.setItem(STORAGE_KEYS.CARD_COLOR_ENABLED, JSON.stringify(next)); } catch {}
-    window.dispatchEvent(new CustomEvent("gridcard:colorpref", { detail: { enabled: next } }));
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.CARD_COLOR_ENABLED,
+        JSON.stringify(next)
+      );
+    } catch {}
+    window.dispatchEvent(
+      new CustomEvent("gridcard:colorpref", {
+        detail: { enabled: next },
+      })
+    );
   }, [cardColorEnabled]);
 
   const dropdownRef = useRef(null);
   const searchWrapperRef = useRef(null);
   const pillsScrollerRef = useRef(null);
 
-  const { savedFilters, saveFilter, deleteFilter } = useSavedFilters();
-  const { history: searchHistory, addToHistory, clearHistory } = useSearchHistory();
-    // NEW – suggestions de recherche
+  const { savedFilters, saveFilter, deleteFilter } =
+    useSavedFilters();
+  const {
+    history: searchHistory,
+    addToHistory,
+    clearHistory,
+  } = useSearchHistory();
+
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const suggestDebounceRef = useRef(null);
 
   const { show: showToast, toastElements } = useToast();
-  const { wrapperRef, contentRef, height } = useAutoHeight(isExpanded && !isMobile, [activeMenu, localFilters, savedFilters, cardColorEnabled, themeKey]);
-
-
-const normalizedQueryForFilter = useMemo(
-  () => normalizeSearchText(searchQuery).toLowerCase(),
-  [searchQuery]
-);
-
-const filteredHistory = useMemo(() => {
-  if (!normalizedQueryForFilter) return searchHistory;
-  return searchHistory.filter((h) =>
-    String(h.term || "").toLowerCase().includes(normalizedQueryForFilter)
+  const { wrapperRef, contentRef, height } = useAutoHeight(
+    isExpanded && !isMobile,
+    [activeMenu, localFilters, savedFilters, cardColorEnabled, themeKey]
   );
-}, [searchHistory, normalizedQueryForFilter]);
-  const hasHistoryMatches = filteredHistory.length > 0; // NEW
-  const hasSuggestions = suggestions.length > 0;        // NEW
-  // Ghost text / auto-complétion inline
+
+  const normalizedQueryForFilter = useMemo(
+    () => normalizeSearchText(searchQuery).toLowerCase(),
+    [searchQuery]
+  );
+
+  const filteredHistory = useMemo(() => {
+    if (!normalizedQueryForFilter) return searchHistory;
+    return searchHistory.filter((h) =>
+      String(h.term || "")
+        .toLowerCase()
+        .includes(normalizedQueryForFilter)
+    );
+  }, [searchHistory, normalizedQueryForFilter]);
+
+  const hasHistoryMatches = filteredHistory.length > 0;
+  const hasSuggestions = suggestions.length > 0;
+
   const ghostText = useMemo(() => {
     const normalized = normalizeSearchText(searchQuery);
     if (!normalized) return "";
@@ -763,24 +990,27 @@ const filteredHistory = useMemo(() => {
     const full = String(match.term || match.label || "");
     if (full.length <= normalized.length) return "";
 
-    // On renvoie le texte complet suggéré (search + complétion)
     return normalized + full.slice(normalized.length);
   }, [searchQuery, suggestions]);
-
 
   // Responsive listener
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 1024px)");
     const handler = (e) => setIsMobile(e.matches);
-    mq.addEventListener ? mq.addEventListener("change", handler) : mq.addListener(handler);
-    return () => mq.removeEventListener ? mq.removeEventListener("change", handler) : mq.removeListener(handler);
+    mq.addEventListener
+      ? mq.addEventListener("change", handler)
+      : mq.addListener(handler);
+    return () =>
+      mq.removeEventListener
+        ? mq.removeEventListener("change", handler)
+        : mq.removeListener(handler);
   }, []);
 
   // Empêche le scroll du body quand le modal mobile est ouvert
   useEffect(() => {
     if (!showMobileModal) return;
     const prevBodyOverflow = document.body.style.overflow;
-    const prevDocOverflow  = document.documentElement.style.overflow;
+    const prevDocOverflow = document.documentElement.style.overflow;
 
     document.body.style.overflow = "hidden";
     document.documentElement.style.overflow = "";
@@ -788,39 +1018,86 @@ const filteredHistory = useMemo(() => {
     return () => {
       document.body.style.overflow = prevBodyOverflow;
       document.documentElement.style.overflow = prevDocOverflow;
-      try { window.scrollTo(window.scrollX, window.scrollY); } catch {}
+      try {
+        window.scrollTo(window.scrollX, window.scrollY);
+      } catch {}
     };
   }, [showMobileModal]);
+// 🔄 Sync depuis l'URL : applique les ?tags= à chaque fois qu'ils changent
+useEffect(() => {
+  const params = new URLSearchParams(location.search);
+  const tagsParam = params.get("tags") || "";
+
+  // ✅ Si le paramètre tags dans l'URL n'a pas changé → on ne touche à rien
+  if (tagsParam === lastTagsFromUrlRef.current) {
+    return;
+  }
+
+  // On mémorise la dernière valeur vue dans l'URL
+  lastTagsFromUrlRef.current = tagsParam;
+
+  const urlTags = tagsParam
+    ? tagsParam
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean)
+    : [];
+
+  // On met à jour uniquement le champ "tags" des filtres,
+  // on laisse tous les autres filtres tranquilles
+  setLocalFilters((prev) => {
+    const updated = { ...prev, tags: urlTags };
+    setFilters(updated); // on pousse vers le parent aussi
+    return updated;
+  });
+}, [location.search, setFilters]);
+
+
 
 
   // Sync rawFilters -> localFilters
   useEffect(() => {
     const cleaned = normalizeFilters(rawFilters);
-    if (!shallowFiltersEqual(cleaned, localFilters)) setLocalFilters(cleaned);
+    if (!shallowFiltersEqual(cleaned, localFilters))
+      setLocalFilters(cleaned);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawFilters, normalizeFilters]);
 
   // Sync search prop -> local search input
   useEffect(() => {
-    if (String(search || "") !== searchQuery) setSearchQuery(String(search || ""));
+    if (String(search || "") !== searchQuery)
+      setSearchQuery(String(search || ""));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  const handleOutsideClick = useCallback((e) => {
-    if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setActiveMenu(null);
-    if (searchWrapperRef.current && !searchWrapperRef.current.contains(e.target) && !isHistoryPinned) {
-      setShowSearchHistory(false);
-    }
-  }, [isHistoryPinned]);
+  const handleOutsideClick = useCallback(
+    (e) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target)
+      )
+        setActiveMenu(null);
+      if (
+        searchWrapperRef.current &&
+        !searchWrapperRef.current.contains(e.target) &&
+        !isHistoryPinned
+      ) {
+        setShowSearchHistory(false);
+      }
+    },
+    [isHistoryPinned]
+  );
+
   useEffect(() => {
     document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
+    return () =>
+      document.removeEventListener("mousedown", handleOutsideClick);
   }, [handleOutsideClick]);
-  // NEW – fetch suggestions basées sur la saisie
+
+  // Suggestions basées sur la saisie
   useEffect(() => {
     const normalized = normalizeSearchText(searchQuery);
 
-    // Si la recherche est vide après normalisation → on nettoie les suggestions
     if (!normalized) {
       if (suggestDebounceRef.current) {
         clearTimeout(suggestDebounceRef.current);
@@ -866,85 +1143,136 @@ const filteredHistory = useMemo(() => {
         setIsHistoryPinned(false);
         if (isMobile && showMobileModal) setShowMobileModal(false);
       }
-      if (ev.key === "/" && !ev.metaKey && !ev.ctrlKey && !ev.altKey) {
+      if (
+        ev.key === "/" &&
+        !ev.metaKey &&
+        !ev.ctrlKey &&
+        !ev.altKey
+      ) {
         const ae = document.activeElement;
-        const typing = ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.contentEditable === "true");
+        const typing =
+          ae &&
+          (ae.tagName === "INPUT" ||
+            ae.tagName === "TEXTAREA" ||
+            ae.contentEditable === "true");
         if (!typing) {
           ev.preventDefault();
-          searchWrapperRef.current?.querySelector("input")?.focus();
+          searchWrapperRef.current
+            ?.querySelector("input")
+            ?.focus();
         }
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [showSaveModal, activeMenu, isExpanded, isMobile, showMobileModal]);
+  }, [
+    showSaveModal,
+    activeMenu,
+    isExpanded,
+    isMobile,
+    showMobileModal,
+  ]);
 
-  const handleApplyFilters = useCallback(() => {
+    const handleApplyFilters = useCallback(() => {
     const cleaned = normalizeFilters(localFilters);
     setFilters(cleaned);
+
+    // ✅ on synchronise l'URL avec les filtres (tags → ?tags=..., ou suppression)
+    syncUrlWithFilters(cleaned);
+
     if (isMobile) setShowMobileModal(false);
     else setActiveMenu(null);
-    showToast(t('filters.toasts.filtersApplied'), "success");
-  }, [localFilters, setFilters, normalizeFilters, showToast, t, isMobile]);
+    showToast(t("filters.toasts.filtersApplied"), "success");
+  }, [
+    localFilters,
+    setFilters,
+    normalizeFilters,
+    showToast,
+    t,
+    isMobile,
+    syncUrlWithFilters,
+  ]);
+
 
   const handleResetFilters = useCallback(() => {
     const empty = normalizeFilters(DEFAULT_FILTERS);
     setLocalFilters(empty);
     setFilters(empty);
+
+    // ✅ on nettoie aussi l'URL (tags supprimés)
+    syncUrlWithFilters(empty);
+
     setActiveMenu(null);
     if (isMobile) setShowMobileModal(false);
-    showToast(t('filters.toasts.filtersReset'), "success");
-  }, [setFilters, normalizeFilters, showToast, t, isMobile]);
+    showToast(t("filters.toasts.filtersReset"), "success");
+  }, [setFilters, normalizeFilters, showToast, t, isMobile, syncUrlWithFilters]);
 
-const handleSearch = useCallback(() => {
-  const normalized = normalizeSearchText(searchQuery); // ✅ multi-espaces → 1 espace + trim
 
-  if (!normalized) {
-    setSearch("");
-    setSuggestions([]);             // NEW : on vide aussi les suggestions
+  const handleSearch = useCallback(() => {
+    const normalized = normalizeSearchText(searchQuery);
+
+    if (!normalized) {
+      setSearch("");
+      setSuggestions([]);
+      setShowSearchHistory(false);
+      setIsHistoryPinned(false);
+      return;
+    }
+
+    setSearchQuery(normalized);
+    setSearch(normalized);
+    addToHistory(normalized);
+
     setShowSearchHistory(false);
     setIsHistoryPinned(false);
-    return;
-  }
-
-  setSearchQuery(normalized);
-  setSearch(normalized);
-  addToHistory(normalized);
-
-  setShowSearchHistory(false);
-  setIsHistoryPinned(false);
-}, [searchQuery, setSearch, addToHistory]);
-
-
+  }, [searchQuery, setSearch, addToHistory]);
 
   const generateSuggestedName = useCallback(() => {
     const parts = [];
-    if (localFilters.featuredOnly) parts.push(t('filters.suggestedNames.featured'));
-    if (localFilters.stickyOnly) parts.push(t('filters.suggestedNames.pinned'));
-    if (localFilters.unreadOnly) parts.push(t('filters.suggestedNames.unread'));
-    if (localFilters.dateFrom || localFilters.dateTo) parts.push(t('filters.suggestedNames.period'));
-    if (localFilters.ratingMin > 0 || localFilters.ratingMax < 5) parts.push(t('filters.suggestedNames.rating'));
-    const base = parts.length ? parts.join(' • ') : t('filters.suggestedNames.custom');
+    if (localFilters.featuredOnly)
+      parts.push(t("filters.suggestedNames.featured"));
+    if (localFilters.stickyOnly)
+      parts.push(t("filters.suggestedNames.pinned"));
+    if (localFilters.unreadOnly)
+      parts.push(t("filters.suggestedNames.unread"));
+    if (localFilters.dateFrom || localFilters.dateTo)
+      parts.push(t("filters.suggestedNames.period"));
+    if (
+      localFilters.ratingMin > 0 ||
+      localFilters.ratingMax < 5
+    )
+      parts.push(t("filters.suggestedNames.rating"));
+    const base = parts.length
+      ? parts.join(" • ")
+      : t("filters.suggestedNames.custom");
     return base.length > 32 ? base.slice(0, 32) + "…" : base;
   }, [localFilters, t]);
 
-  const handleSaveFilter = useCallback((name) => {
-    const trimmed = String(name || "").trim();
-    if (!trimmed) return false;
-    const ok = saveFilter(trimmed, normalizeFilters(localFilters));
-    showToast(
-      ok ? t('filters.toasts.filterSaved', { name: trimmed }) : t('filters.toasts.saveError'),
-      ok ? "success" : "error"
-    );
-    return ok;
-  }, [localFilters, saveFilter, normalizeFilters, showToast, t]);
+  const handleSaveFilter = useCallback(
+    (name) => {
+      const trimmed = String(name || "").trim();
+      if (!trimmed) return false;
+      const ok = saveFilter(trimmed, normalizeFilters(localFilters));
+      showToast(
+        ok
+          ? t("filters.toasts.filterSaved", { name: trimmed })
+          : t("filters.toasts.saveError"),
+        ok ? "success" : "error"
+      );
+      return ok;
+    },
+    [localFilters, saveFilter, normalizeFilters, showToast, t]
+  );
 
   const activeFiltersCount = useMemo(() => {
     const base = normalizeFilters(DEFAULT_FILTERS);
     let count = 0;
-    if (!arraysEqualShallowStrings(localFilters.categories, base.categories)) count += localFilters.categories.length;
-    if (!arraysEqualShallowStrings(localFilters.tags, base.tags)) count += localFilters.tags.length;
-    if (!arraysEqualShallowStrings(localFilters.authors, base.authors)) count += localFilters.authors.length;
+    if (!arraysEqualShallowStrings(localFilters.categories, base.categories))
+      count += localFilters.categories.length;
+    if (!arraysEqualShallowStrings(localFilters.tags, base.tags))
+      count += localFilters.tags.length;
+    if (!arraysEqualShallowStrings(localFilters.authors, base.authors))
+      count += localFilters.authors.length;
     if (localFilters.featuredOnly) count += 1;
     if (localFilters.stickyOnly) count += 1;
     if (localFilters.unreadOnly) count += 1;
@@ -954,51 +1282,120 @@ const handleSearch = useCallback(() => {
     return count;
   }, [localFilters, normalizeFilters]);
 
-  const renderOptionChips = (options = [], type) => {
-    // Empty state illustré quand aucune option
-    if (!options || options.length === 0) {
-      return (
-        <div className="text-center p-8">
-          <div className="mx-auto mb-2 h-16 w-16 rounded-full bg-slate-100" aria-hidden="true" />
-          <p className="text-sm text-slate-500">{t('filters.noOptions', { type: t(`filters.types.${type}`) })}</p>
-        </div>
-      );
-    }
+const renderOptionChips = (options = [], type) => {
+  if (!options || options.length === 0) {
     return (
-      <div className="flex flex-wrap gap-2">
-        {options.map((opt, index) => {
-          const id = String(opt.id);
-          const label = opt.name ?? `#${id}`;
-          const isActive = (localFilters[type] || []).some((v) => String(v) === id);
-          return (
-            <Chip
-              key={id}
-              index={index}
-              active={isActive}
-              onClick={() => setLocalFilters(prev => {
-                const existing = Array.isArray(prev[type]) ? prev[type].map(x => String(x)) : [];
-                if (existing.includes(id)) {
-                  return { ...prev, [type]: existing.filter(x => x !== id) };
-                } else {
-                  return { ...prev, [type]: [...existing, id] };
-                }
-              })}
-            >
-              <span className="inline-flex items-center gap-2">
-                {!isActive && <span className="h-2 w-2 rounded-full bg-slate-300" aria-hidden="true" />}
-                {isActive && <span className="h-2 w-2 rounded-full bg-blue-200" aria-hidden="true" />}
-                {label}
-              </span>
-            </Chip>
-          );
-        })}
+      <div className="text-center p-8">
+        <div
+          className="mx-auto mb-2 h-16 w-16 rounded-full bg-slate-100"
+          aria-hidden="true"
+        />
+        <p className="text-sm text-slate-500">
+          {t("filters.noOptions", {
+            type: t(`filters.types.${type}`),
+          })}
+        </p>
       </div>
     );
-  };
+  }
 
-  const animatedHint = useTypewriter(SEARCH_HINTS, !searchQuery.length);
-  const animatedHintText = animatedHint || t('filters.search.placeholder');
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((opt, index) => {
+        const id = String(opt.id);
+        const slug = opt.slug ? String(opt.slug) : null;
+        const label = opt.name ?? `#${id}`;
 
+        // 🔹 helper pour savoir si une valeur de filtre "appartient" à cette option
+        const matchesOption = (val) => {
+          if (val == null) return false;
+          const v = String(val).toLowerCase();
+          const idLc = id.toLowerCase();
+          const labelLc = String(label).toLowerCase();
+          const slugLc = slug ? slug.toLowerCase() : null;
+
+          if (v === idLc) return true;
+          if (slugLc && v === slugLc) return true;
+          if (v === labelLc) return true;
+
+          // tentative de correspondance avec un slug dérivé du label
+          try {
+            const pseudoSlug = labelLc
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .replace(/\s+/g, "-")
+              .replace(/[^a-z0-9-]/g, "");
+            if (v === pseudoSlug) return true;
+          } catch {
+            // pas grave si normalize n'est pas supporté
+          }
+
+          return false;
+        };
+
+        // 🔹 Actif si un des filtres matche cette option (id / slug / label / slugifié)
+        const isActive = (localFilters[type] || []).some(matchesOption);
+
+        return (
+          <Chip
+            key={id}
+            index={index}
+            active={isActive}
+            onClick={() =>
+              setLocalFilters((prev) => {
+                const existing = Array.isArray(prev[type])
+                  ? prev[type].map((x) => String(x))
+                  : [];
+
+                const alreadyActive = existing.some(matchesOption);
+
+                if (alreadyActive) {
+                  // 🔹 On retire toutes les valeurs qui matchent cette option (id, slug, label, etc.)
+                  return {
+                    ...prev,
+                    [type]: existing.filter((v) => !matchesOption(v)),
+                  };
+                }
+
+                // 🔹 Sinon, on ajoute l'ID (simple, stable)
+                return {
+                  ...prev,
+                  [type]: [...existing, id],
+                };
+              })
+            }
+          >
+            <span className="inline-flex items-center gap-2">
+              {!isActive && (
+                <span
+                  className="h-2 w-2 rounded-full bg-slate-300"
+                  aria-hidden="true"
+                />
+              )}
+              {isActive && (
+                <span
+                  className="h-2 w-2 rounded-full bg-blue-200"
+                  aria-hidden="true"
+                />
+              )}
+              {label}
+            </span>
+          </Chip>
+        );
+      })}
+    </div>
+  );
+};
+
+
+  const animatedHint = useTypewriter(
+    SEARCH_HINTS,
+    !searchQuery.length
+  );
+  const animatedHintText =
+    animatedHint || t("filters.search.placeholder");
+
+ 
   // --- UI ---
   return (
     <div
@@ -1015,7 +1412,6 @@ const handleSearch = useCallback(() => {
             ref={searchWrapperRef}
             className={cls(
               "relative flex-1 min-w-[220px] max-w-[640px] transition-all duration-200 z-[70]",
-              // Glass plus visible sur fond blanc
               "rounded-2xl border border-slate-200/70 bg-slate-50/80 backdrop-blur-xl",
               isSearchFocused
                 ? "scale-[1.01] shadow-[0_12px_35px_rgba(15,23,42,0.22)]"
@@ -1026,22 +1422,25 @@ const handleSearch = useCallback(() => {
               type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              onFocus={() => { setIsSearchFocused(true); setShowSearchHistory(true); }}
+              onKeyDown={(e) =>
+                e.key === "Enter" && handleSearch()
+              }
+              onFocus={() => {
+                setIsSearchFocused(true);
+                setShowSearchHistory(true);
+              }}
               onBlur={(e) => {
-                  setIsSearchFocused(false);
-
-                  // e.relatedTarget = l’élément qui va recevoir le focus
-                  const next = e.relatedTarget;
-                  if (
-                    !isHistoryPinned &&
-                    (!next || !searchWrapperRef.current?.contains(next))
-                  ) {
-                    setShowSearchHistory(false);
-                  }
-                }}
-
-              placeholder={isMobile ? t('filters.search.placeholder') : ""}
+                setIsSearchFocused(false);
+                const next = e.relatedTarget;
+                if (
+                  !isHistoryPinned &&
+                  (!next ||
+                    !searchWrapperRef.current?.contains(next))
+                ) {
+                  setShowSearchHistory(false);
+                }
+              }}
+              placeholder={t("filters.search.placeholder")}
               className={cls(
                 "w-full pl-10 pr-20 h-10 rounded-2xl border-0 bg-transparent text-slate-900",
                 "placeholder:text-slate-400",
@@ -1052,14 +1451,12 @@ const handleSearch = useCallback(() => {
                   ? "shadow-[inset_0_0_0_1px_rgba(59,130,246,.35)]"
                   : "shadow-none"
               )}
-              aria-label={t('filters.search.ariaLabel')}
+              aria-label={t("filters.search.ariaLabel")}
               autoComplete="off"
             />
-                        {/* Ghost suggestion (auto-complétion inline) */}
             {!isMobile && isSearchFocused && searchQuery && ghostText && (
               <div className="pointer-events-none absolute left-10 right-20 top-1/2 -translate-y-1/2 text-slate-400 text-[13px] select-none">
                 <span>
-                  {/* On “réécrit” ce que l’utilisateur a tapé en invisible pour aligner la complétion */}
                   <span className="invisible">{searchQuery}</span>
                   <span className="opacity-60">
                     {ghostText.slice(searchQuery.length)}
@@ -1067,7 +1464,6 @@ const handleSearch = useCallback(() => {
                 </span>
               </div>
             )}
-
 
             {!isMobile && !searchQuery.length && (
               <div className="pointer-events-none absolute left-10 right-20 top-1/2 -translate-y-1/2 text-slate-500 text-[13px] select-none">
@@ -1079,7 +1475,7 @@ const handleSearch = useCallback(() => {
                     )}
                   </span>
                   <span className="hidden md:inline text-[11px] px-2 py-0.5 rounded-full bg-slate-50/90 border border-slate-200/80 backdrop-blur-sm">
-                    {t('filters.search.tip')}
+                    {t("filters.search.tip")}
                   </span>
                 </span>
               </div>
@@ -1088,7 +1484,9 @@ const handleSearch = useCallback(() => {
             <FaSearch
               className={cls(
                 "absolute left-3 top-1/2 -translate-y-1/2 transition-all duration-200",
-                isSearchFocused ? `${theme.accentIcon} translate-x-[1px] scale-110` : "text-slate-400 translate-x-0 scale-100"
+                isSearchFocused
+                  ? `${theme.accentIcon} translate-x-[1px] scale-110`
+                  : "text-slate-400 translate-x-0 scale-100"
               )}
               aria-hidden="true"
             />
@@ -1096,8 +1494,15 @@ const handleSearch = useCallback(() => {
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => { setIsHistoryPinned((p) => !p); setShowSearchHistory((p) => !p); }}
-                title={isHistoryPinned ? t('filters.search.hideHistory') : t('filters.search.showHistory')}
+                onClick={() => {
+                  setIsHistoryPinned((p) => !p);
+                  setShowSearchHistory((p) => !p);
+                }}
+                title={
+                  isHistoryPinned
+                    ? t("filters.search.hideHistory")
+                    : t("filters.search.showHistory")
+                }
                 className={cls(
                   "h-8 w-8 rounded-xl border inline-flex items-center justify-center transition-all duration-200",
                   "active:scale-95 focus:outline-none",
@@ -1115,17 +1520,16 @@ const handleSearch = useCallback(() => {
                 <button
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => {
-                      setSearchQuery("");
-                      setSuggestions([]);      // NEW – on vide aussi les suggestions
-                    }}
-
+                  onClick={() => {
+                    setSearchQuery("");
+                    setSuggestions([]);
+                  }}
                   className={cls(
                     "h-8 w-8 rounded-xl border inline-flex items-center justify-center transition-all duration-200 active:scale-95 focus:outline-none",
                     theme.primaryRing,
                     "bg-slate-50/60 text-slate-600 border-slate-200/80 hover:bg-slate-50/90 hover:text-slate-800"
                   )}
-                  title={t('filters.search.clear')}
+                  title={t("filters.search.clear")}
                 >
                   <FaTimes />
                 </button>
@@ -1141,119 +1545,145 @@ const handleSearch = useCallback(() => {
                     theme.primaryRing,
                     "bg-blue-600/95 hover:bg-blue-700 shadow-[0_8px_24px_rgba(37,99,235,0.45)] hover:-translate-y-[1px]"
                   )}
-                  title={t('filters.search.execute')}
+                  title={t("filters.search.execute")}
                 >
                   <FaRocket />
                 </button>
               )}
             </div>
 
-          {showSearchHistory && (hasHistoryMatches || hasSuggestions) && (
-        <div className="absolute left-0 right-0 top-[44px] transition-all duration-200 z-[80] opacity-100 translate-y-0 pointer-events-auto animate-[dropdown-in_.14s_ease-out]">
-          <div className="bg-slate-50/95 backdrop-blur-xl border border-slate-200/80 rounded-xl shadow-2xl overflow-hidden">
-            {hasHistoryMatches && (
-              <>
-                <div className="px-3 py-2 text-xs text-slate-600 border-b border-slate-100/80 flex items-center justify-between">
-                  <span className="inline-flex items-center gap-2">
-                    <FaHistory aria-hidden="true" /> {t('filters.search.recentSearches')}
-                  </span>
-                  <button
-                    onClick={clearHistory}
-                    className="text-red-500 hover:text-red-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-200 rounded"
-                    title={t('filters.search.clearHistory')}
-                  >
-                    <FaTrash />
-                  </button>
-                </div>
-                <div className="max-h-40 overflow-y-auto">
-                  {filteredHistory.map((h, index) => (
-                    <button
-                      key={h.id}
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => {
-                        const normalized = normalizeSearchText(h.term);
-                        setSearchQuery(normalized);
-                        setTimeout(() => {
-                          setSearch(normalized);
-                          addToHistory(normalized);
-                          setShowSearchHistory(false);
-                          setIsHistoryPinned(false);
-                        }, 0);
-                      }}
-                      className={cls(
-                        "w-full text-left px-3 py-2 text-sm text-slate-700 flex items-center gap-2 transition-all duration-150",
-                        "hover:bg-slate-50/80 focus-visible:outline-none focus-visible:bg-slate-100 active:scale-[0.98]"
-                      )}
-                      style={{
-                        transitionDelay: `${Math.min(
-                          index,
-                          6
-                        ) * ANIMATION_DELAYS.HISTORY_STAGGER}ms`,
-                      }}
-                    >
-                      <FaSearch className="text-slate-400 text-xs" aria-hidden="true" />
-                      <span className="flex-1 truncate">{h.term}</span>
-                      <span className="text-[11px] text-slate-400">
-                        {new Date(h.timestamp).toLocaleDateString()}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {hasSuggestions && (
-              <>
-                <div className={cls(
-                  "px-3 pt-2 pb-1 text-xs text-slate-600 flex items-center justify-between",
-                  hasHistoryMatches ? "border-t border-slate-100/80" : ""
-                )}>
-                  <span className="inline-flex items-center gap-2">
-                    <FaSearch aria-hidden="true" />
-                    {t('filters.search.suggestions') || "Suggestions de recherche"}
-                  </span>
-                  {loadingSuggestions && (
-                    <span className="text-[11px] text-slate-400">
-                      {t('filters.search.loadingSuggestions') || "mise à jour…"}
-                    </span>
-                  )}
-                </div>
-                <div className="max-h-40 overflow-y-auto">
-                  {suggestions.map((sug, index) => {
-                    const raw = sug.term || sug.label || "";
-                    return (
-                      <button
-                        key={`${raw}-${index}`}
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => {
-                          const normalized = normalizeSearchText(raw);
-                          if (!normalized) return;
-                          setSearchQuery(normalized);
-                          setTimeout(() => {
-                            setSearch(normalized);
-                            addToHistory(normalized);
-                            setShowSearchHistory(false);
-                            setIsHistoryPinned(false);
-                          }, 0);
-                        }}
-                        className="w-full text-left px-3 py-2 text-sm text-slate-700 flex items-center gap-2 hover:bg-slate-50/80 active:scale-[0.98] transition-all"
-                      >
-                        <FaSearch className="text-slate-400 text-xs" aria-hidden="true" />
-                        <span className="flex-1 truncate">
-                          {sug.label || sug.term}
+            {showSearchHistory && (hasHistoryMatches || hasSuggestions) && (
+              <div className="absolute left-0 right-0 top-[44px] transition-all duration-200 z-[80] opacity-100 translate-y-0 pointer-events-auto animate-[dropdown-in_.14s_ease-out]">
+                <div className="bg-slate-50/95 backdrop-blur-xl border border-slate-200/80 rounded-xl shadow-2xl overflow-hidden">
+                  {hasHistoryMatches && (
+                    <>
+                      <div className="px-3 py-2 text-xs text-slate-600 border-b border-slate-100/80 flex items-center justify-between">
+                        <span className="inline-flex items-center gap-2">
+                          <FaHistory aria-hidden="true" />{" "}
+                          {t("filters.search.recentSearches")}
                         </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+                        <button
+                          onClick={clearHistory}
+                          className="text-red-500 hover:text-red-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-200 rounded"
+                          title={t(
+                            "filters.search.clearHistory"
+                          )}
+                        >
+                          <FaTrash />
+                        </button>
+                      </div>
+                      <div className="max-h-40 overflow-y-auto">
+                        {filteredHistory.map((h, index) => (
+                          <button
+                            key={h.id}
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              const normalized =
+                                normalizeSearchText(h.term);
+                              setSearchQuery(normalized);
+                              setTimeout(() => {
+                                setSearch(normalized);
+                                addToHistory(normalized);
+                                setShowSearchHistory(false);
+                                setIsHistoryPinned(false);
+                              }, 0);
+                            }}
+                            className={cls(
+                              "w-full text-left px-3 py-2 text-sm text-slate-700 flex items-center gap-2 transition-all duration-150",
+                              "hover:bg-slate-50/80 focus-visible:outline-none focus-visible:bg-slate-100 active:scale-[0.98]"
+                            )}
+                            style={{
+                              transitionDelay: `${
+                                Math.min(
+                                  index,
+                                  6
+                                ) * ANIMATION_DELAYS.HISTORY_STAGGER
+                              }ms`,
+                            }}
+                          >
+                            <FaSearch
+                              className="text-slate-400 text-xs"
+                              aria-hidden="true"
+                            />
+                            <span className="flex-1 truncate">
+                              {h.term}
+                            </span>
+                            <span className="text-[11px] text-slate-400">
+                              {new Date(
+                                h.timestamp
+                              ).toLocaleDateString()}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
                   )}
 
+                  {hasSuggestions && (
+                    <>
+                      <div
+                        className={cls(
+                          "px-3 pt-2 pb-1 text-xs text-slate-600 flex items-center justify-between",
+                          hasHistoryMatches
+                            ? "border-t border-slate-100/80"
+                            : ""
+                        )}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <FaSearch aria-hidden="true" />
+                          {t("filters.search.suggestions") ||
+                            "Suggestions de recherche"}
+                        </span>
+                        {loadingSuggestions && (
+                          <span className="text-[11px] text-slate-400">
+                            {t(
+                              "filters.search.loadingSuggestions"
+                            ) || "mise à jour…"}
+                          </span>
+                        )}
+                      </div>
+                      <div className="max-h-40 overflow-y-auto">
+                        {suggestions.map((sug, index) => {
+                          const raw =
+                            sug.term || sug.label || "";
+                          return (
+                            <button
+                              key={`${raw}-${index}`}
+                              type="button"
+                              onMouseDown={(e) =>
+                                e.preventDefault()
+                              }
+                              onClick={() => {
+                                const normalized =
+                                  normalizeSearchText(raw);
+                                if (!normalized) return;
+                                setSearchQuery(normalized);
+                                setTimeout(() => {
+                                  setSearch(normalized);
+                                  addToHistory(normalized);
+                                  setShowSearchHistory(false);
+                                  setIsHistoryPinned(false);
+                                }, 0);
+                              }}
+                              className="w-full text-left px-3 py-2 text-sm text-slate-700 flex items-center gap-2 hover:bg-slate-50/80 active:scale-[0.98] transition-all"
+                            >
+                              <FaSearch
+                                className="text-slate-400 text-xs"
+                                aria-hidden="true"
+                              />
+                              <span className="flex-1 truncate">
+                                {sug.label || sug.term}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
 
             {showSearchHistory &&
               !hasHistoryMatches &&
@@ -1261,17 +1691,15 @@ const handleSearch = useCallback(() => {
               searchHistory.length > 0 && (
                 <div className="absolute left-0 right-0 top-[44px] z-[80]">
                   <div className="bg-slate-50/95 border border-slate-200/80 rounded-xl shadow-2xl px-3 py-2 text-xs text-slate-500">
-                    {t('filters.search.noSuggestion') ||
+                    {t("filters.search.noSuggestion") ||
                       "Aucune suggestion ne correspond à votre recherche."}
                   </div>
                 </div>
               )}
-
           </div>
 
           {/* Right controls */}
           <div className="flex items-center gap-2 ml-3">
-            {/* Thème (desktop – toujours caché pour l’instant) */}
             <label className="relative hidden md:hidden">
               <span className="sr-only">Theme</span>
               <select
@@ -1290,14 +1718,21 @@ const handleSearch = useCallback(() => {
               </select>
             </label>
 
-            {/* Vue grid / list */}
             <div
               className="hidden sm:flex bg-slate-50/80 backdrop-blur-md rounded-2xl border border-slate-200/80 p-1 shadow-sm"
               role="tablist"
             >
               {[
-                { key: "grid", icon: FaThLarge, label: t('filters.view.grid') },
-                { key: "list", icon: FaTable,   label: t('filters.view.list') },
+                {
+                  key: "grid",
+                  icon: FaThLarge,
+                  label: t("filters.view.grid"),
+                },
+                {
+                  key: "list",
+                  icon: FaTable,
+                  label: t("filters.view.list"),
+                },
               ].map(({ key, icon: Icon, label }) => {
                 const active = view === key;
                 return (
@@ -1323,35 +1758,43 @@ const handleSearch = useCallback(() => {
               })}
             </div>
 
-            {/* Per page */}
             <label className="relative hidden sm:block">
-              <span className="sr-only">{t('filters.itemsPerPage')}</span>
+              <span className="sr-only">
+                {t("filters.itemsPerPage")}
+              </span>
               <select
                 value={perPage}
-                onChange={(e) => setPerPage(Number(e.target.value))}
+                onChange={(e) =>
+                  setPerPage(Number(e.target.value))
+                }
                 className={cls(
                   "h-10 px-3 rounded-xl border bg-slate-50/80 backdrop-blur-md text-sm focus:outline-none cursor-pointer",
                   "border-slate-200/80",
                   theme.primaryRing
                 )}
-                title={t('filters.itemsPerPage')}
+                title={t("filters.itemsPerPage")}
               >
                 {[12, 24, 48, 96].map((count) => (
-                  <option key={count} value={count}>{count}/page</option>
+                  <option key={count} value={count}>
+                    {count}/page
+                  </option>
                 ))}
               </select>
             </label>
 
-            {/* Mode de chargement : pagination classique / scroll infini */}
+            {/* LoadMode toggle (page / infinite) */}
             <div
               className={cls(
                 "hidden sm:flex relative items-center rounded-2xl border border-slate-200/80",
                 "bg-slate-50/80 backdrop-blur-md p-1 shadow-sm",
                 theme.primaryRing,
-                dragMode && "ring-2 ring-blue-200 shadow-[0_0_0_1px_rgba(191,219,254,0.9),0_14px_40px_rgba(15,23,42,0.28)]"
+                dragMode &&
+                  "ring-2 ring-blue-200 shadow-[0_0_0_1px_rgba(191,219,254,0.9),0_14px_40px_rgba(15,23,42,0.28)]"
               )}
               role="tablist"
-              aria-label={t('filters.loadMode.label') || 'Mode de chargement'}
+              aria-label={
+                t("filters.loadMode.label") || "Mode de chargement"
+              }
               onDragOver={(e) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
@@ -1360,15 +1803,13 @@ const handleSearch = useCallback(() => {
                 e.preventDefault();
                 const mode = e.dataTransfer.getData("text/plain");
                 if (mode === "page") {
-                  setLoadMode?.("pagination");
+                  setLoadMode?.("page");
                 } else if (mode === "infinite") {
                   setLoadMode?.("infinite");
                 }
                 setDragMode(null);
               }}
-
             >
-              {/* Knob glass + bleu clair pour bien ressortir */}
               <div
                 className={cls(
                   "absolute inset-y-1 left-1 rounded-xl bg-blue-50/95 backdrop-blur-xl",
@@ -1378,12 +1819,14 @@ const handleSearch = useCallback(() => {
                 )}
                 style={{
                   width: "calc(50% - 4px)",
-                  transform: loadMode === "infinite" ? "translateX(100%)" : "translateX(0%)",
+                  transform:
+                    loadMode === "infinite"
+                      ? "translateX(100%)"
+                      : "translateX(0%)",
                 }}
                 aria-hidden="true"
               />
 
-              {/* Pagination */}
               <button
                 type="button"
                 draggable
@@ -1393,7 +1836,7 @@ const handleSearch = useCallback(() => {
                   setDragMode("page");
                 }}
                 onDragEnd={() => setDragMode(null)}
-                onClick={() => setLoadMode?.("pagination")}
+                onClick={() => setLoadMode?.("page")}
                 className={cls(
                   "relative z-10 flex-1 h-8 px-3 rounded-xl text-xs inline-flex items-center justify-center gap-1.5",
                   "transition-all focus:outline-none",
@@ -1402,21 +1845,26 @@ const handleSearch = useCallback(() => {
                     : "text-slate-500"
                 )}
                 aria-pressed={loadMode === "page"}
-                title={t('paginated') || 'Pagination par pages'}
+                title={
+                  t("paginated") ||
+                  "Pagination par pages"
+                }
               >
                 <FaBars aria-hidden="true" />
                 <span className="hidden xl:inline">
-                  {t('paginated') || 'Pages'}
+                  {t("paginated") || "Pages"}
                 </span>
               </button>
 
-              {/* Infini */}
               <button
                 type="button"
                 draggable
                 onDragStart={(e) => {
                   e.dataTransfer.effectAllowed = "move";
-                  e.dataTransfer.setData("text/plain", "infinite");
+                  e.dataTransfer.setData(
+                    "text/plain",
+                    "infinite"
+                  );
                   setDragMode("infinite");
                 }}
                 onDragEnd={() => setDragMode(null)}
@@ -1429,38 +1877,41 @@ const handleSearch = useCallback(() => {
                     : "text-slate-500"
                 )}
                 aria-pressed={loadMode === "infinite"}
-                title={t('infinite') || 'Scroll infini'}
+                title={
+                  t("infinite") || "Scroll infini"
+                }
               >
                 <FaSyncAlt aria-hidden="true" />
                 <span className="hidden xl:inline">
-                  {t('infinite') || 'Infini'}
+                  {t("infinite") || "Infini"}
                 </span>
               </button>
             </div>
 
-            {/* Bouton Filters (desktop / mobile) */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => {
                   if (isMobile) setShowMobileModal(true);
-                  else setIsExpanded(prev => !prev);
+                  else setIsExpanded((prev) => !prev);
                 }}
                 className={cls(
                   "h-10 px-4 rounded-2xl font-medium inline-flex items-center gap-2 border transition-all",
                   "focus:outline-none",
                   theme.primaryRing,
-                  (isExpanded && !isMobile)
+                  isExpanded && !isMobile
                     ? "bg-blue-600/95 text-white border-blue-500 shadow-[0_10px_30px_rgba(37,99,235,0.55)]"
                     : "bg-slate-50/80 text-slate-800 border-slate-200/80 hover:bg-slate-50/95 hover:border-slate-300 shadow-sm"
                 )}
-                title={t('filters.toggleFilters')}
+                title={t("filters.toggleFilters")}
                 aria-expanded={isExpanded}
                 aria-controls="filters-panel"
                 aria-pressed={isExpanded}
               >
                 <FaFilter aria-hidden="true" />
-                <span className="hidden sm:inline">{t('filters.filters')}</span>
+                <span className="hidden sm:inline">
+                  {t("filters.filters")}
+                </span>
                 {activeFiltersCount > 0 && (
                   <span
                     className={cls(
@@ -1476,20 +1927,6 @@ const handleSearch = useCallback(() => {
                 </span>
               </button>
             </div>
-
-            {/* Export */}
-            {/* <button
-              type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent("articlelib:export"))}
-              className={cls(
-                "h-10 w-10 rounded-2xl border inline-flex items-center justify-center transition-all",
-                "bg-slate-50/80 text-slate-800 border-slate-200/80 hover:bg-slate-50/95 hover:border-slate-300 shadow-sm active:scale-[0.97]",
-                theme.primaryRing
-              )}
-              title={t('filters.export')}
-            >
-              <FaDownload aria-hidden="true" />
-            </button> */}
           </div>
         </div>
       </div>
@@ -1498,7 +1935,9 @@ const handleSearch = useCallback(() => {
       <div
         id="filters-panel"
         ref={wrapperRef}
-        style={{ height: !isMobile ? (isExpanded ? height : 0) : 0 }}
+        style={{
+          height: !isMobile ? (isExpanded ? height : 0) : 0,
+        }}
         className={cls(
           "transition-[height] duration-300 ease-out overflow-hidden border-t border-slate-200/60",
           "bg-slate-50/80 backdrop-blur-xl"
@@ -1515,9 +1954,7 @@ const handleSearch = useCallback(() => {
                 "backdrop-blur-xl"
               )}
             >
-              {/* Pills + Scroll-shadows */}
               <div className="relative">
-                {/* Gradients left/right (scroll-shadows) */}
                 <div className="pointer-events-none absolute left-0 top-0 h-full w-6 bg-gradient-to-r from-slate-50/90 to-transparent" />
                 <div className="pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-slate-50/90 to-transparent" />
 
@@ -1526,13 +1963,103 @@ const handleSearch = useCallback(() => {
                   className="px-6 pt-4 pb-2 flex gap-2 overflow-x-auto no-scrollbar"
                   style={{ scrollbarWidth: "none" }}
                 >
-                  <Pill theme={theme} label={t('filters.categories')} icon={<FaTag />} open={activeMenu === "categories"} onToggle={() => setActiveMenu(activeMenu === "categories" ? null : "categories")} badge={(localFilters.categories || []).length} />
-                  <Pill theme={theme} label={t('filters.tags')}        icon={<FaTag />} open={activeMenu === "tags"}        onToggle={() => setActiveMenu(activeMenu === "tags" ? null : "tags")}       badge={(localFilters.tags || []).length} />
-                  <Pill theme={theme} label={t('filters.authors')}     icon={<FaUser />} open={activeMenu === "authors"}     onToggle={() => setActiveMenu(activeMenu === "authors" ? null : "authors")} badge={(localFilters.authors || []).length} />
-                  <Pill theme={theme} label={t('filters.options')}     icon={<FaFilter />} open={activeMenu === "options"}   onToggle={() => setActiveMenu(activeMenu === "options" ? null : "options")} />
-                  <Pill theme={theme} label={t('filters.dates')}       icon={<FaCalendar />} open={activeMenu === "dates"}   onToggle={() => setActiveMenu(activeMenu === "dates" ? null : "dates")}     badge={localFilters.dateFrom || localFilters.dateTo ? 1 : 0} />
-                  <Pill theme={theme} label={t('filters.rating')}      icon={<FaThumbsUp />} open={activeMenu === "rating"}  onToggle={() => setActiveMenu(activeMenu === "rating" ? null : "rating")}   badge={(localFilters.ratingMin > 0 || localFilters.ratingMax < 5) ? 1 : 0} />
-                  <Pill theme={theme} label={t('filters.saved')}       icon={<FaBookmark />} open={activeMenu === "saved"}   onToggle={() => setActiveMenu(activeMenu === "saved" ? null : "saved")} />
+                  <Pill
+                    theme={theme}
+                    label={t("filters.categories")}
+                    icon={<FaTag />}
+                    open={activeMenu === "categories"}
+                    onToggle={() =>
+                      setActiveMenu(
+                        activeMenu === "categories"
+                          ? null
+                          : "categories"
+                      )
+                    }
+                    badge={(localFilters.categories || []).length}
+                  />
+                  <Pill
+                    theme={theme}
+                    label={t("filters.tags")}
+                    icon={<FaTag />}
+                    open={activeMenu === "tags"}
+                    onToggle={() =>
+                      setActiveMenu(
+                        activeMenu === "tags" ? null : "tags"
+                      )
+                    }
+                    badge={(localFilters.tags || []).length}
+                  />
+                  <Pill
+                    theme={theme}
+                    label={t("filters.authors")}
+                    icon={<FaUser />}
+                    open={activeMenu === "authors"}
+                    onToggle={() =>
+                      setActiveMenu(
+                        activeMenu === "authors"
+                          ? null
+                          : "authors"
+                      )
+                    }
+                    badge={(localFilters.authors || []).length}
+                  />
+                  <Pill
+                    theme={theme}
+                    label={t("filters.options")}
+                    icon={<FaFilter />}
+                    open={activeMenu === "options"}
+                    onToggle={() =>
+                      setActiveMenu(
+                        activeMenu === "options"
+                          ? null
+                          : "options"
+                      )
+                    }
+                  />
+                  <Pill
+                    theme={theme}
+                    label={t("filters.dates")}
+                    icon={<FaCalendar />}
+                    open={activeMenu === "dates"}
+                    onToggle={() =>
+                      setActiveMenu(
+                        activeMenu === "dates" ? null : "dates"
+                      )
+                    }
+                    badge={
+                      localFilters.dateFrom || localFilters.dateTo
+                        ? 1
+                        : 0
+                    }
+                  />
+                  <Pill
+                    theme={theme}
+                    label={t("filters.rating")}
+                    icon={<FaThumbsUp />}
+                    open={activeMenu === "rating"}
+                    onToggle={() =>
+                      setActiveMenu(
+                        activeMenu === "rating" ? null : "rating"
+                      )
+                    }
+                    badge={
+                      localFilters.ratingMin > 0 ||
+                      localFilters.ratingMax < 5
+                        ? 1
+                        : 0
+                    }
+                  />
+                  <Pill
+                    theme={theme}
+                    label={t("filters.saved")}
+                    icon={<FaBookmark />}
+                    open={activeMenu === "saved"}
+                    onToggle={() =>
+                      setActiveMenu(
+                        activeMenu === "saved" ? null : "saved"
+                      )
+                    }
+                  />
 
                   <div className="ml-auto flex gap-2 pl-4">
                     <button
@@ -1545,12 +2072,21 @@ const handleSearch = useCallback(() => {
                       )}
                       title={
                         cardColorEnabled
-                          ? (t('filters.cardsColor.disable') || 'Désactiver les couleurs')
-                          : (t('filters.cardsColor.enable')  || 'Activer les couleurs')
+                          ? t(
+                              "filters.cardsColor.disable"
+                            ) || "Désactiver les couleurs"
+                          : t(
+                              "filters.cardsColor.enable"
+                            ) || "Activer les couleurs"
                       }
                       aria-pressed={cardColorEnabled}
                     >
-                      <FaPalette className={cls("text-base", theme.accentIcon)} />
+                      <FaPalette
+                        className={cls(
+                          "text-base",
+                          theme.accentIcon
+                        )}
+                      />
                     </button>
 
                     <button
@@ -1561,10 +2097,12 @@ const handleSearch = useCallback(() => {
                         theme.primaryRing,
                         "border-slate-200"
                       )}
-                      title={t('filters.resetAll')}
+                      title={t("filters.resetAll")}
                     >
                       <FaEraser aria-hidden="true" />
-                      <span className="hidden sm:inline">{t('filters.resetAll')}</span>
+                      <span className="hidden sm:inline">
+                        {t("filters.resetAll")}
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -1575,136 +2113,312 @@ const handleSearch = useCallback(() => {
                         theme.primaryBg,
                         "shadow-[0_10px_28px_rgba(37,99,235,0.45)]"
                       )}
-                      title={t('filters.apply')}
+                      title={t("filters.apply")}
                     >
                       <FaRocket aria-hidden="true" />
-                      <span>{t('filters.apply')}</span>
+                      <span>{t("filters.apply")}</span>
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* Sections */}
               <div className="px-6 pb-6 space-y-3">
                 <FilterSection
                   theme={theme}
                   visible={activeMenu === "categories"}
-                  title={`${t('filters.categories')} ${localFilters.categories.length ? `(${localFilters.categories.length})` : ''}`}
-                  onClear={localFilters.categories.length ? () => setLocalFilters(p => ({ ...p, categories: [] })) : undefined}
+                  title={`${t("filters.categories")} ${
+                    localFilters.categories.length
+                      ? `(${localFilters.categories.length})`
+                      : ""
+                  }`}
+                  onClear={
+                    localFilters.categories.length
+                      ? () =>
+                          setLocalFilters((p) => ({
+                            ...p,
+                            categories: [],
+                          }))
+                      : undefined
+                  }
                 >
                   <div className="mb-2 max-w-sm">
                     <InputWithIcon
                       icon={<FaSearch />}
-                      label={t('filters.searchCategory')}
-                      placeholder={t('filters.searchCategoryPlaceholder')}
+                      label={t("filters.searchCategory")}
+                      placeholder={t(
+                        "filters.searchCategoryPlaceholder"
+                      )}
                       onChange={setCatQuery}
                     />
                   </div>
                   {catLoading ? (
                     <SkeletonChips />
                   ) : catError ? (
-                    <div className="text-sm text-rose-600">{t('filters.errors.loadCategories') || "Impossible de charger les catégories."}</div>
+                    <div className="text-sm text-rose-600">
+                      {t("filters.errors.loadCategories") ||
+                        "Impossible de charger les catégories."}
+                    </div>
                   ) : (
-                    renderOptionChips(safeCategories, 'categories')
+                    renderOptionChips(safeCategories, "categories")
                   )}
                 </FilterSection>
 
                 <FilterSection
                   theme={theme}
                   visible={activeMenu === "tags"}
-                  title={`${t('filters.tags')} ${localFilters.tags.length ? `(${localFilters.tags.length})` : ''}`}
-                  onClear={localFilters.tags.length ? () => setLocalFilters(p => ({ ...p, tags: [] })) : undefined}
+                  title={`${t("filters.tags")} ${
+                    localFilters.tags.length
+                      ? `(${localFilters.tags.length})`
+                      : ""
+                  }`}
+                  onClear={
+                    localFilters.tags.length
+                      ? () =>
+                          setLocalFilters((p) => ({
+                            ...p,
+                            tags: [],
+                          }))
+                      : undefined
+                  }
                 >
                   <div className="mb-2 max-w-sm">
                     <InputWithIcon
                       icon={<FaSearch />}
-                      label={t('filters.searchTag') || "Rechercher un tag"}
-                      placeholder={t('filters.searchTagPlaceholder') || "Nom de tag…"}
+                      label={
+                        t("filters.searchTag") ||
+                        "Rechercher un tag"
+                      }
+                      placeholder={
+                        t("filters.searchTagPlaceholder") ||
+                        "Nom de tag…"
+                      }
                       onChange={setTagQuery}
                     />
                   </div>
                   {tagLoading ? (
                     <SkeletonChips />
                   ) : tagError ? (
-                    <div className="text-sm text-rose-600">{t('filters.errors.loadTags') || "Impossible de charger les tags."}</div>
+                    <div className="text-sm text-rose-600">
+                      {t("filters.errors.loadTags") ||
+                        "Impossible de charger les tags."}
+                    </div>
                   ) : (
-                    renderOptionChips(safeTags, 'tags')
+                    renderOptionChips(safeTags, "tags")
                   )}
                 </FilterSection>
 
                 <FilterSection
                   theme={theme}
                   visible={activeMenu === "authors"}
-                  title={`${t('filters.authors')} ${localFilters.authors.length ? `(${localFilters.authors.length})` : ''}`}
-                  onClear={localFilters.authors.length ? () => setLocalFilters(p => ({ ...p, authors: [] })) : undefined}
+                  title={`${t("filters.authors")} ${
+                    localFilters.authors.length
+                      ? `(${localFilters.authors.length})`
+                      : ""
+                  }`}
+                  onClear={
+                    localFilters.authors.length
+                      ? () =>
+                          setLocalFilters((p) => ({
+                            ...p,
+                            authors: [],
+                          }))
+                      : undefined
+                  }
                 >
-                  {renderOptionChips(safeAuthors, 'authors')}
+                  {renderOptionChips(safeAuthors, "authors")}
                 </FilterSection>
 
                 <FilterSection
                   theme={theme}
                   visible={activeMenu === "options"}
-                  title={t('filters.quickOptions')}
-                  onClear={(localFilters.featuredOnly || localFilters.stickyOnly || localFilters.unreadOnly)
-                    ? () => setLocalFilters(p => ({ ...p, featuredOnly: false, stickyOnly: false, unreadOnly: false }))
-                    : undefined}
+                  title={t("filters.quickOptions")}
+                  onClear={
+                    localFilters.featuredOnly ||
+                    localFilters.stickyOnly ||
+                    localFilters.unreadOnly
+                      ? () =>
+                          setLocalFilters((p) => ({
+                            ...p,
+                            featuredOnly: false,
+                            stickyOnly: false,
+                            unreadOnly: false,
+                          }))
+                      : undefined
+                  }
                 >
                   <div className="flex flex-wrap gap-3">
-                    <ToggleButton theme={theme} active={localFilters.featuredOnly} onClick={() => setLocalFilters(prev => ({ ...prev, featuredOnly: !prev.featuredOnly }))} icon={<FaStar />} label={t('filters.featuredOnly')} />
-                    <ToggleButton theme={theme} active={localFilters.stickyOnly}   onClick={() => setLocalFilters(prev => ({ ...prev, stickyOnly: !prev.stickyOnly }))}   icon={<FaThumbtack />} label={t('filters.pinnedOnly')} />
-                    <ToggleButton theme={theme} active={localFilters.unreadOnly}   onClick={() => setLocalFilters(prev => ({ ...prev, unreadOnly: !prev.unreadOnly }))}   icon={<FaEye />} label={t('filters.unreadOnly')} />
+                    <ToggleButton
+                      theme={theme}
+                      active={localFilters.featuredOnly}
+                      onClick={() =>
+                        setLocalFilters((prev) => ({
+                          ...prev,
+                          featuredOnly: !prev.featuredOnly,
+                        }))
+                      }
+                      icon={<FaStar />}
+                      label={t("filters.featuredOnly")}
+                    />
+                    <ToggleButton
+                      theme={theme}
+                      active={localFilters.stickyOnly}
+                      onClick={() =>
+                        setLocalFilters((prev) => ({
+                          ...prev,
+                          stickyOnly: !prev.stickyOnly,
+                        }))
+                      }
+                      icon={<FaThumbtack />}
+                      label={t("filters.pinnedOnly")}
+                    />
+                    <ToggleButton
+                      theme={theme}
+                      active={localFilters.unreadOnly}
+                      onClick={() =>
+                        setLocalFilters((prev) => ({
+                          ...prev,
+                          unreadOnly: !prev.unreadOnly,
+                        }))
+                      }
+                      icon={<FaEye />}
+                      label={t("filters.unreadOnly")}
+                    />
                   </div>
                 </FilterSection>
 
                 <FilterSection
                   theme={theme}
                   visible={activeMenu === "dates"}
-                  title={t('filters.dates')}
-                  onClear={(localFilters.dateFrom || localFilters.dateTo) ? () => setLocalFilters(p => ({ ...p, dateFrom: "", dateTo: "" })) : undefined}
+                  title={t("filters.dates")}
+                  onClear={
+                    localFilters.dateFrom || localFilters.dateTo
+                      ? () =>
+                          setLocalFilters((p) => ({
+                            ...p,
+                            dateFrom: "",
+                            dateTo: "",
+                          }))
+                      : undefined
+                  }
                 >
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <InputWithIcon icon={<FaCalendar />} type="date" label={t('filters.startDate')} value={localFilters.dateFrom} onChange={(value) => setLocalFilters(prev => ({ ...prev, dateFrom: value }))} />
-                    <InputWithIcon icon={<FaCalendar />} type="date" label={t('filters.endDate')}   value={localFilters.dateTo}   onChange={(value) => setLocalFilters(prev => ({ ...prev, dateTo: value }))} />
+                    <InputWithIcon
+                      icon={<FaCalendar />}
+                      type="date"
+                      label={t("filters.startDate")}
+                      value={localFilters.dateFrom}
+                      onChange={(value) =>
+                        setLocalFilters((prev) => ({
+                          ...prev,
+                          dateFrom: value,
+                        }))
+                      }
+                    />
+                    <InputWithIcon
+                      icon={<FaCalendar />}
+                      type="date"
+                      label={t("filters.endDate")}
+                      value={localFilters.dateTo}
+                      onChange={(value) =>
+                        setLocalFilters((prev) => ({
+                          ...prev,
+                          dateTo: value,
+                        }))
+                      }
+                    />
                   </div>
                 </FilterSection>
 
                 <FilterSection
                   theme={theme}
                   visible={activeMenu === "rating"}
-                  title={t('filters.rating')}
-                  onClear={(localFilters.ratingMin > 0 || localFilters.ratingMax < 5) ? () => setLocalFilters(p => ({ ...p, ratingMin: 0, ratingMax: 5 })) : undefined}
+                  title={t("filters.rating")}
+                  onClear={
+                    localFilters.ratingMin > 0 ||
+                    localFilters.ratingMax < 5
+                      ? () =>
+                          setLocalFilters((p) => ({
+                            ...p,
+                            ratingMin: 0,
+                            ratingMax: 5,
+                          }))
+                      : undefined
+                  }
                 >
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <InputWithIcon icon={<FaThumbsUp />} type="number" min="0" max="5" step="0.1" placeholder={t('filters.minRating')} label={t('filters.minRating')} value={localFilters.ratingMin}
-                      onChange={(value) => setLocalFilters(prev => ({ ...prev, ratingMin: Math.min(5, Math.max(0, parseFloat(value) || 0)) }))} />
-                    <InputWithIcon icon={<FaThumbsUp />} type="number" min="0" max="5" step="0.1" placeholder={t('filters.maxRating')} label={t('filters.maxRating')} value={localFilters.ratingMax}
-                      onChange={(value) => setLocalFilters(prev => ({ ...prev, ratingMax: Math.min(5, Math.max(0, parseFloat(value) || 5)) }))} />
+                    <InputWithIcon
+                      icon={<FaThumbsUp />}
+                      type="number"
+                      min="0"
+                      max="5"
+                      step="0.1"
+                      placeholder={t("filters.minRating")}
+                      label={t("filters.minRating")}
+                      value={localFilters.ratingMin}
+                      onChange={(value) =>
+                        setLocalFilters((prev) => ({
+                          ...prev,
+                          ratingMin: Math.min(
+                            5,
+                            Math.max(
+                              0,
+                              parseFloat(value) || 0
+                            )
+                          ),
+                        }))
+                      }
+                    />
+                    <InputWithIcon
+                      icon={<FaThumbsUp />}
+                      type="number"
+                      min="0"
+                      max="5"
+                      step="0.1"
+                      placeholder={t("filters.maxRating")}
+                      label={t("filters.maxRating")}
+                      value={localFilters.ratingMax}
+                      onChange={(value) =>
+                        setLocalFilters((prev) => ({
+                          ...prev,
+                          ratingMax: Math.min(
+                            5,
+                            Math.max(
+                              0,
+                              parseFloat(value) || 5
+                            )
+                          ),
+                        }))
+                      }
+                    />
                   </div>
                 </FilterSection>
 
                 <FilterSection
                   theme={theme}
                   visible={activeMenu === "saved"}
-                  title={t('filters.savedFilters')}
+                  title={t("filters.savedFilters")}
                   action={
                     <button
                       type="button"
-                      onClick={() => { setSaveModalName(generateSuggestedName()); setShowSaveModal(true); }}
+                      onClick={() => {
+                        setSaveModalName(generateSuggestedName());
+                        setShowSaveModal(true);
+                      }}
                       className={cls(
                         "h-9 px-3 rounded-lg text-white inline-flex items-center gap-2 transition-colors focus:outline-none",
                         theme.primaryRing,
                         theme.primaryBg
                       )}
-                      title={t('filters.saveCurrent')}
+                      title={t("filters.saveCurrent")}
                     >
                       <FaSave aria-hidden="true" />
-                      <span>{t('filters.saveCurrent')}</span>
+                      <span>{t("filters.saveCurrent")}</span>
                     </button>
                   }
                 >
                   {savedFilters.length === 0 ? (
                     <div className="text-sm text-slate-500">
-                      {t('filters.noSavedFilters')}
+                      {t("filters.noSavedFilters")}
                     </div>
                   ) : (
                     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1715,36 +2429,79 @@ const handleSearch = useCallback(() => {
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <div className="text-sm font-medium truncate">{sf.name}</div>
+                              <div className="text-sm font-medium truncate">
+                                {sf.name}
+                              </div>
                               <div className="text-xs text-slate-500 mt-0.5">
-                                {t('filters.createdOn')} {new Date(sf.createdAt).toLocaleDateString()}
+                                {t("filters.createdOn")}{" "}
+                                {new Date(
+                                  sf.createdAt
+                                ).toLocaleDateString()}
                               </div>
                             </div>
                             <button
                               type="button"
-                              onClick={() => { deleteFilter(sf.id); showToast(t('filters.toasts.filterDeleted'), "success"); }}
+                              onClick={() => {
+                                deleteFilter(sf.id);
+                                showToast(
+                                  t(
+                                    "filters.toasts.filterDeleted"
+                                  ),
+                                  "success"
+                                );
+                              }}
                               className="text-red-500 hover:text-red-700 transition-colors p-1 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-red-200"
-                              title={t('filters.deleteFilter', { name: sf.name })}
+                              title={t(
+                                "filters.deleteFilter",
+                                { name: sf.name }
+                              )}
                             >
                               <FaTrash />
                             </button>
                           </div>
 
-                          {/* Aperçu des conditions */}
                           <div className="mt-2 flex flex-wrap gap-1.5">
-                            {sf.filters?.featuredOnly && <span className="px-2 h-6 rounded bg-slate-100 text-xs inline-flex items-center gap-1"><FaStar className="text-[10px]" /> featured</span>}
-                            {sf.filters?.stickyOnly && <span className="px-2 h-6 rounded bg-slate-100 text-xs inline-flex items-center gap-1"><FaThumbtack className="text-[10px]" /> pinned</span>}
-                            {sf.filters?.unreadOnly && <span className="px-2 h-6 rounded bg-slate-100 text-xs inline-flex items-center gap-1"><FaEye className="text-[10px]" /> unread</span>}
-                            {!!(sf.filters?.categories?.length) && <span className="px-2 h-6 rounded bg-slate-100 text-xs">{sf.filters.categories.length} cat.</span>}
-                            {!!(sf.filters?.tags?.length) && <span className="px-2 h-6 rounded bg-slate-100 text-xs">{sf.filters.tags.length} tags</span>}
-                            {(sf.filters?.ratingMin > 0 || sf.filters?.ratingMax < 5) && (
-                              <span className="px-2 h-6 rounded bg-slate-100 text-xs">
-                                {sf.filters.ratingMin}–{sf.filters.ratingMax}★
+                            {sf.filters?.featuredOnly && (
+                              <span className="px-2 h-6 rounded bg-slate-100 text-xs inline-flex items-center gap-1">
+                                <FaStar className="text-[10px]" />{" "}
+                                featured
                               </span>
                             )}
-                            {(sf.filters?.dateFrom || sf.filters?.dateTo) && (
+                            {sf.filters?.stickyOnly && (
+                              <span className="px-2 h-6 rounded bg-slate-100 text-xs inline-flex items-center gap-1">
+                                <FaThumbtack className="text-[10px]" />{" "}
+                                pinned
+                              </span>
+                            )}
+                            {sf.filters?.unreadOnly && (
+                              <span className="px-2 h-6 rounded bg-slate-100 text-xs inline-flex items-center gap-1">
+                                <FaEye className="text-[10px]" />{" "}
+                                unread
+                              </span>
+                            )}
+                            {!!sf.filters?.categories?.length && (
                               <span className="px-2 h-6 rounded bg-slate-100 text-xs">
-                                {sf.filters.dateFrom || "—"} → {sf.filters.dateTo || "—"}
+                                {sf.filters.categories.length}{" "}
+                                cat.
+                              </span>
+                            )}
+                            {!!sf.filters?.tags?.length && (
+                              <span className="px-2 h-6 rounded bg-slate-100 text-xs">
+                                {sf.filters.tags.length} tags
+                              </span>
+                            )}
+                            {(sf.filters?.ratingMin > 0 ||
+                              sf.filters?.ratingMax < 5) && (
+                              <span className="px-2 h-6 rounded bg-slate-100 text-xs">
+                                {sf.filters.ratingMin}–
+                                {sf.filters.ratingMax}★
+                              </span>
+                            )}
+                            {(sf.filters?.dateFrom ||
+                              sf.filters?.dateTo) && (
+                              <span className="px-2 h-6 rounded bg-slate-100 text-xs">
+                                {sf.filters.dateFrom || "—"} →{" "}
+                                {sf.filters.dateTo || "—"}
                               </span>
                             )}
                           </div>
@@ -1752,22 +2509,33 @@ const handleSearch = useCallback(() => {
                           <div className="mt-3 flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => {
+                             onClick={() => {
                                 const cleaned = normalizeFilters(sf.filters);
                                 setLocalFilters(cleaned);
                                 setFilters(cleaned);
+
+                                // ✅ l'URL reflète aussi le filtre sauvegardé
+                                syncUrlWithFilters(cleaned);
+
                                 setActiveMenu(null);
-                                showToast(t('filters.toasts.filterLoaded', { name: sf.name }), "success");
+                                showToast(
+                                  t("filters.toasts.filterLoaded", { name: sf.name }),
+                                  "success"
+                                );
                               }}
+
                               className={cls(
                                 "h-9 px-3 rounded-lg text-white text-sm inline-flex items-center gap-2 transition-colors focus:outline-none",
                                 theme.primaryRing,
                                 theme.primaryBg
                               )}
-                              title={t('filters.loadFilter', { name: sf.name })}
+                              title={t(
+                                "filters.loadFilter",
+                                { name: sf.name }
+                              )}
                             >
                               <FaRocket className="text-xs" />
-                              {t('filters.apply')}
+                              {t("filters.apply")}
                             </button>
                           </div>
                         </div>
@@ -1781,7 +2549,6 @@ const handleSearch = useCallback(() => {
         </div>
       </div>
 
-      {/* Mobile bottom-sheet modal (AUCUN WRAPPER AUTOUR) */}
       {isMobile && (
         <MobileFiltersModal
           open={showMobileModal}
@@ -1804,12 +2571,13 @@ const handleSearch = useCallback(() => {
         />
       )}
 
-      {/* Save modal */}
       {showSaveModal && (
         <SaveModal
           initialValue={saveModalName}
           onClose={() => setShowSaveModal(false)}
-          onSave={(name) => { if (handleSaveFilter(name)) setShowSaveModal(false); }}
+          onSave={(name) => {
+            if (handleSaveFilter(name)) setShowSaveModal(false);
+          }}
         />
       )}
 
@@ -1817,11 +2585,19 @@ const handleSearch = useCallback(() => {
     </div>
   );
 }
+  
 
 // -------------------------------------------
 // Sub-components (desktop shared)
 // -------------------------------------------
-function FilterSection({ visible, title, children, onClear, action, theme = THEME_STYLES.neutral }) {
+function FilterSection({
+  visible,
+  title,
+  children,
+  onClear,
+  action,
+  theme = THEME_STYLES.neutral,
+}) {
   const { t } = useTranslation();
   if (!visible) return null;
   return (
@@ -1846,10 +2622,13 @@ function FilterSection({ visible, title, children, onClear, action, theme = THEM
                   "focus-visible:ring-2",
                   theme.primaryRing
                 )}
-                title={t('filters.resetSection', { section: String(title).toLowerCase?.() || "" })}
+                title={t("filters.resetSection", {
+                  section:
+                    String(title).toLowerCase?.() || "",
+                })}
               >
                 <FaEraser aria-hidden="true" />
-                <span>{t('filters.reset')}</span>
+                <span>{t("filters.reset")}</span>
               </button>
             )}
           </div>
@@ -1867,15 +2646,20 @@ function SaveModal({ initialValue = "", onSave, onClose }) {
   const inputRef = useRef(null);
 
   useEffect(() => {
-    const outside = (e) => { if (modalRef.current && !modalRef.current.contains(e.target)) onClose?.(); };
+    const outside = (e) => {
+      if (modalRef.current && !modalRef.current.contains(e.target))
+        onClose?.();
+    };
     document.addEventListener("mousedown", outside);
-    return () => document.removeEventListener("mousedown", outside);
+    return () =>
+      document.removeEventListener("mousedown", outside);
   }, [onClose]);
 
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") onClose?.();
-      else if (e.key === "Enter" && name.trim()) onSave?.(name.trim());
+      else if (e.key === "Enter" && name.trim())
+        onSave?.(name.trim());
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -1892,28 +2676,46 @@ function SaveModal({ initialValue = "", onSave, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="save-modal-title">
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="save-modal-title"
+    >
       <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm animate-fade-in" />
-      <div ref={modalRef} className="relative w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-2xl animate-scale-in">
+      <div
+        ref={modalRef}
+        className="relative w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-2xl animate-scale-in"
+      >
         <form onSubmit={submit} className="p-4">
           <button
             type="button"
             onClick={onClose}
             className="absolute right-2 top-2 h-8 w-8 rounded-full text-slate-500 hover:bg-slate-100 inline-flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
-            aria-label={t('common.close')}
+            aria-label={t("common.close")}
           >
             <FaTimes />
           </button>
 
           <div className="space-y-4 pt-2">
             <div>
-              <h2 id="save-modal-title" className="text-base font-semibold text-slate-900">{t('filters.saveModal.title')}</h2>
-              <p className="text-sm text-slate-500 mt-1">{t('filters.saveModal.description')}</p>
+              <h2
+                id="save-modal-title"
+                className="text-base font-semibold text-slate-900"
+              >
+                {t("filters.saveModal.title")}
+              </h2>
+              <p className="text-sm text-slate-500 mt-1">
+                {t("filters.saveModal.description")}
+              </p>
             </div>
 
             <div>
-              <label htmlFor="filter-name" className="block text-sm font-medium text-slate-700 mb-1">
-                {t('filters.saveModal.filterName')}
+              <label
+                htmlFor="filter-name"
+                className="block text-sm font-medium text-slate-700 mb-1"
+              >
+                {t("filters.saveModal.filterName")}
               </label>
               <input
                 id="filter-name"
@@ -1921,7 +2723,7 @@ function SaveModal({ initialValue = "", onSave, onClose }) {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder={t('filters.saveModal.placeholder')}
+                placeholder={t("filters.saveModal.placeholder")}
                 className="w-full h-10 px-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition-all"
                 maxLength={50}
               />
@@ -1933,7 +2735,7 @@ function SaveModal({ initialValue = "", onSave, onClose }) {
                 onClick={onClose}
                 className="h-9 px-3 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
               >
-                {t('common.cancel')}
+                {t("common.cancel")}
               </button>
               <button
                 type="submit"
@@ -1941,11 +2743,13 @@ function SaveModal({ initialValue = "", onSave, onClose }) {
                 className={cls(
                   "h-9 px-4 rounded-lg font-medium transition-colors inline-flex items-center gap-2",
                   "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200",
-                  name.trim() ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-500 cursor-not-allowed"
+                  name.trim()
+                    ? "bg-blue-600 text-white hover:bg-blue-700"
+                    : "bg-slate-200 text-slate-500 cursor-not-allowed"
                 )}
               >
                 <FaSave className="text-xs" aria-hidden="true" />
-                <span>{t('common.save')}</span>
+                <span>{t("common.save")}</span>
               </button>
             </div>
           </div>
@@ -1954,7 +2758,8 @@ function SaveModal({ initialValue = "", onSave, onClose }) {
     </div>
   );
 }
-function FiltersPortal({ children, containerId = 'overlays-root' }) {
+
+function FiltersPortal({ children, containerId = "overlays-root" }) {
   const [host, setHost] = useState(null);
 
   useLayoutEffect(() => {
@@ -1962,17 +2767,17 @@ function FiltersPortal({ children, containerId = 'overlays-root' }) {
     let createdRoot = false;
 
     if (!root) {
-      root = document.createElement('div');
+      root = document.createElement("div");
       root.id = containerId;
-      root.style.position = 'relative';
+      root.style.position = "relative";
       document.body.appendChild(root);
       createdRoot = true;
     }
 
-    const el = document.createElement('div');
-    el.style.position = 'fixed';
-    el.style.inset = '0';
-    el.style.zIndex = '999';
+    const el = document.createElement("div");
+    el.style.position = "fixed";
+    el.style.inset = "0";
+    el.style.zIndex = "999";
     root.appendChild(el);
 
     setHost(el);
@@ -1992,7 +2797,6 @@ function FiltersPortal({ children, containerId = 'overlays-root' }) {
    Mobile bottom-sheet (wrapper sans hooks) + contenu avec hooks
 ========================= */
 function MobileFiltersModal(props) {
-  // ⚠️ AUCUN HOOK ICI
   const { open } = props;
   if (!open) return null;
 
@@ -2003,68 +2807,90 @@ function MobileFiltersModal(props) {
   );
 }
 
-
 function MobileFiltersModalContent({
-  open, onClose,
-  safeCategories, safeTags, safeAuthors,
-  localFilters, setLocalFilters,
-  handleApplyFilters, handleResetFilters,
-  cardColorEnabled, toggleCardColor,
-  t, theme, themeKey, onThemeChange, loadMode, setLoadMode
+  open,
+  onClose,
+  safeCategories,
+  safeTags,
+  safeAuthors,
+  localFilters,
+  setLocalFilters,
+  handleApplyFilters,
+  handleResetFilters,
+  cardColorEnabled,
+  toggleCardColor,
+  t,
+  theme,
+  themeKey,
+  onThemeChange,
+  loadMode,
+  setLoadMode,
 }) {
   const sheetRef = useRef(null);
   const [openSection, setOpenSection] = useState("quick");
 
-  // Petites recherches locales par section (client-side)
   const [catLocalQuery, setCatLocalQuery] = useState("");
   const [tagLocalQuery, setTagLocalQuery] = useState("");
   const [authLocalQuery, setAuthLocalQuery] = useState("");
 
-  // Focus initial + swipe-to-close
   useEffect(() => {
-    sheetRef.current?.querySelector("button, input, select")?.focus?.();
+    sheetRef.current
+      ?.querySelector("button, input, select")
+      ?.focus?.();
 
     let startY = null;
-    const onTouchStart = (e) => { startY = e.touches?.[0]?.clientY ?? null; };
-    const onTouchMove  = (e) => {
+    const onTouchStart = (e) => {
+      startY = e.touches?.[0]?.clientY ?? null;
+    };
+    const onTouchMove = (e) => {
       if (!startY) return;
       const y = e.touches?.[0]?.clientY ?? startY;
       const dy = y - startY;
-      if (dy > 36) { onClose?.(); startY = null; }
+      if (dy > 36) {
+        onClose?.();
+        startY = null;
+      }
     };
     const el = sheetRef.current;
-    el?.addEventListener("touchstart", onTouchStart, { passive: true });
-    el?.addEventListener("touchmove", onTouchMove, { passive: true });
+    el?.addEventListener("touchstart", onTouchStart, {
+      passive: true,
+    });
+    el?.addEventListener("touchmove", onTouchMove, {
+      passive: true,
+    });
     return () => {
       el?.removeEventListener("touchstart", onTouchStart);
       el?.removeEventListener("touchmove", onTouchMove);
     };
   }, [onClose]);
 
-  const toggle = (key) => setOpenSection((prev) => (prev === key ? null : key));
+  const toggle = (key) =>
+    setOpenSection((prev) => (prev === key ? null : key));
   const filterBy = (items = [], q = "") =>
-    (items || []).filter(o => String(o?.name || "").toLowerCase().includes(String(q).toLowerCase()));
+    (items || []).filter((o) =>
+      String(o?.name || "")
+        .toLowerCase()
+        .includes(String(q).toLowerCase())
+    );
 
-  const catFiltered  = filterBy(safeCategories, catLocalQuery);
-  const tagFiltered  = filterBy(safeTags,      tagLocalQuery);
-  const authFiltered = filterBy(safeAuthors,   authLocalQuery);
+  const catFiltered = filterBy(safeCategories, catLocalQuery);
+  const tagFiltered = filterBy(safeTags, tagLocalQuery);
+  const authFiltered = filterBy(safeAuthors, authLocalQuery);
 
   return (
     <div className="fixed inset-0 z-[80] flex flex-col justify-end">
-      {/* Overlay */}
       <button
         type="button"
         onClick={onClose}
-        aria-label={t('common.close')}
+        aria-label={t("common.close")}
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
       />
 
-      {/* Bottom Sheet */}
       <div
         ref={sheetRef}
         role="dialog"
         aria-modal="true"
-        aria-label={t('filters.filters')}
+        aria-label={t("filters.filters")}
         className="
           relative w-full
           bg-white rounded-t-2xl shadow-2xl
@@ -2075,24 +2901,29 @@ function MobileFiltersModalContent({
           will-change-transform
         "
       >
-        {/* Handle + Header sticky */}
         <div className="sticky top-0 bg-white rounded-t-2xl pt-2 px-4 pb-3 border-b border-slate-200">
-          <div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-slate-200" aria-hidden="true" />
+          <div
+            className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-slate-200"
+            aria-hidden="true"
+          />
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold">{t('filters.filters')}</h3>
+            <h3 className="text-base font-semibold">
+              {t("filters.filters")}
+            </h3>
             <div className="flex items-center gap-2">
-              {/* Mode page / infini (mobile) */}
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => setLoadMode?.("pagination")}
+                  onClick={() => setLoadMode?.("page")}
                   className={cls(
                     "h-8 w-8 rounded-lg border inline-flex items-center justify-center text-xs",
                     loadMode !== "infinite"
                       ? "bg-slate-100 text-slate-800 border-slate-300"
                       : "bg-white text-slate-500 border-slate-200"
                   )}
-                  title={t('filters.loadMode.paginated') || 'Pages'}
+                  title={
+                    t("paginated") || "Pages"
+                  }
                 >
                   <FaBars />
                 </button>
@@ -2105,17 +2936,20 @@ function MobileFiltersModalContent({
                       ? "bg-slate-100 text-slate-800 border-slate-300"
                       : "bg-white text-slate-500 border-slate-200"
                   )}
-                  title={t('filters.loadMode.infinite') || 'Infini'}
+                  title={
+                    t("infinite") || "Infini"
+                  }
                 >
                   <FaSyncAlt />
                 </button>
               </div>
-              {/* Select thème (mobile) */}
               <label className="relative">
                 <span className="sr-only">Theme</span>
                 <select
                   value={themeKey}
-                  onChange={(e) => onThemeChange?.(e.target.value)}
+                  onChange={(e) =>
+                    onThemeChange?.(e.target.value)
+                  }
                   className="h-9 px-2 rounded-lg border border-slate-200 bg-white text-sm"
                   title="Theme"
                 >
@@ -2132,12 +2966,14 @@ function MobileFiltersModalContent({
                 title="Couleurs cartes"
                 aria-pressed={cardColorEnabled}
               >
-                <FaPalette className={cls("text-base", theme.accentIcon)} />
+                <FaPalette
+                  className={cls("text-base", theme.accentIcon)}
+                />
               </button>
               <button
                 onClick={onClose}
                 className="h-9 w-9 rounded-lg border border-slate-200 bg-white inline-flex items-center justify-center hover:bg-slate-50"
-                aria-label={t('common.close')}
+                aria-label={t("common.close")}
               >
                 <FaTimes />
               </button>
@@ -2145,48 +2981,77 @@ function MobileFiltersModalContent({
           </div>
         </div>
 
-        {/* Contenu scrollable (min-h-0 indispensable pour Firefox) */}
         <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3">
-          {/* Quick options */}
           <AccordionItem
             open={openSection === "quick"}
             onToggle={() => toggle("quick")}
-            title={t('filters.quickOptions')}
+            title={t("filters.quickOptions")}
           >
             <div className="flex gap-2 flex-wrap">
               <ToggleButton
                 theme={theme}
                 active={localFilters.featuredOnly}
-                onClick={() => setLocalFilters(p => ({ ...p, featuredOnly: !p.featuredOnly }))}
-                icon={<FaStar />} label={t('filters.featuredOnly')}
+                onClick={() =>
+                  setLocalFilters((p) => ({
+                    ...p,
+                    featuredOnly: !p.featuredOnly,
+                  }))
+                }
+                icon={<FaStar />}
+                label={t("filters.featuredOnly")}
               />
               <ToggleButton
                 theme={theme}
                 active={localFilters.stickyOnly}
-                onClick={() => setLocalFilters(p => ({ ...p, stickyOnly: !p.stickyOnly }))}
-                icon={<FaThumbtack />} label={t('filters.pinnedOnly')}
+                onClick={() =>
+                  setLocalFilters((p) => ({
+                    ...p,
+                    stickyOnly: !p.stickyOnly,
+                  }))
+                }
+                icon={<FaThumbtack />}
+                label={t("filters.pinnedOnly")}
               />
               <ToggleButton
                 theme={theme}
                 active={localFilters.unreadOnly}
-                onClick={() => setLocalFilters(p => ({ ...p, unreadOnly: !p.unreadOnly }))}
-                icon={<FaEye />} label={t('filters.unreadOnly')}
+                onClick={() =>
+                  setLocalFilters((p) => ({
+                    ...p,
+                    unreadOnly: !p.unreadOnly,
+                  }))
+                }
+                icon={<FaEye />}
+                label={t("filters.unreadOnly")}
               />
             </div>
           </AccordionItem>
 
-          {/* Categories */}
           <AccordionItem
             open={openSection === "categories"}
             onToggle={() => toggle("categories")}
-            title={`${t('filters.categories')} ${localFilters.categories.length ? `(${localFilters.categories.length})` : ''}`}
-            onClear={localFilters.categories.length ? () => setLocalFilters(p => ({ ...p, categories: [] })) : undefined}
+            title={`${t("filters.categories")} ${
+              localFilters.categories.length
+                ? `(${localFilters.categories.length})`
+                : ""
+            }`}
+            onClear={
+              localFilters.categories.length
+                ? () =>
+                    setLocalFilters((p) => ({
+                      ...p,
+                      categories: [],
+                    }))
+                : undefined
+            }
           >
             <div className="mb-2">
               <InputWithIcon
                 icon={<FaSearch />}
-                label={t('filters.searchCategory')}
-                placeholder={t('filters.searchCategoryPlaceholder')}
+                label={t("filters.searchCategory")}
+                placeholder={t(
+                  "filters.searchCategoryPlaceholder"
+                )}
                 onChange={setCatLocalQuery}
               />
             </div>
@@ -2198,18 +3063,29 @@ function MobileFiltersModalContent({
             />
           </AccordionItem>
 
-          {/* Tags */}
           <AccordionItem
             open={openSection === "tags"}
             onToggle={() => toggle("tags")}
-            title={`${t('filters.tags')} ${localFilters.tags.length ? `(${localFilters.tags.length})` : ''}`}
-            onClear={localFilters.tags.length ? () => setLocalFilters(p => ({ ...p, tags: [] })) : undefined}
+            title={`${t("filters.tags")} ${
+              localFilters.tags.length
+                ? `(${localFilters.tags.length})`
+                : ""
+            }`}
+            onClear={
+              localFilters.tags.length
+                ? () =>
+                    setLocalFilters((p) => ({
+                      ...p,
+                      tags: [],
+                    }))
+                : undefined
+            }
           >
             <div className="mb-2">
               <InputWithIcon
                 icon={<FaSearch />}
-                label={t('filters.searchTag')}
-                placeholder={t('filters.searchTagPlaceholder')}
+                label={t("filters.searchTag")}
+                placeholder={t("filters.searchTagPlaceholder")}
                 onChange={setTagLocalQuery}
               />
             </div>
@@ -2221,18 +3097,35 @@ function MobileFiltersModalContent({
             />
           </AccordionItem>
 
-          {/* Authors */}
           <AccordionItem
             open={openSection === "authors"}
             onToggle={() => toggle("authors")}
-            title={`${t('filters.authors')} ${localFilters.authors.length ? `(${localFilters.authors.length})` : ''}`}
-            onClear={localFilters.authors.length ? () => setLocalFilters(p => ({ ...p, authors: [] })) : undefined}
+            title={`${t("filters.authors")} ${
+              localFilters.authors.length
+                ? `(${localFilters.authors.length})`
+                : ""
+            }`}
+            onClear={
+              localFilters.authors.length
+                ? () =>
+                    setLocalFilters((p) => ({
+                      ...p,
+                      authors: [],
+                    }))
+                : undefined
+            }
           >
             <div className="mb-2">
               <InputWithIcon
                 icon={<FaSearch />}
-                label={t('filters.searchAuthor') || "Rechercher un auteur"}
-                placeholder={t('filters.searchAuthorPlaceholder') || "Nom d'auteur…"}
+                label={
+                  t("filters.searchAuthor") ||
+                  "Rechercher un auteur"
+                }
+                placeholder={
+                  t("filters.searchAuthorPlaceholder") ||
+                  "Nom d'auteur…"
+                }
                 onChange={setAuthLocalQuery}
               />
             </div>
@@ -2244,63 +3137,126 @@ function MobileFiltersModalContent({
             />
           </AccordionItem>
 
-          {/* Dates */}
           <AccordionItem
             open={openSection === "dates"}
             onToggle={() => toggle("dates")}
-            title={t('filters.dates')}
-            onClear={(localFilters.dateFrom || localFilters.dateTo) ? () => setLocalFilters(p => ({ ...p, dateFrom: "", dateTo: "" })) : undefined}
+            title={t("filters.dates")}
+            onClear={
+              localFilters.dateFrom || localFilters.dateTo
+                ? () =>
+                    setLocalFilters((p) => ({
+                      ...p,
+                      dateFrom: "",
+                      dateTo: "",
+                    }))
+                : undefined
+            }
           >
             <div className="grid grid-cols-2 gap-2">
-              <InputWithIcon icon={<FaCalendar />} type="date" label={t('filters.startDate')}
+              <InputWithIcon
+                icon={<FaCalendar />}
+                type="date"
+                label={t("filters.startDate")}
                 value={localFilters.dateFrom}
-                onChange={(value) => setLocalFilters(prev => ({ ...prev, dateFrom: value }))} />
-              <InputWithIcon icon={<FaCalendar />} type="date" label={t('filters.endDate')}
+                onChange={(value) =>
+                  setLocalFilters((prev) => ({
+                    ...prev,
+                    dateFrom: value,
+                  }))
+                }
+              />
+              <InputWithIcon
+                icon={<FaCalendar />}
+                type="date"
+                label={t("filters.endDate")}
                 value={localFilters.dateTo}
-                onChange={(value) => setLocalFilters(prev => ({ ...prev, dateTo: value }))} />
+                onChange={(value) =>
+                  setLocalFilters((prev) => ({
+                    ...prev,
+                    dateTo: value,
+                  }))
+                }
+              />
             </div>
           </AccordionItem>
 
-          {/* Rating */}
           <AccordionItem
             open={openSection === "rating"}
             onToggle={() => toggle("rating")}
-            title={t('filters.rating')}
-            onClear={(localFilters.ratingMin > 0 || localFilters.ratingMax < 5) ? () => setLocalFilters(p => ({ ...p, ratingMin: 0, ratingMax: 5 })) : undefined}
+            title={t("filters.rating")}
+            onClear={
+              localFilters.ratingMin > 0 ||
+              localFilters.ratingMax < 5
+                ? () =>
+                    setLocalFilters((p) => ({
+                      ...p,
+                      ratingMin: 0,
+                      ratingMax: 5,
+                    }))
+                : undefined
+            }
           >
             <div className="grid grid-cols-2 gap-2">
-              <InputWithIcon icon={<FaThumbsUp />} type="number" min="0" max="5" step="0.1"
-                placeholder={t('filters.minRating')} label={t('filters.minRating')}
+              <InputWithIcon
+                icon={<FaThumbsUp />}
+                type="number"
+                min="0"
+                max="5"
+                step="0.1"
+                placeholder={t("filters.minRating")}
+                label={t("filters.minRating")}
                 value={localFilters.ratingMin}
-                onChange={(value) => setLocalFilters(prev => ({ ...prev, ratingMin: Math.min(5, Math.max(0, parseFloat(value) || 0)) }))} />
-              <InputWithIcon icon={<FaThumbsUp />} type="number" min="0" max="5" step="0.1"
-                placeholder={t('filters.maxRating')} label={t('filters.maxRating')}
+                onChange={(value) =>
+                  setLocalFilters((prev) => ({
+                    ...prev,
+                    ratingMin: Math.min(
+                      5,
+                      Math.max(0, parseFloat(value) || 0)
+                    ),
+                  }))
+                }
+              />
+              <InputWithIcon
+                icon={<FaThumbsUp />}
+                type="number"
+                min="0"
+                max="5"
+                step="0.1"
+                placeholder={t("filters.maxRating")}
+                label={t("filters.maxRating")}
                 value={localFilters.ratingMax}
-                onChange={(value) => setLocalFilters(prev => ({ ...prev, ratingMax: Math.min(5, Math.max(0, parseFloat(value) || 5)) }))} />
+                onChange={(value) =>
+                  setLocalFilters((prev) => ({
+                    ...prev,
+                    ratingMax: Math.min(
+                      5,
+                      Math.max(0, parseFloat(value) || 5)
+                    ),
+                  }))
+                }
+              />
             </div>
           </AccordionItem>
         </div>
 
-        {/* Footer sticky */}
         <div className="sticky bottom-0 bg-white border-t border-slate-200 p-3 flex gap-2">
           <button
             onClick={handleResetFilters}
             className="flex-1 h-11 rounded-xl border border-slate-200 bg-white text-slate-700 active:scale-[0.98] transition"
           >
-            {t('filters.resetAll')}
+            {t("filters.resetAll")}
           </button>
           <button
             onClick={handleApplyFilters}
             className="flex-1 h-11 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 active:scale-[0.98] transition"
           >
-            {t('filters.apply')}
+            {t("filters.apply")}
           </button>
         </div>
       </div>
     </div>
   );
 }
-
 
 function AccordionItem({ open, onToggle, title, children, onClear }) {
   return (
@@ -2311,23 +3267,35 @@ function AccordionItem({ open, onToggle, title, children, onClear }) {
         className="w-full h-12 px-3 flex items-center justify-between bg-white/90"
         aria-expanded={open}
       >
-        <span className="text-sm font-medium text-slate-900">{title}</span>
+        <span className="text-sm font-medium text-slate-900">
+          {title}
+        </span>
         <div className="flex items-center gap-2">
           {onClear && (
             <span
-              onClick={(e) => { e.stopPropagation(); onClear?.(); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClear?.();
+              }}
               className="text-xs text-slate-500 hover:text-slate-700 cursor-pointer"
             >
               Reset
             </span>
           )}
-          <FaChevronDown className={cls("transition-transform", open ? "rotate-180" : "rotate-0")} />
+          <FaChevronDown
+            className={cls(
+              "transition-transform",
+              open ? "rotate-180" : "rotate-0"
+            )}
+          />
         </div>
       </button>
       <div
         className={cls(
           "transition-[grid-template-rows,opacity] duration-200",
-          open ? "grid grid-rows-[1fr] opacity-100" : "grid grid-rows-[0fr] opacity-0"
+          open
+            ? "grid grid-rows-[1fr] opacity-100"
+            : "grid grid-rows-[0fr] opacity-0"
         )}
       >
         <div className="overflow-hidden p-3 bg-slate-50">
@@ -2342,27 +3310,74 @@ function ChipsGrid({ options = [], type, localFilters, setLocalFilters }) {
   if (!options || options.length === 0) {
     return (
       <div className="text-center p-8">
-        <div className="mx-auto mb-2 h-16 w-16 rounded-full bg-slate-100" aria-hidden="true" />
+        <div
+          className="mx-auto mb-2 h-16 w-16 rounded-full bg-slate-100"
+          aria-hidden="true"
+        />
         <p className="text-sm text-slate-500">—</p>
       </div>
     );
   }
+
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
       {options.map((opt) => {
         const id = String(opt.id);
+        const slug = opt.slug ? String(opt.slug) : null;
         const label = opt.name ?? `#${id}`;
-        const isActive = (localFilters[type] || []).some((v) => String(v) === id);
+
+        const matchesOption = (val) => {
+          if (val == null) return false;
+          const v = String(val).toLowerCase();
+          const idLc = id.toLowerCase();
+          const labelLc = String(label).toLowerCase();
+          const slugLc = slug ? slug.toLowerCase() : null;
+
+          if (v === idLc) return true;
+          if (slugLc && v === slugLc) return true;
+          if (v === labelLc) return true;
+
+          try {
+            const pseudoSlug = labelLc
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .replace(/\s+/g, "-")
+              .replace(/[^a-z0-9-]/g, "");
+            if (v === pseudoSlug) return true;
+          } catch {}
+
+          return false;
+        };
+
+        const isActive = (localFilters[type] || []).some(matchesOption);
+
         return (
           <button
             key={id}
             type="button"
-            onClick={() => setLocalFilters(prev => {
-              const existing = Array.isArray(prev[type]) ? prev[type].map(x => String(x)) : [];
-              return existing.includes(id)
-                ? { ...prev, [type]: existing.filter(x => x !== id) }
-                : { ...prev, [type]: [...existing, id] };
-            })}
+            onClick={() =>
+              setLocalFilters((prev) => {
+                const existing = Array.isArray(prev[type])
+                  ? prev[type].map((x) => String(x))
+                  : [];
+
+                const alreadyActive = existing.some(matchesOption);
+
+                if (alreadyActive) {
+                  // 🔹 On retire toutes les valeurs qui correspondent à cette option
+                  return {
+                    ...prev,
+                    [type]: existing.filter((v) => !matchesOption(v)),
+                  };
+                }
+
+                // 🔹 Ajout de l'ID pour les nouveaux choix
+                return {
+                  ...prev,
+                  [type]: [...existing, id],
+                };
+              })
+            }
             className={cls(
               "h-9 px-3 rounded-lg border text-xs font-medium text-left",
               "active:scale-[0.98] transition-all",
@@ -2373,8 +3388,18 @@ function ChipsGrid({ options = [], type, localFilters, setLocalFilters }) {
             aria-pressed={isActive}
           >
             <span className="inline-flex items-center gap-2">
-              {!isActive && <span className="h-2 w-2 rounded-full bg-slate-300" aria-hidden="true" />}
-              {isActive && <span className="h-2 w-2 rounded-full bg-blue-200" aria-hidden="true" />}
+              {!isActive && (
+                <span
+                  className="h-2 w-2 rounded-full bg-slate-300"
+                  aria-hidden="true"
+                />
+              )}
+              {isActive && (
+                <span
+                  className="h-2 w-2 rounded-full bg-blue-200"
+                  aria-hidden="true"
+                />
+              )}
               {label}
             </span>
           </button>
@@ -2384,11 +3409,16 @@ function ChipsGrid({ options = [], type, localFilters, setLocalFilters }) {
   );
 }
 
+
+
 function SkeletonChips() {
   return (
     <div className="flex flex-wrap gap-2">
       {Array.from({ length: 10 }).map((_, i) => (
-        <div key={i} className="h-7 w-20 rounded-lg bg-slate-200 animate-pulse" />
+        <div
+          key={i}
+          className="h-7 w-20 rounded-lg bg-slate-200 animate-pulse"
+        />
       ))}
     </div>
   );

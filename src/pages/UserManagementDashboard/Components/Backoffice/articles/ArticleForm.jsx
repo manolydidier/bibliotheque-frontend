@@ -7,6 +7,7 @@ import {
   FiFolder, FiSettings, FiEdit3, FiStar, FiMessageCircle,
   FiShare2, FiThumbsUp, FiBarChart2, FiClock, FiUsers, FiShield, FiSave, FiPlay, FiRefreshCw, FiMaximize2, FiX,
   FiTrash2,
+  FiLayers,
   
 } from 'react-icons/fi';
 // src/pages/.../ArticleForm.jsx
@@ -44,6 +45,8 @@ const allowedKeys = [
   "is_featured", "is_sticky", "allow_comments", "allow_sharing", "allow_rating",
   // Auteur
   "author_name", "author_bio", "author_avatar", "author_id",
+  // 🔹 ICI
+  "tenant_id",
   // SEO/Meta
   "meta", "seo_data",
   // Taxonomies
@@ -51,6 +54,7 @@ const allowedKeys = [
   // Métriques simples (facultatif)
   "reading_time", "word_count", "rating_average", "rating_count",
 ];
+
 
 // ⚠️ NE PAS envoyer de fichier sur `featured_image`/`author_avatar`.
 // On n’envoie que *_file.
@@ -123,7 +127,49 @@ const toAbsolute = (u) => {
   const base = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/api\/?$/i, "");
   return base ? `${base}/${fixed.replace(/^\/+/, "")}` : `/${fixed.replace(/^\/+/, "")}`;
 };
+// 🔹 Petit helper pour afficher un drapeau à partir du pays
+const getCountryFlag = (country) => {
+  if (!country) return '🌍';
+  const c = country.toLowerCase();
 
+  if (c.includes('madagascar')) return '🇲🇬';
+  if (c.includes('france')) return '🇫🇷';
+  if (c.includes('canada')) return '🇨🇦';
+  if (
+    c.includes('usa') ||
+    c.includes('united states') ||
+    c.includes('états-unis')
+  ) {
+    return '🇺🇸';
+  }
+
+  return '🌍';
+};
+
+// 🔗 Logo de la société / tenant (même logique que BureauForm)
+const buildSocieteLogoUrl = (value) => {
+  if (!value) return '';
+
+  const s = String(value).trim();
+
+  if (
+    s.startsWith('http://') ||
+    s.startsWith('https://') ||
+    s.startsWith('/')
+  ) {
+    return s;
+  }
+
+  const storageBase = (
+    import.meta.env.VITE_API_BASE_STORAGE ||
+    import.meta.env.VITE_API_BASE_URL ||
+    ''
+  )
+    .replace(/\/api\/?$/i, '')
+    .replace(/\/+$/, '');
+
+  return storageBase ? `${storageBase}/storage/logos/${s}` : '';
+};
 
 // Image principale (priorités identiques au Visualiseur)
 const primaryMediaUrl = (obj) => {
@@ -212,6 +258,8 @@ async function listTags() {
   const res = await api.get('/tags', { params: { per_page: 1000 } });
   return res?.data?.data || res?.data || [];
 }
+
+
 async function fetchArticleDirect(idOrSlug) {
   const res = await api.get(`/articlesbackoffice/${encodeURIComponent(idOrSlug)}`, {
     params: { include: 'categories,tags' },
@@ -286,6 +334,7 @@ const ArticleForm = () => {
   const navigate = useNavigate();
   const { id: idOrSlug } = useParams();
   const isEdit = Boolean(idOrSlug);
+ 
 
   // Styles
   const inputBase = [
@@ -323,6 +372,8 @@ const ArticleForm = () => {
   const [progress, setProgress] = useState(0);
   const progressTimerRef = useRef(null);
   const [activeTab, setActiveTab] = useState('content');
+  const [tenants, setTenants] = useState([]);
+  const [isTenantOpen, setIsTenantOpen] = useState(false);
 
   // Fichiers
   const [featFile, setFeatFile] = useState(null);
@@ -368,11 +419,11 @@ const [lb, setLb] = useState({ open: false, src: '', alt: '' });
   // Champs par onglet (pour dirty + save partiel)
  // Champs par onglet (pour dirty + save partiel)
 const tabFields = {
-  content:     ['title','slug','excerpt','content','seo_data'],
+  content:     ['title','slug','excerpt','content','seo_data','tenant_id'],
+  //                                                   
   settings:    [
     'status','visibility','password',
     'published_at','scheduled_at','expires_at',
-    // ▼▼▼ Ajout pour que le bouton "Save" réagisse aux toggles ▼▼▼
     'is_featured','is_sticky','allow_comments','allow_sharing','allow_rating'
   ],
   author:      ['author_name','author_bio','author_id','author_avatar_file','author_avatar'],
@@ -382,6 +433,7 @@ const tabFields = {
   management:  ['reviewed_by','reviewed_at','review_notes'],
   preview:     []
 };
+
 
   const tabErrorCount = useMemo(() => {
     const out = {};
@@ -514,6 +566,36 @@ const tabFields = {
       }
     })();
   }, []);
+
+  // Charger la liste des tenants
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get('/societes');
+        const raw = res?.data?.data || res?.data || [];
+
+        const list = (Array.isArray(raw) ? raw : []).map((s) => ({
+          id: s.id,
+          nom: s.nom ?? s.name ?? '',
+          sigle: s.sigle ?? s.slug ?? '',
+          ville: s.ville ?? '',
+          pays: s.pays ?? '',
+          logo_url: s.logo_url ?? s.logo ?? '',
+        }));
+
+        setTenants(list);
+      } catch (e) {
+        console.error('Erreur chargement sociétés (tenants) pour ArticleForm', e);
+        setTenants([]);
+      }
+    })();
+  }, []);
+
+  const selectedTenant = useMemo(
+    () => tenants.find((t) => String(t.id) === String(model.tenant_id || '')) || null,
+    [tenants, model.tenant_id]
+  );
+
 
   // Preview avatar (object URL)
   const lastAvatarUrl = useRef('');
@@ -663,6 +745,7 @@ const tabFields = {
 
       const payload = {
         ...model,
+         tenant_id: model.tenant_id ? Number(model.tenant_id) : null,
         is_featured: !!model.is_featured,
         is_sticky: !!model.is_sticky,
         allow_comments: !!model.allow_comments,
@@ -1184,7 +1267,156 @@ const tabFields = {
                 />
                 <FieldError name="title" />
               </div>
+              {/* Tenant / Société */}
+              {/* Société / Tenant lié */}
+            <div className="space-y-2 z-[999999]">
+              <label className={sectionTitle}>
+                Société / Tenant
+              </label>
 
+              <div className="relative">
+                {/* Icône à gauche */}
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                  <FiLayers className="w-4 h-4" />
+                </span>
+
+                {/* Bouton principal (style BureauForm) */}
+                <button
+                  type="button"
+                  onClick={() => !tenantLocked && setIsTenantOpen((o) => !o)}
+                  disabled={tenantLocked}
+                  className={`w-full text-left pl-9 pr-9 py-2.5 rounded-xl border bg-white/90 shadow-sm flex items-center justify-between gap-3 ${
+                    hasError('tenant_id')
+                      ? 'border-red-400 focus:ring-red-400 focus:border-red-400'
+                      : 'border-slate-200 focus:ring-indigo-500 focus:border-indigo-500'
+                  } ${tenantLocked ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    {selectedTenant && selectedTenant.logo_url ? (
+                      <img
+                        src={buildSocieteLogoUrl(selectedTenant.logo_url)}
+                        alt={selectedTenant.nom}
+                        className="w-8 h-8 rounded-xl object-cover border border-slate-200/80 flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-[10px] text-slate-500 border border-slate-200/70 flex-shrink-0">
+                        Logo
+                      </div>
+                    )}
+
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm font-semibold text-slate-900 truncate flex items-center gap-1">
+                        {selectedTenant
+                          ? selectedTenant.nom
+                          : 'Sélectionner une société…'}
+                        {selectedTenant?.pays && (
+                          <span className="text-base">
+                            {getCountryFlag(selectedTenant.pays)}
+                          </span>
+                        )}
+                      </span>
+                      {selectedTenant && (
+                        <span className="text-[11px] text-slate-500 truncate">
+                          {selectedTenant.sigle && (
+                            <span className="font-medium">{selectedTenant.sigle}</span>
+                          )}
+                          {(selectedTenant.ville || selectedTenant.pays) && (
+                            <>
+                              {selectedTenant.sigle ? ' · ' : ''}
+                              {selectedTenant.ville ? selectedTenant.ville : ''}
+                              {selectedTenant.ville && selectedTenant.pays ? ' · ' : ''}
+                              {selectedTenant.pays || ''}
+                            </>
+                          )}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <span className="ml-2 text-slate-400 text-xs">
+                    {tenantLocked ? '🔒' : isTenantOpen ? '▲' : '▼'}
+                  </span>
+                </button>
+
+                {/* Dropdown des sociétés (style BureauForm) */}
+                {isTenantOpen && !tenantLocked && (
+                  <div className="absolute z-40 mt-1 w-full rounded-2xl bg-white shadow-xl border border-slate-200/80 h-56 overflow-y-auto">
+                    {tenants.length === 0 && (
+                      <div className="px-4 py-3 text-sm text-slate-500">
+                        Aucune société trouvée.
+                      </div>
+                    )}
+                    {tenants.map((t) => {
+                      const logoUrl = t.logo_url ? buildSocieteLogoUrl(t.logo_url) : '';
+                      const active = String(t.id) === String(model.tenant_id || '');
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => {
+                            onChange('tenant_id', t.id);       // 👈 remplit tenant_id
+                            setIsTenantOpen(false);
+                          }}
+                          className={`w-full px-3 py-2.5 flex items-center gap-3 text-left text-sm ${
+                            active
+                              ? 'bg-indigo-50'
+                              : 'hover:bg-slate-50 transition-colors'
+                          }`}
+                        >
+                          {logoUrl ? (
+                            <img
+                              src={logoUrl}
+                              alt={t.nom}
+                              className="w-8 h-8 rounded-xl object-cover border border-slate-200/80 flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-[10px] text-slate-500 border border-slate-200/70 flex-shrink-0">
+                              Logo
+                            </div>
+                          )}
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-semibold text-slate-900 truncate flex items-center gap-1">
+                              {t.nom}
+                              {t.pays && (
+                                <span className="text-base">
+                                  {getCountryFlag(t.pays)}
+                                </span>
+                              )}
+                            </span>
+                            <span className="text-[11px] text-slate-500 truncate">
+                              {t.sigle && (
+                                <span className="font-medium">{t.sigle}</span>
+                              )}
+                              {(t.ville || t.pays) && (
+                                <>
+                                  {t.sigle ? ' · ' : ''}
+                                  {t.ville ? t.ville : ''}
+                                  {t.ville && t.pays ? ' · ' : ''}
+                                  {t.pays || ''}
+                                </>
+                              )}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Erreur + lock bouton */}
+              <div className="flex items-center justify-between mt-1">
+                <FieldError name="tenant_id" />
+                <button
+                  type="button"
+                  onClick={() => setTenantLocked((v) => !v)}
+                  className="ml-2 px-3 py-1.5 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-semibold text-slate-700"
+                  title={tenantLocked ? 'Déverrouiller pour modifier' : 'Reverrouiller'}
+                >
+                  {tenantLocked ? 'Déverrouiller' : 'Reverrouiller'}
+                </button>
+              </div>
+            </div>
               <div className="space-y-3">
                 <label className={sectionTitle}>Slug (URL)</label>
                 <input
@@ -1200,27 +1432,7 @@ const tabFields = {
                 <FieldError name="slug" />
               </div>
 
-              {/* Tenant ID (optionnel) */}
-              <div className="space-y-2">
-                <label className={sectionTitle}>Tenant ID</label>
-                <div className="flex gap-2 items-center">
-                  <input
-                    className={inputBase + ' ' + (tenantLocked ? 'bg-slate-50 cursor-not-allowed' : '')}
-                    value={model.tenant_id || ''}
-                    onChange={e => onChange('tenant_id', e.target.value)}
-                    placeholder="tenant-123"
-                    readOnly={tenantLocked}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setTenantLocked(v => !v)}
-                    className="px-3 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-xs"
-                    title={tenantLocked ? 'Déverrouiller pour modifier' : 'Reverrouiller'}
-                  >
-                    {tenantLocked ? 'Déverrouiller' : 'Reverrouiller'}
-                  </button>
-                </div>
-              </div>
+              
             </section>
 
             <section className={`${card} p-8 space-y-3`}>

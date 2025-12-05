@@ -377,27 +377,31 @@ export default function HomeHero() {
       <div className="relative z-10 max-w-screen-2xl mx-auto px-6 md:px-8 py-10 ">
         {/* Header */}
         <header className="mb-10">
-          <div className="flex flex-col items-center text-center gap-3 md:gap-4">
-            {/* Icône dans un carré comme HomeHero */}
-            <div className="w-11 h-11 md:w-12 md:h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center border border-blue-100">
-              <FiMail className="text-blue-600 text-lg md:text-xl" />
-            </div>
-
-            <p className="text-[11px] md:text-xs text-slate-500 font-medium uppercase tracking-widest">
-              Nous écrire / nous joindre
-            </p>
-
-            <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-slate-900">
-              Contact & bureaux
-            </h1>
-
-            <div className="w-32 h-1 bg-slate-900 mx-auto" />
-
-            <p className="text-xs md:text-sm text-slate-600 max-w-xl mx-auto">
-              Une question, une demande de collaboration ou un besoin spécifique&nbsp;?
-              Envoyez-nous un message, nous revenons vers vous rapidement.
-            </p>
+                     {/* Header */}
+      <header className="mb-10">
+        <div className="text-center mb-12 lg:mb-16">
+          {/* Pastille type SpotlightArticles */}
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/70 border border-slate-200 text-blue-600 text-xs font-medium shadow-sm backdrop-blur-md">
+            <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+            <FiMail className="w-3.5 h-3.5" />
+            <span className="uppercase tracking-[0.18em]">
+              PORTAIL DOCUMENTAIRE
+            </span>
           </div>
+
+          {/* Titre principal */}
+          <h1 className="mt-4 text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 mb-4 tracking-tight">
+            Portail documentaire sécurisé
+            <span className="block text-slate-900">
+              pour la SAF/FJKM & Care et partenaires
+            </span>
+          </h1>
+
+        
+        </div>
+      </header>
+
+
         </header>
 
 
