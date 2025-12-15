@@ -1,35 +1,13 @@
-// ------------------------------
-// File: media-library/parts/Pagination.jsx
-// ------------------------------
-import { useMemo, useState, useCallback } from "react";
-import { useTranslation, Trans } from 'react-i18next';
+import { useMemo, useState, useCallback, useRef, useEffect } from "react";
+import { useTranslation, Trans } from "react-i18next";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faChevronLeft,
   faChevronRight,
   faAngleDoubleLeft,
-  faAngleDoubleRight
+  faAngleDoubleRight,
 } from "@fortawesome/free-solid-svg-icons";
 
-/**
- * Pagination — composant accessible, réactif et stylé (Tailwind) avec i18n
- *
- * Props :
- * - page: number (1-indexed)
- * - perPage: number
- * - total: number
- * - onChange: (nextPage:number) => void
- *
- * Options (facultatives) :
- * - className: string
- * - siblingCount: number (déf. 1)
- * - boundaryCount: number (déf. 1)
- * - showFirstLast: boolean (déf. true)
- * - showJump: boolean (déf. true)
- * - showPageSize: boolean (déf. false)
- * - pageSizeOptions: number[] (déf. [10,20,50,100])
- * - onPageSizeChange: (size:number) => void
- */
 export default function Pagination({
   page = 1,
   perPage = 24,
@@ -45,128 +23,186 @@ export default function Pagination({
   onPageSizeChange,
 }) {
   const { t, i18n } = useTranslation();
+  const jumpInputRef = useRef(null);
 
-  const pages = Math.max(1, Math.ceil((total || 0) / Math.max(1, perPage)));
-  const current = Math.min(Math.max(1, page), pages);
+  const pages = useMemo(
+    () => Math.max(1, Math.ceil((total || 0) / Math.max(1, perPage))),
+    [total, perPage]
+  );
+
+  const current = useMemo(
+    () => Math.min(Math.max(1, page), pages),
+    [page, pages]
+  );
+
   const canPrev = current > 1;
   const canNext = current < pages;
 
   const go = useCallback(
     (p) => {
       const next = Math.min(Math.max(1, p), pages);
-      if (next !== current) onChange(next);
+      if (next !== current && onChange) {
+        onChange(next);
+      }
     },
     [current, pages, onChange]
   );
 
-  // Calcule la plage des boutons numériques avec ellipses
   const pageItems = useMemo(() => {
-    const totalPages = pages;
-    if (totalPages <= 1) return [1];
+    if (pages <= 1) return [1];
 
     const range = (start, end) =>
       Array.from({ length: end - start + 1 }, (_, i) => start + i);
 
-    const startPages = range(1, Math.min(boundaryCount, totalPages));
+    const maxVisiblePages = boundaryCount * 2 + siblingCount * 2 + 3;
+    if (pages <= maxVisiblePages) {
+      return range(1, pages);
+    }
+
+    const startPages = range(1, Math.min(boundaryCount, pages));
     const endPages = range(
-      Math.max(totalPages - boundaryCount + 1, boundaryCount + 1),
-      totalPages
+      Math.max(pages - boundaryCount + 1, boundaryCount + 1),
+      pages
     );
 
     const siblingsStart = Math.max(
       Math.min(
         current - siblingCount,
-        totalPages - boundaryCount - siblingCount * 2 - 1
+        pages - boundaryCount - siblingCount * 2 - 1
       ),
       boundaryCount + 2
     );
+
     const siblingsEnd = Math.min(
       Math.max(
         current + siblingCount,
         boundaryCount + siblingCount * 2 + 2
       ),
-      totalPages - boundaryCount - 1
+      pages - boundaryCount - 1
     );
 
     const items = [
       ...startPages,
-      siblingsStart > boundaryCount + 2 ? "ellipsis" : null,
+      siblingsStart > boundaryCount + 2 ? "ellipsis-start" : null,
       ...range(siblingsStart, siblingsEnd),
-      siblingsEnd < totalPages - boundaryCount - 1 ? "ellipsis" : null,
+      siblingsEnd < pages - boundaryCount - 1 ? "ellipsis-end" : null,
       ...endPages,
     ].filter(Boolean);
-
-    if (totalPages <= boundaryCount * 2 + siblingCount * 2 + 3) {
-      return range(1, totalPages);
-    }
 
     return items;
   }, [pages, current, siblingCount, boundaryCount]);
 
-  const hasItems = total > 0;
-  const startItem = hasItems ? (current - 1) * perPage + 1 : 0;
-  const endItem = hasItems ? Math.min(total, current * perPage) : 0;
+  const displayInfo = useMemo(() => {
+    const hasItems = total > 0;
+    return {
+      hasItems,
+      start: hasItems ? (current - 1) * perPage + 1 : 0,
+      end: hasItems ? Math.min(total, current * perPage) : 0,
+    };
+  }, [total, current, perPage]);
 
   const [jump, setJump] = useState("");
 
-  // Styles
-  const btnBase =
-    "inline-flex items-center justify-center h-9 min-w-9 px-3 rounded-md border text-sm transition focus:outline-none focus:ring-2 focus:ring-blue-400/60 disabled:opacity-50 disabled:cursor-not-allowed";
-  const btnGhost =
-    "hover:bg-blue-50 border-blue-200 text-blue-700 dark:hover:bg-blue-900/30 dark:border-blue-700 dark:text-blue-200";
-  const btnSolid =
-    "bg-blue-600 text-white hover:bg-blue-700 border-blue-600 dark:bg-blue-500 dark:text-white dark:hover:bg-blue-600";
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
 
-  // Accessibilité clavier
-  const onKeyDownNav = (e) => {
-    if (e.target.tagName === "INPUT") return;
-    if (e.key === "ArrowLeft" && canPrev) {
-      e.preventDefault();
-      go(current - 1);
-    } else if (e.key === "ArrowRight" && canNext) {
-      e.preventDefault();
-      go(current + 1);
+      if (e.key === "ArrowLeft" && canPrev) {
+        e.preventDefault();
+        go(current - 1);
+      } else if (e.key === "ArrowRight" && canNext) {
+        e.preventDefault();
+        go(current + 1);
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [canPrev, canNext, current, go]);
+
+  const nf = useMemo(
+    () => new Intl.NumberFormat(i18n.language),
+    [i18n.language]
+  );
+
+  const handleJumpSubmit = useCallback(() => {
+    const val = parseInt(jump, 10);
+    if (!Number.isNaN(val) && val >= 1 && val <= pages) {
+      go(val);
+      setJump("");
+      jumpInputRef.current?.blur();
     }
-  };
+  }, [jump, pages, go]);
 
-  // Formatage selon locale
-  const nf = useMemo(() => new Intl.NumberFormat(i18n.language), [i18n.language]);
+  const handlePageSizeChange = useCallback(
+    (e) => {
+      const newSize = parseInt(e.target.value, 10);
+      if (onPageSizeChange) {
+        onPageSizeChange(newSize);
+      }
+    },
+    [onPageSizeChange]
+  );
+
+  if (pages <= 1) return null;
+
+  const btnBase =
+    "inline-flex items-center justify-center h-8 sm:h-9 min-w-8 sm:min-w-9 px-3 " +
+    "rounded-full border text-xs sm:text-sm font-medium transition-colors " +
+    "focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/70 " +
+    "focus-visible:ring-offset-1 focus-visible:ring-offset-slate-50 " +
+    "disabled:opacity-50 disabled:cursor-not-allowed";
+
+  const btnGhost =
+    "bg-white border-slate-200 text-slate-600 " +
+    "hover:bg-slate-50 hover:border-sky-200 hover:text-sky-700 " +
+    "active:bg-slate-100";
+
+  const btnSolid =
+    "bg-sky-100 border-sky-200 text-sky-700 font-semibold " +
+    "hover:bg-sky-200 hover:border-sky-300";
 
   return (
     <nav
-      className={`w-full flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between py-4 ${className}`}
       role="navigation"
-      aria-label={t('pagination.ariaLabel', 'Pagination')}
-      onKeyDown={onKeyDownNav}
+      aria-label={t("pagination.navigation")}
+      className={`flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between ${className}`}
     >
-      {/* Infos */}
-      <div className="flex flex-wrap items-center gap-3">
-        {/* ✅ Version riche avec <b>…</b> */}
-        <p className="text-sm text-slate-600 dark:text-slate-300">
+      {/* Section d'information */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+        {/* Info affichage */}
+        <div
+          className="text-xs sm:text-sm text-slate-600"
+          role="status"
+          aria-live="polite"
+        >
           <Trans
-            i18nKey="pagination.displayInfoHtml"
-            components={{ b: <b /> }}
+            i18nKey="pagination.showing"
+            components={{
+              strong: <span className="font-semibold text-slate-900" />,
+            }}
             values={{
-              start: nf.format(startItem),
-              end: nf.format(endItem),
+              start: nf.format(displayInfo.start),
+              end: nf.format(displayInfo.end),
               total: nf.format(total),
             }}
-          >
-            {/* Fallback si la clé i18n n’existe pas */}
-            Affichage <b>{{ start: nf.format(startItem) }}</b>–<b>{{ end: nf.format(endItem) }}</b> sur <b>{{ total: nf.format(total) }}</b>
-          </Trans>
-        </p>
+          />
+        </div>
 
-        {showPageSize && (
-          <div className="flex items-center gap-2 text-sm">
-            <label htmlFor="page-size" className="text-slate-600 dark:text-slate-300">
-              {t('pagination.itemsPerPage', 'Éléments/page')}
+        {/* Sélecteur de taille de page */}
+        {showPageSize && onPageSizeChange && (
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="page-size-select"
+              className="text-xs sm:text-sm text-slate-600 whitespace-nowrap"
+            >
+              {t("pagination.itemsPerPage")}
             </label>
             <select
-              id="page-size"
-              className="h-9 rounded-md border border-blue-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/60 dark:border-blue-700 dark:bg-slate-900"
+              id="page-size-select"
               value={perPage}
-              onChange={(e) => onPageSizeChange?.(parseInt(e.target.value, 10))}
+              onChange={handlePageSizeChange}
+              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-xs sm:text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-300/70 focus:border-sky-300"
             >
               {pageSizeOptions.map((opt) => (
                 <option key={opt} value={opt}>
@@ -178,99 +214,108 @@ export default function Pagination({
         )}
       </div>
 
-      {/* Contrôles */}
-      <div className="flex items-center gap-2">
+      {/* Section de contrôles */}
+      <div className="flex flex-wrap items-center gap-2">
         {showFirstLast && (
           <button
             type="button"
-            aria-label={t('pagination.firstPage', 'Première page')}
-            className={`${btnBase} ${btnGhost}`}
-            disabled={!canPrev}
             onClick={() => go(1)}
+            disabled={!canPrev}
+            aria-label={t("pagination.firstPage")}
+            className={`${btnBase} ${btnGhost}`}
           >
-            <FontAwesomeIcon icon={faAngleDoubleLeft} />
+            <FontAwesomeIcon icon={faAngleDoubleLeft} className="text-sm" />
           </button>
         )}
 
         <button
           type="button"
-          aria-label={t('pagination.previousPage', 'Page précédente')}
-          className={`${btnBase} ${btnGhost}`}
-          disabled={!canPrev}
           onClick={() => go(current - 1)}
+          disabled={!canPrev}
+          aria-label={t("pagination.previousPage")}
+          className={`${btnBase} ${btnGhost}`}
         >
-          <FontAwesomeIcon icon={faChevronLeft} />
+          <FontAwesomeIcon icon={faChevronLeft} className="text-xs" />
         </button>
 
-        {/* Pages numériques (compact sur mobile) */}
-        <ul className="hidden sm:flex items-center gap-1" aria-label={t('pagination.pages', 'Pages')}>
+        <div className="flex items-center gap-1" role="list">
           {pageItems.map((item, idx) => {
-            if (item === "ellipsis") {
+            if (typeof item === "string" && item.startsWith("ellipsis")) {
               return (
-                <li key={`el-${idx}`} className="px-2 text-blue-400/80 select-none">…</li>
+                <div
+                  key={`${item}-${idx}`}
+                  className="flex h-8 sm:h-9 min-w-8 sm:min-w-9 items-center justify-center text-slate-400"
+                  role="presentation"
+                  aria-hidden="true"
+                >
+                  …
+                </div>
               );
             }
+
             const isActive = item === current;
             return (
-              <li key={item}>
-                <button
-                  type="button"
-                  aria-label={t('pagination.goToPage', { page: item })}
-                  aria-current={isActive ? "page" : undefined}
-                  className={`${btnBase} ${isActive ? btnSolid : btnGhost}`}
-                  onClick={() => go(item)}
-                >
-                  {nf.format(item)}
-                </button>
-              </li>
+              <button
+                key={item}
+                type="button"
+                onClick={() => go(item)}
+                disabled={isActive}
+                aria-label={t("pagination.pageNumber", { number: item })}
+                aria-current={isActive ? "page" : undefined}
+                className={`${btnBase} ${isActive ? btnSolid : btnGhost}`}
+              >
+                {nf.format(item)}
+              </button>
             );
           })}
-        </ul>
+        </div>
 
         <button
           type="button"
-          aria-label={t('pagination.nextPage', 'Page suivante')}
-          className={`${btnBase} ${btnGhost}`}
-          disabled={!canNext}
           onClick={() => go(current + 1)}
+          disabled={!canNext}
+          aria-label={t("pagination.nextPage")}
+          className={`${btnBase} ${btnGhost}`}
         >
-          <FontAwesomeIcon icon={faChevronRight} />
+          <FontAwesomeIcon icon={faChevronRight} className="text-xs" />
         </button>
 
         {showFirstLast && (
           <button
             type="button"
-            aria-label={t('pagination.lastPage', 'Dernière page')}
-            className={`${btnBase} ${btnGhost}`}
-            disabled={!canNext}
             onClick={() => go(pages)}
+            disabled={!canNext}
+            aria-label={t("pagination.lastPage")}
+            className={`${btnBase} ${btnGhost}`}
           >
-            <FontAwesomeIcon icon={faAngleDoubleRight} />
+            <FontAwesomeIcon icon={faAngleDoubleRight} className="text-sm" />
           </button>
         )}
 
         {showJump && (
-          <div className="ml-1 flex items-center gap-2">
-            <label htmlFor="jump" className="sr-only">
-              {t('pagination.jumpToPage', 'Aller à la page')}
+          <div className="flex items-center gap-2 ml-2">
+            <label
+              htmlFor="jump-to-page"
+              className="text-xs sm:text-sm text-slate-600 whitespace-nowrap"
+            >
+              {t("pagination.jumpToPage")}
             </label>
             <input
-              id="jump"
+              ref={jumpInputRef}
+              id="jump-to-page"
               type="number"
-              inputMode="numeric"
-              min={1}
+              min="1"
               max={pages}
               value={jump}
               onChange={(e) => setJump(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
-                  const val = parseInt(jump, 10);
-                  if (!Number.isNaN(val)) go(val);
-                  setJump("");
+                  handleJumpSubmit();
                 }
               }}
-              placeholder={t('pagination.jumpPlaceholder', 'N° de page')}
-              className="h-9 w-24 rounded-md border border-blue-200 bg-white px-3 text-sm placeholder:text-blue-400/70 focus:outline-none focus:ring-2 focus:ring-blue-400/60 dark:border-blue-700 dark:bg-slate-900"
+              placeholder={t("pagination.jumpPlaceholder")}
+              aria-label={t("pagination.jumpToPageAria")}
+              className="h-8 sm:h-9 w-20 sm:w-24 rounded-full border border-slate-200 bg-slate-50 px-3 text-xs sm:text-sm text-slate-700 text-center placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-300/70 focus:border-sky-300 focus:bg-white"
             />
           </div>
         )}

@@ -551,6 +551,13 @@ const DashboardLayout = () => {
             accent: 'indigo',
           },
           {
+          id: 'miradiaSlidesBo',            // 👈 NEW
+          tKey: 'layout.menu.miradiaSlidesBo',
+          icon: <FaImages />,
+          link: '/miradia-slidescontroler',
+          accent: 'sky',
+        },
+          {
             id: 'articleNew',
             tKey: 'layout.menu.articleNew',
             icon: <FaPlus />,
@@ -847,8 +854,12 @@ const DashboardLayout = () => {
       newTitle = t('layout.titles.settings');
     else if (path.startsWith('/dashboard') || path.startsWith('/backoffice'))
       newTitle = t('layout.titles.dashboard');
+      else if (path.startsWith('/miradia-slidescontroler') || path.startsWith('/miradia-slides'))
+    newTitle = t('layout.titles.miradiaSlidesBo', 'Slides MIRADIA');
+
     else newTitle = t('layout.titles.dashboard');
     setTitle(newTitle);
+    
   }, [location.pathname, location.search, t]);
 
   /* ===== Profil ===== */
@@ -1221,6 +1232,7 @@ const DashboardLayout = () => {
 
                       const isSocietes = item.id === 'societesBo';
                       const isBureaux = item.id === 'bureauxBo';
+                      const isMiradiaSlides = item.id === 'miradiaSlidesBo';
 
                       const ContentNode = ({ isActive }) => (
                         <div
@@ -1236,26 +1248,28 @@ const DashboardLayout = () => {
                           <Content
                             icon={item.icon}
                             labelKey={item.tKey}
-                            fallback={
-                              item.id === 'categoriesTags'
-                                ? 'Catégories & Tags'
+                                  fallback={
+                            item.id === 'categoriesTags'
+                              ? 'Catégories & Tags'
                               : item.id === 'messageriesBo'
                               ? 'Messagerie'
+                              : item.id === 'miradiaSlidesBo'
+                              ? 'Miradia Slides'
                               : undefined
-                            }
+                          }
+
                             t={t}
                             accentKey={accentKey}
                             isActive={!!isActive}
-                            showAdd={isSocietes || isBureaux}
+                            showAdd={isSocietes || isBureaux || isMiradiaSlides}
                             onAdd={() => {
-                              if (isSocietes)
-                                navigate('/societes/create');
-                              else if (isBureaux)
-                                navigate('/bureaux/create');
+                              if (isSocietes) navigate('/societes/create');
+                              else if (isBureaux) navigate('/bureaux/create');
+                              else if (isMiradiaSlides) navigate('/miradia-slides/new');
                             }}
-                          />
-                        </div>
-                      );
+                                                    />
+                                                  </div>
+                          );
 
                       return item.link ? (
                         <ActiveLink

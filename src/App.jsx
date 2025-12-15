@@ -50,6 +50,9 @@ import BureauxIndex from './pages/UserManagementDashboard/Components/Backoffice/
 import BureauEditCreate from './pages/UserManagementDashboard/Components/Backoffice/TenantId/Bureau/BureauEditCreate';
 import BureauPublicShow from './pages/UserManagementDashboard/Components/Backoffice/TenantId/Bureau/BureauPublicShow';
 import ContactMessagesIndex from './pages/UserManagementDashboard/Components/Backoffice/TenantId/Messagerie/ContactMessagesIndex';
+import HomeMiradia from './pages/Miradia/HomeMiradia';
+import MiradiaSlidesIndex from './pages/UserManagementDashboard/Components/Backoffice/Miradia/Slide/MiradiaSlidesIndex';
+import MiradiaSlideForm from './pages/UserManagementDashboard/Components/Backoffice/Miradia/Slide/MiradiaSlideForm';
 
 function BootScreen() {
   return (
@@ -252,6 +255,32 @@ export default function App() {
                         </AdminRoute>
                       }
                     />
+                     <Route
+                    path="/miradia-slidescontroler"
+                    element={
+                      <AdminRoute>
+                        <MiradiaSlidesIndex />
+                      </AdminRoute>
+                    }
+                  />
+                      <Route
+                  path="/miradia-slides/new"
+                  element={
+                    <AdminRoute>
+                      <MiradiaSlideForm />
+                    </AdminRoute>
+                  }
+                />
+
+                <Route
+                  path="/miradia-slides/:id/edit"
+                  element={
+                    <AdminRoute>
+                      <MiradiaSlideForm />
+                    </AdminRoute>
+                  }
+                />
+
                   </Route>
                 </Route>
 
@@ -261,6 +290,7 @@ export default function App() {
                  <Route path="/documentation" element={<DocumentationPage />} />
                 <Route path="/guide" element={<UserGuidePage />} />
                 <Route path="/faq" element={<FAQPage />} />
+                <Route path="/miradia" element={<HomeMiradia />} />
 
               </Routes>
             </Router>

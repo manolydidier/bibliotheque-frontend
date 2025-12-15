@@ -16,9 +16,9 @@ import {
   FaCircleNotch,
 } from 'react-icons/fa';
 import axios from 'axios';
+import './Footer.css'; // 👈 nouveau
 
 // 🔐 Helper très simple pour savoir si l'utilisateur est admin
-// ⬇️ A ADAPTER à ta vraie logique (contexte, JWT, etc.)
 const getIsAdmin = () => {
   try {
     const role = localStorage.getItem('user_role');
@@ -52,9 +52,9 @@ const NewsletterToast = ({ message, onClose }) => {
       <div
         className="
           relative max-w-md w-full rounded-2xl 
-          bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900
+          bg-gradient-to-br from-slate-950/95 via-slate-900/95 to-slate-950/95
           border border-emerald-500/40
-          shadow-[0_20px_60px_rgba(15,23,42,0.7)]
+          shadow-[0_20px_60px_rgba(15,23,42,0.85)]
           px-5 py-4 text-white
           animate-[toast-in_0.18s_ease-out]
         "
@@ -182,12 +182,11 @@ const Footer = () => {
       { label: 'À propos', href: '/about' },
     ],
     ressources: [
-       { label: "Documentation", href: "/documentation" },
-  { label: "Guide d'utilisation", href: "/guide" },
-  { label: "FAQ", href: "/faq" },
+      { label: 'Documentation', href: '/documentation' },
+      { label: "Guide d'utilisation", href: '/guide' },
+      { label: 'FAQ', href: '/faq' },
       { label: 'Dashboard', href: '/dashboard' }, // filtré pour non-admin plus bas
     ],
-    // 💡 Les liens légaux incluent un paramètre tab pour piloter LegalPolicies
     legal: [
       { label: 'Mentions légales', href: '/termsofuse', tab: 'terms' },
       { label: 'Politique de confidentialité', href: '/termsofuse', tab: 'privacy' },
@@ -197,10 +196,10 @@ const Footer = () => {
   };
 
   const socialLinks = [
-    { icon: FaLinkedin, href: '#', label: 'LinkedIn', color: 'hover:text-blue-600' },
-    { icon: FaTwitter, href: '#', label: 'Twitter', color: 'hover:text-sky-500' },
-    { icon: FaFacebook, href: '#', label: 'Facebook', color: 'hover:text-blue-700' },
-    { icon: FaInstagram, href: '#', label: 'Instagram', color: 'hover:text-pink-600' },
+    { icon: FaLinkedin, href: '#', label: 'LinkedIn' },
+    { icon: FaTwitter, href: '#', label: 'Twitter' },
+    { icon: FaFacebook, href: '#', label: 'Facebook' },
+    { icon: FaInstagram, href: '#', label: 'Instagram' },
   ];
 
   // ⚙️ baseURL fallback
@@ -230,7 +229,7 @@ const Footer = () => {
           updated_at: data?.updated_at || data?.updatedAt || null,
         });
       } catch (err) {
-        // silencieux : fallback par défaut
+        // silencieux
       } finally {
         if (!cancelled) setStatusLoading(false);
       }
@@ -338,7 +337,6 @@ const Footer = () => {
   // Helper pour construire le path + query des liens légaux
   const buildLegalTo = (link) => {
     if (!link.tab) {
-      // liens simples : /configuration etc.
       return link.href;
     }
     const searchParams = new URLSearchParams(location.search);
@@ -354,19 +352,17 @@ const Footer = () => {
         onClose={() => setShowToast(false)}
       />
 
-      <footer className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white mt-20 border-t border-slate-800/60">
+      <footer className="footer-root mt-20">
         {/* Newsletter Section */}
-        <div className="border-b border-slate-800/60">
-          <div className="max-w-6xl mx-auto px-6 py-12">
-            <div className="grid md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.1fr)] gap-10 items-center">
+        <div className="footer-section-border">
+          <div className="max-w-6xl mx-auto px-6 py-10 sm:py-12">
+            <div className="grid md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.1fr)] gap-8 sm:gap-10 items-center">
               <div>
-                <p className="uppercase tracking-[0.2em] text-[11px] text-slate-400 mb-3">
+                <p className="uppercase tracking-[0.2em] text-[11px] text-slate-400 mb-2">
                   newsletter
                 </p>
-                <h3 className="text-2xl sm:text-3xl font-bold mb-3">
-                  <span className="bg-gradient-to-r from-[#1690FF] to-sky-300 bg-clip-text text-transparent">
-                    Restez informé
-                  </span>
+                <h3 className="text-2xl sm:text-3xl font-semibold mb-3 footer-title-gradient">
+                  Restez informé
                 </h3>
                 <p className="text-slate-400 text-sm leading-relaxed max-w-md">
                   Recevez les dernières actualités, analyses et contenus
@@ -375,7 +371,7 @@ const Footer = () => {
                 </p>
 
                 {/* Statut + dernières mises à jour */}
-                <div className="mt-5 space-y-2 text-xs text-slate-400">
+                <div className="mt-5 space-y-3 text-xs text-slate-400">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     {statusLoading ? (
                       <div className="flex items-center gap-2 text-slate-400 text-xs">
@@ -392,19 +388,19 @@ const Footer = () => {
                   </div>
 
                   {/* Dernières mises à jour */}
-                  <div className="mt-3">
+                  <div className="mt-2">
                     <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-1.5">
                       dernières mises à jour
                     </p>
                     {updatesLoading ? (
                       <div className="space-y-1.5 text-[11px] text-slate-500">
                         <div className="flex items-center gap-2">
-                          <span className="h-1.5 w-16 rounded-full bg-slate-700 animate-pulse" />
-                          <span className="h-1.5 w-10 rounded-full bg-slate-800 animate-pulse" />
+                          <span className="h-1.5 w-16 rounded-full bg-slate-700/60 animate-pulse" />
+                          <span className="h-1.5 w-10 rounded-full bg-slate-800/60 animate-pulse" />
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="h-1.5 w-20 rounded-full bg-slate-700 animate-pulse" />
-                          <span className="h-1.5 w-8 rounded-full bg-slate-800 animate-pulse" />
+                          <span className="h-1.5 w-20 rounded-full bg-slate-700/60 animate-pulse" />
+                          <span className="h-1.5 w-8 rounded-full bg-slate-800/60 animate-pulse" />
                         </div>
                       </div>
                     ) : (
@@ -413,7 +409,7 @@ const Footer = () => {
                           <li key={u.id} className="flex items-start gap-2">
                             <span className="mt-[6px] h-1 w-1 rounded-full bg-slate-500" />
                             <span className="truncate">
-                              <span className="text-slate-300 font-medium">
+                              <span className="text-slate-200 font-medium">
                                 [{u.repo}] {u.title}
                               </span>
                               {u.date && (
@@ -435,9 +431,9 @@ const Footer = () => {
               {/* Formulaire Newsletter */}
               <form
                 onSubmit={handleSubscribe}
-                className="flex flex-col gap-3 bg-slate-900/60 border border-slate-800/80 rounded-2xl px-4 py-4 sm:px-5 sm:py-5 shadow-[0_20px_60px_rgba(15,23,42,0.6)]"
+                className="footer-card flex flex-col gap-3 px-4 py-4 sm:px-5 sm:py-5"
               >
-                <label className="text-xs font-medium text-slate-300 mb-1">
+                <label className="text-xs font-medium text-slate-200 mb-1">
                   Votre adresse email
                 </label>
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -447,11 +443,11 @@ const Footer = () => {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="exemple@domaine.com"
                     className="
-                      flex-1 px-4 py-3 rounded-lg
-                      bg-slate-900/60
-                      border border-slate-700
-                      focus:border-[#1690FF]
-                      focus:outline-none focus:ring-2 focus:ring-[#1690FF]/25
+                      flex-1 px-4 py-3 rounded-xl
+                      bg-slate-950/40
+                      border border-slate-700/60
+                      focus:border-sky-400/70
+                      focus:outline-none focus:ring-2 focus:ring-sky-500/30
                       transition-all text-sm text-slate-50
                       placeholder:text-slate-500
                     "
@@ -462,13 +458,14 @@ const Footer = () => {
                     disabled={submitting}
                     className="
                       px-6 py-3
-                      bg-[#1690FF] hover:bg-[#1378d6]
+                      rounded-xl
+                      bg-sky-500/90 hover:bg-sky-400
                       disabled:opacity-70 disabled:cursor-not-allowed
-                      text-white rounded-lg font-medium
+                      text-white font-medium
                       transition-all flex items-center justify-center gap-2 whitespace-nowrap
-                      shadow-[0_12px_30px_rgba(22,144,255,0.45)]
-                      hover:shadow-[0_16px_40px_rgba(22,144,255,0.55)]
-                      active:translate-y-[1px] active:shadow-[0_6px_18px_rgba(22,144,255,0.40)]
+                      shadow-[0_14px_40px_rgba(56,189,248,0.55)]
+                      hover:-translate-y-[1px]
+                      active:translate-y-[0px] active:shadow-[0_8px_24px_rgba(56,189,248,0.45)]
                     "
                   >
                     {submitting ? 'Envoi…' : "S'abonner"}
@@ -479,9 +476,16 @@ const Footer = () => {
                 </div>
 
                 {errorMsg && (
-                  <p className="text-xs text-red-400 mt-1 flex items-center gap-1.5">
+                  <p className="text-xs text-red-300 mt-1 flex items-center gap-1.5">
                     <FaExclamationTriangle className="text-[13px]" />
                     <span>{errorMsg}</span>
+                  </p>
+                )}
+
+                {!errorMsg && (
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Nous n&apos;envoyons que des contenus pertinents. Vous
+                    pouvez vous désabonner à tout moment.
                   </p>
                 )}
               </form>
@@ -490,14 +494,14 @@ const Footer = () => {
         </div>
 
         {/* Main Footer Content */}
-        <div className="max-w-6xl mx-auto px-6 py-12">
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
+        <div className="max-w-6xl mx-auto px-6 py-10 sm:py-12">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 mb-10">
             {/* Brand Section */}
-            <div className="lg:col-span-1">
-              <h3 className="text-2xl font-bold mb-4 bg-gradient-to-r from-[#1690FF] to-blue-400 bg-clip-text text-transparent">
+            <div className="lg:col-span-1 space-y-4">
+              <h3 className="text-2xl font-bold footer-title-gradient">
                 Plateforme
               </h3>
-              <p className="text-slate-400 mb-6 leading-relaxed text-sm">
+              <p className="text-slate-400 mb-3 leading-relaxed text-sm">
                 Votre source d&apos;information et de ressources pour le
                 développement durable, l&apos;innovation et les politiques
                 publiques en Afrique.
@@ -508,13 +512,7 @@ const Footer = () => {
                     key={index}
                     href={social.href}
                     aria-label={social.label}
-                    className={`
-                      w-10 h-10 flex items-center justify-center rounded-lg
-                      bg-slate-900/60 border border-slate-700
-                      transition-all ${social.color}
-                      hover:border-current hover:-translate-y-1
-                      shadow-[0_10px_25px_rgba(15,23,42,0.6)]
-                    `}
+                    className="footer-social-btn"
                   >
                     <social.icon className="text-lg" aria-hidden="true" />
                   </a>
@@ -524,19 +522,18 @@ const Footer = () => {
 
             {/* Links Sections */}
             <div>
-              <h4 className="text-lg font-semibold mb-4">Plateforme</h4>
+              <h4 className="text-lg font-semibold mb-4 text-slate-100">
+                Plateforme
+              </h4>
               <ul className="space-y-3 text-sm">
                 {footerLinks.plateforme.map((link, index) => (
                   <li key={index}>
                     <Link
                       to={link.href}
-                      className="
-                        text-slate-400 hover:text-[#1690FF]
-                        transition-colors inline-flex items-center gap-2 group
-                      "
+                      className="footer-link inline-flex items-center gap-2 group"
                     >
-                      <span className="w-0 group-hover:w-2 h-0.5 bg-[#1690FF] transition-all" />
-                      {link.label}
+                      <span className="footer-link-bullet" />
+                      <span>{link.label}</span>
                     </Link>
                   </li>
                 ))}
@@ -544,19 +541,18 @@ const Footer = () => {
             </div>
 
             <div>
-              <h4 className="text-lg font-semibold mb-4">Ressources</h4>
+              <h4 className="text-lg font-semibold mb-4 text-slate-100">
+                Ressources
+              </h4>
               <ul className="space-y-3 text-sm">
                 {ressourcesLinks.map((link, index) => (
                   <li key={index}>
                     <Link
                       to={link.href}
-                      className="
-                        text-slate-400 hover:text-[#1690FF]
-                        transition-colors inline-flex items-center gap-2 group
-                      "
+                      className="footer-link inline-flex items-center gap-2 group"
                     >
-                      <span className="w-0 group-hover:w-2 h-0.5 bg-[#1690FF] transition-all" />
-                      {link.label}
+                      <span className="footer-link-bullet" />
+                      <span>{link.label}</span>
                     </Link>
                   </li>
                 ))}
@@ -565,21 +561,23 @@ const Footer = () => {
 
             {/* Contact Section */}
             <div>
-              <h4 className="text-lg font-semibold mb-4">Contact</h4>
+              <h4 className="text-lg font-semibold mb-4 text-slate-100">
+                Contact
+              </h4>
               <ul className="space-y-3 text-sm">
-                <li className="flex items-start gap-3 text-slate-400">
-                  <FaMapMarkerAlt className="mt-1 text-[#1690FF] flex-shrink-0" />
+                <li className="flex items-start gap-3 text-slate-300">
+                  <FaMapMarkerAlt className="mt-1 text-sky-400 flex-shrink-0" />
                   <span>Antananarivo, Madagascar</span>
                 </li>
-                <li className="flex items-center gap-3 text-slate-400">
-                  <FaPhone className="text-[#1690FF] flex-shrink-0" />
+                <li className="flex items-center gap-3 text-slate-300">
+                  <FaPhone className="text-sky-400 flex-shrink-0" />
                   <span>+261 38 32 006 19</span>
                 </li>
-                <li className="flex items-center gap-3 text-slate-400">
-                  <FaEnvelope className="text-[#1690FF] flex-shrink-0" />
+                <li className="flex items-center gap-3 text-slate-300">
+                  <FaEnvelope className="text-sky-400 flex-shrink-0" />
                   <a
                     href="mailto:johary@saf-fjkm.org"
-                    className="hover:text-[#1690FF] transition-colors"
+                    className="hover:text-sky-300 transition-colors"
                   >
                     johary@saf-fjkm.org
                   </a>
@@ -589,10 +587,10 @@ const Footer = () => {
           </div>
 
           {/* Bottom Bar */}
-          <div className="pt-8 border-t border-slate-800/60">
+          <div className="footer-bottom-bar pt-6">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
               <div className="text-center md:text-left space-y-1">
-                <p className="text-slate-500 text-xs sm:text-sm">
+                <p className="text-slate-400 text-xs sm:text-sm">
                   © {currentYear} Plateforme. Tous droits réservés.
                 </p>
                 <p className="text-[11px] text-slate-500">
@@ -601,7 +599,7 @@ const Footer = () => {
                     href="https://md2i.eu"
                     target="_blank"
                     rel="noreferrer"
-                    className="text-sky-400 hover:text-sky-300 underline underline-offset-2"
+                    className="text-sky-300 hover:text-sky-200 underline underline-offset-2"
                   >
                     md2i.eu
                   </a>
@@ -613,7 +611,7 @@ const Footer = () => {
                   <Link
                     key={index}
                     to={buildLegalTo(link)}
-                    className="text-slate-400 hover:text-[#1690FF] transition-colors"
+                    className="footer-link text-xs sm:text-sm"
                   >
                     {link.label}
                   </Link>

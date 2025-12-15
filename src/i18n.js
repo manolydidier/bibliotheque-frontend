@@ -737,18 +737,24 @@ i18n
   }
 },
 
-  "pagination": {
-    "ariaLabel": "Pagination",
-    "displayInfo": "Showing <b>{{start}}</b>–<b>{{end}}</b> of <b>{{total}}</b>",
-    "itemsPerPage": "Per page",
+   "pagination": {
+    "navigation": "Pagination navigation",
+
+    "showing": "Showing <strong>{{start}}</strong>–<strong>{{end}}</strong> of <strong>{{total}}</strong>",
+
+    "itemsPerPage": "Items/page",
+
     "firstPage": "First page",
     "previousPage": "Previous page",
     "nextPage": "Next page",
     "lastPage": "Last page",
+
+    "pageNumber": "Page {{number}}",
     "pages": "Pages",
-    "goToPage": "Go to page {{page}}",
-    "jumpToPage": "Jump to page",
-    "jumpPlaceholder": "Go to..."
+
+    "jumpToPage": "Go to page",
+    "jumpToPageAria": "Enter page number",
+    "jumpPlaceholder": "Page #"
   }
 ,
 
@@ -2295,17 +2301,23 @@ notfound: {
   }
 ,
   "pagination": {
-    "ariaLabel": "Pagination",
-    "displayInfo": "Affichage <b>{{start}}</b>–<b>{{end}}</b> sur <b>{{total}}</b>",
-    "itemsPerPage": "Par page",
+    "navigation": "Navigation de pagination",
+
+    "showing": "Affichage <strong>{{start}}</strong>–<strong>{{end}}</strong> sur <strong>{{total}}</strong>",
+
+    "itemsPerPage": "Éléments/page",
+
     "firstPage": "Première page",
     "previousPage": "Page précédente",
     "nextPage": "Page suivante",
     "lastPage": "Dernière page",
+
+    "pageNumber": "Page {{number}}",
     "pages": "Pages",
-    "goToPage": "Aller à la page {{page}}",
+
     "jumpToPage": "Aller à la page",
-    "jumpPlaceholder": "Aller à…"
+    "jumpToPageAria": "Saisir le numéro de page",
+    "jumpPlaceholder": "N° de page"
   }
 ,
 

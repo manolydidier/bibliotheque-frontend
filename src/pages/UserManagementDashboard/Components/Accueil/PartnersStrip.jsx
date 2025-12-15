@@ -1,5 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+// src/media-library/parts/PartnersStrip.jsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import PartnerStandardCard from "./PartnerStandardCard";
+import api from "../../../../services/api"; // adapte le chemin si besoin
 
 // Hook simple pour reveal au scroll
 function useRevealOnScroll(threshold = 0.2) {
@@ -30,48 +32,140 @@ function useRevealOnScroll(threshold = 0.2) {
   return [ref, visible];
 }
 
-// Données partenaires réalistes basées sur SAF/FJKM & CARE Madagascar
-const DEFAULT_PARTNERS = [
-  {
-    id: "saf-fjkm",
-    name: "SAF/FJKM",
-    acronym: "SAF/FJKM",
-    role:
-      "Département de développement de l’Église FJKM et structure porteuse de la bibliothèque numérique.",
-    logo:
-      "https://saf-fjkm.org/wp-content/themes/saf-fjkm/assets/images/logo.png",
-    color: "#0ea5e9",
-    href: "https://saf-fjkm.org/",
-    location: "Antananarivo · Réseau national",
-  },
-  {
-    id: "care-madagascar",
-    name: "CARE Madagascar",
-    acronym: "CARE",
-    role:
-      "Organisation humanitaire internationale, productrice de rapports, études et albums terrain.",
-    logo: "https://care.mg/wp-content/uploads/2019/10/logo-Care.png",
-    color: "#8b5cf6",
-    href: "https://care.mg/",
-    location: "Antananarivo · Interventions nationales",
-  },
-  {
-    id: "other-partners",
-    name: "Organisations membres & réseaux",
-    acronym: "Partenaires",
-    role:
-      "ONG, réseaux et institutions qui alimentent et consultent la bibliothèque en ligne.",
-    color: "#10b981",
-    href: "#",
-    location: "Madagascar · Régional & international",
-  },
-];
+// 🌍 Drapeau pays (comme dans ArticleForm)
+const getCountryFlag = (country) => {
+  if (!country) return "🌍";
+  const c = country.toLowerCase();
 
-export default function PartnersStrip({ partners = DEFAULT_PARTNERS }) {
+  if (c.includes("madagascar")) return "🇲🇬";
+  if (c.includes("france")) return "🇫🇷";
+  if (c.includes("canada")) return "🇨🇦";
+  if (
+    c.includes("usa") ||
+    c.includes("united states") ||
+    c.includes("états-unis")
+  ) {
+    return "🇺🇸";
+  }
+
+  return "🌍";
+};
+
+// 🔗 Logo société, même logique que buildSocieteLogoUrl
+const STORAGE_BASE = (
+  import.meta.env.VITE_API_BASE_STORAGE ||
+  import.meta.env.VITE_API_BASE_URL ||
+  ""
+)
+  .replace(/\/api\/?$/i, "")
+  .replace(/\/+$/, "");
+
+const buildSocieteLogoUrl = (value) => {
+  if (!value) return "";
+
+  const s = String(value).trim();
+
+  // URL absolue ou chemin déjà complet
+  if (
+    s.startsWith("http://") ||
+    s.startsWith("https://") ||
+    s.startsWith("/")
+  ) {
+    return s;
+  }
+
+  // Fichier stocké dans /storage/logos
+  return STORAGE_BASE ? `${STORAGE_BASE}/storage/logos/${s}` : "";
+};
+
+/**
+ * PartnersStrip
+ *
+ * - Charge les sociétés via /societes
+ * - Map vers PartnerStandardCard
+ * - Option : highlightTenantId pour mettre en avant le tenant courant
+ */
+export default function PartnersStrip({ highlightTenantId = null }) {
   const [ref, visible] = useRevealOnScroll(0.2);
+  const [societes, setSocietes] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // On duplique la liste pour un effet de boucle infinie
-  const marqueeItems = [...partners, ...partners];
+  // 🔥 Fetch Laravel /societes (shape = ton log)
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const res = await api.get("/societes", {
+          params: {
+            per_page: 100, // ajuste si besoin
+          },
+        });
+
+        const raw = res?.data?.data || res?.data || [];
+
+        if (!mounted) return;
+
+        setSocietes(Array.isArray(raw) ? raw : []);
+      } catch (e) {
+        console.error("Erreur chargement sociétés pour PartnersStrip", e);
+        if (mounted) setSocietes([]);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // 🧠 Mapping sociétés -> format PartnerStandardCard
+  const partners = useMemo(() => {
+    if (!Array.isArray(societes) || societes.length === 0) return [];
+
+    return societes.map((s) => {
+      const acronym =
+        s.slug ||
+        (s.name ? s.name.split(" ").map((p) => p[0]).join("") : "") ||
+        "—";
+
+      const color =
+        s.primary_color && typeof s.primary_color === "string"
+          ? s.primary_color
+          : "#0ea5e9"; // fallback
+
+      const location =
+        s.ville && s.pays
+          ? `${s.ville} · ${s.pays}`
+          : s.ville || s.pays || "Madagascar";
+
+      return {
+        id: s.id,
+        name: s.name || acronym,
+        acronym,
+        logo: buildSocieteLogoUrl(s.logo_url),
+        color,
+        href: s.website_url || "#",
+        location,
+        role:
+          s.description ||
+          "Organisation membre de la bibliothèque numérique.",
+        isActive:
+          highlightTenantId != null &&
+          String(highlightTenantId) === String(s.id),
+        countryFlag: getCountryFlag(s.pays),
+      };
+    });
+  }, [societes, highlightTenantId]);
+
+  // 🎞️ Marquee infini
+  const marqueeItems = useMemo(
+    () => (partners.length ? [...partners, ...partners] : []),
+    [partners]
+  );
+
+  const hasData = partners.length > 0;
 
   return (
     <section
@@ -100,7 +194,7 @@ export default function PartnersStrip({ partners = DEFAULT_PARTNERS }) {
       </style>
 
       <div className="w-full max-w-6xl mx-auto">
-        {/* Titre aligné avec le storytelling Hero/Slider */}
+        {/* Header */}
         <div className="w-full max-w-4xl mx-auto text-center mb-8 md:mb-10">
           <p className="text-[11px] md:text-xs font-semibold tracking-[0.25em] uppercase text-slate-500 mb-2">
             Réseau de la plateforme
@@ -110,37 +204,57 @@ export default function PartnersStrip({ partners = DEFAULT_PARTNERS }) {
           </h2>
           <div className="w-32 h-1 bg-slate-900 mx-auto mb-4 md:mb-5" />
           <p className="text-sm md:text-base text-slate-500 leading-relaxed">
-            La bibliothèque numérique relie le SAF/FJKM, CARE Madagascar et les
-            autres organisations membres autour des mêmes rapports, albums
-            photos, documents de référence et supports de formation, dans un
-            espace web commun.
+            La bibliothèque numérique relie les sociétés, ONG et institutions
+            membres autour des mêmes rapports, albums photos, documents de
+            référence et supports de formation, dans un espace web commun.
           </p>
         </div>
 
         {/* Contenant principal */}
         <div className="relative border border-slate-200 rounded-3xl bg-white shadow-sm overflow-hidden">
-          {/* Fades gauche/droite pour l’effet vitrine */}
+          {/* Fades gauche/droite */}
           <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-white via-white/90 to-transparent z-10" />
           <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-white via-white/90 to-transparent z-10" />
 
           <div className="relative w-full overflow-hidden">
-            <div
-              className="partners-marquee-track flex items-stretch gap-4 py-4 px-4 md:px-6"
-              style={{ width: "max-content" }}
-            >
-              {marqueeItems.map((partner, index) => (
-                <div
-                  key={`${partner.id || partner.name}-${index}`}
-                  className="shrink-0 w-[260px] md:w-[320px]"
-                >
-                  <PartnerStandardCard {...partner} />
-                </div>
-              ))}
-            </div>
+            {loading && (
+              <div className="px-4 py-6 text-sm text-slate-500">
+                Chargement des partenaires…
+              </div>
+            )}
+
+            {!loading && !hasData && (
+              <div className="px-4 py-6 text-sm text-slate-500">
+                Aucun partenaire trouvé pour le moment.
+              </div>
+            )}
+
+            {!loading && hasData && (
+              <div
+                className="partners-marquee-track flex items-stretch gap-4 py-4 px-4 md:px-6"
+                style={{ width: "max-content" }}
+              >
+                {marqueeItems.map((partner, index) => (
+                  <div
+                    key={`${partner.id || partner.name}-${index}`}
+                    className={[
+                      "shrink-0 w-[260px] md:w-[320px] transition-transform duration-200",
+                      partner.isActive
+                        ? "scale-[1.03] drop-shadow-md ring-2 ring-sky-300/80 rounded-3xl"
+                        : "",
+                    ].join(" ")}
+                  >
+                    <PartnerStandardCard
+                      {...partner}
+                      countryFlag={partner.countryFlag}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Petite ligne de cohérence en dessous (optionnelle) */}
         <p className="mt-4 text-[11px] md:text-xs text-slate-500 text-center">
           Chaque partenaire dispose d&apos;un accès dédié pour déposer et
           consulter les rapports, albums et documents qui le concernent dans la

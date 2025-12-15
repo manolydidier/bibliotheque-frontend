@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Miradia Motion – Animation Platform (anime.js style)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    :root {
+      --bg: #050816;
+      --bg-alt: #020617;
+      --surface: #0b1220;
+      --surface-soft: #020617;
+      --accent: #ff6bcb;
+      --accent-2: #4f46e5;
+      --accent-3: #22c55e;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --border: #1f2937;
+      --radius-lg: 1.3rem;
+      --shadow-soft: 0 30px 80px rgba(15, 23, 42, 0.7);
+      --easing: cubic-bezier(.4, 0, .2, 1);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      background:
+        radial-gradient(circle at 0% 0%, #1e293b 0, transparent 60%),
+        radial-gradient(circle at 100% 100%, #4b5563 0, transparent 55%),
+        var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    /* Background grid & glow */
+
+    .bg-grid {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -2;
+      background-image:
+        linear-gradient(to right, rgba(148,163,184,0.12) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(148,163,184,0.12) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: 0.45;
+      mask-image: radial-gradient(circle at top, black, transparent 70%);
+    }
+
+    .bg-orb {
+      position: fixed;
+      width: 420px;
+      height: 420px;
+      border-radius: 999px;
+      filter: blur(70px);
+      opacity: 0.85;
+      mix-blend-mode: screen;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    .bg-orb.a {
+      top: -140px;
+      left: -120px;
+      background: radial-gradient(circle, rgba(244,63,94,0.8), transparent 65%);
+    }
+
+    .bg-orb.b {
+      bottom: -160px;
+      right: -100px;
+      background: radial-gradient(circle, rgba(59,130,246,0.7), transparent 65%);
+    }
+
+    .bg-orb.c {
+      top: 30%;
+      right: 15%;
+      background: radial-gradient(circle, rgba(56,189,248,0.7), transparent 65%);
+      opacity: 0.6;
+    }
+
+    .bg-dots {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    .bg-dot {
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: radial-gradient(circle, #f9fafb, #a5b4fc);
+      box-shadow: 0 0 12px rgba(129,140,248,0.9);
+      opacity: 0.35;
+    }
+
+    /* Layout */
+
+    .page {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 1.5rem 3rem;
+    }
+
+    header {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0.9rem 1.5rem 0.9rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(22px);
+      background: linear-gradient(
+        to bottom,
+        rgba(5, 8, 22, 0.97),
+        rgba(5, 8, 22, 0.9),
+        transparent
+      );
+      border-bottom: 1px solid rgba(31,41,55,0.8);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+    }
+
+    .logo-badge {
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      padding: 2px;
+      background: conic-gradient(from 180deg, #ff6bcb, #4f46e5, #22c55e, #06b6d4, #ff6bcb);
+      animation: logoGlow 3s ease-in-out infinite;
+    }
+
+    .logo-inner {
+      width: 100%;
+      height: 100%;
+      border-radius: inherit;
+      background: radial-gradient(circle at 20% 0, #f9fafb, #020617);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: #020617;
+    }
+
+    .logo-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.1;
+    }
+
+    .logo-title {
+      font-size: 1.05rem;
+      font-weight: 600;
+    }
+
+    .logo-sub {
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+
+    @keyframes logoGlow {
+      0%   { box-shadow: 0 10px 22px rgba(248,113,113,0.6); }
+      50%  { box-shadow: 0 16px 32px rgba(14,116,144,0.85); }
+      100% { box-shadow: 0 10px 22px rgba(248,113,113,0.6); }
+    }
+
+    nav {
+      display: flex;
+      gap: 1.2rem;
+      font-size: 0.9rem;
+    }
+
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      position: relative;
+      padding-bottom: 2px;
+      transition: color 0.22s var(--easing), transform 0.18s var(--easing);
+    }
+
+    nav a::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      height: 2px;
+      width: 0;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #ff6bcb, #4f46e5);
+      transition: width 0.22s var(--easing);
+    }
+
+    nav a:hover {
+      color: #e5e7eb;
+      transform: translateY(-1px);
+    }
+
+    nav a.active::after {
+      width: 100%;
+    }
+
+    .nav-cta {
+      padding: 0.5rem 1rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.6);
+      background: radial-gradient(circle at 0 0, rgba(248,250,252,0.12), transparent 55%),
+                  rgba(15,23,42,0.9);
+      color: #e5e7eb;
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.22s var(--easing);
+      box-shadow: 0 10px 26px rgba(15,23,42,0.8);
+    }
+
+    .nav-cta:hover {
+      border-color: #ff6bcb;
+      transform: translateY(-1px) scale(1.02);
+      box-shadow: 0 16px 36px rgba(15,23,42,1);
+    }
+
+    /* Hero */
+
+    #hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.1fr);
+      gap: 2.3rem;
+      align-items: center;
+      padding-top: 2.3rem;
+      padding-bottom: 3rem;
+    }
+
+    .hero-left {
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.18rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.55);
+      background: rgba(15,23,42,0.95);
+      font-size: 0.75rem;
+      margin-bottom: 0.8rem;
+    }
+
+    .hero-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #22c55e;
+      box-shadow: 0 0 0 0 rgba(34,197,94,0.7);
+      animation: dotPulse 1.6s ease-out infinite;
+    }
+
+    @keyframes dotPulse {
+      0%   { transform: scale(1); box-shadow: 0 0 0 0 rgba(34,197,94,0.7); }
+      70%  { transform: scale(1.4); box-shadow: 0 0 0 14px rgba(34,197,94,0); }
+      100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+    }
+
+    .hero-title {
+      font-size: clamp(2.4rem, 4vw, 3rem);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+      margin-bottom: 0.5rem;
+      color: #f9fafb;
+    }
+
+    .hero-title span.accent {
+      background: linear-gradient(120deg, #ff6bcb, #4f46e5, #22c55e);
+      -webkit-background-clip: text;
+      color: transparent;
+      text-shadow: 0 0 28px rgba(139,92,246,0.55);
+    }
+
+    .hero-subtitle {
+      font-size: 0.96rem;
+      color: var(--muted);
+      max-width: 32rem;
+      line-height: 1.7;
+      margin-bottom: 1.4rem;
+    }
+
+    .hero-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.9rem;
+      margin-bottom: 1rem;
+    }
+
+    .btn-primary {
+      padding: 0.78rem 1.3rem;
+      border-radius: 999px;
+      border: none;
+      font-size: 0.86rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      background: linear-gradient(130deg, #ff6bcb, #4f46e5);
+      color: #f9fafb;
+      box-shadow: 0 18px 38px rgba(79,70,229,0.7);
+      transition: all 0.22s var(--easing);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-primary::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -60%;
+      width: 40%;
+      height: 100%;
+      background: linear-gradient(120deg,
+                  rgba(255,255,255,0),
+                  rgba(255,255,255,0.7),
+                  rgba(255,255,255,0));
+      transform: skewX(-20deg);
+      opacity: 0;
+      animation: shimmer 4s infinite;
+    }
+
+    @keyframes shimmer {
+      0%   { transform: translateX(-80%) skewX(-20deg); opacity: 0; }
+      40%  { opacity: 0; }
+      55%  { opacity: 0.6; }
+      100% { transform: translateX(220%) skewX(-20deg); opacity: 0; }
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px) scale(1.02);
+      box-shadow: 0 24px 50px rgba(79,70,229,0.9);
+    }
+
+    .btn-ghost {
+      padding: 0.78rem 1.2rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.7);
+      background: rgba(15,23,42,0.95);
+      color: #e5e7eb;
+      font-size: 0.86rem;
+      cursor: pointer;
+      transition: all 0.22s var(--easing);
+    }
+
+    .btn-ghost:hover {
+      border-color: #ff6bcb;
+      background: rgba(15,23,42,1);
+      transform: translateY(-1px);
+      box-shadow: 0 14px 32px rgba(15,23,42,0.9);
+    }
+
+    .hero-meta {
+      font-size: 0.8rem;
+      color: var(--muted);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .hero-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .hero-meta-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: #22c55e;
+    }
+
+    /* Hero right: card + pseudo-code + shapes */
+
+    .hero-right {
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-panel {
+      border-radius: 1.6rem;
+      background: radial-gradient(circle at 0 0, rgba(248, 250, 252, 0.08), transparent 55%),
+                  rgba(15,23,42,0.98);
+      border: 1px solid rgba(55,65,81,0.8);
+      box-shadow: var(--shadow-soft);
+      padding: 1.1rem 1.1rem 1.2rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.6rem;
+      font-size: 0.8rem;
+      color: #9ca3af;
+    }
+
+    .hero-dots {
+      display: flex;
+      gap: 0.25rem;
+    }
+
+    .hero-dots span {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #ef4444;
+    }
+
+    .hero-dots span:nth-child(2) { background: #facc15; }
+    .hero-dots span:nth-child(3) { background: #22c55e; }
+
+    .hero-panel-title {
+      font-size: 0.8rem;
+      color: #e5e7eb;
+      opacity: 0.9;
+    }
+
+    pre {
+      margin: 0;
+      padding: 0;
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.75rem;
+      color: #e5e7eb;
+      overflow-x: auto;
+    }
+
+    code {
+      white-space: pre;
+    }
+
+    .code-line {
+      opacity: 0.7;
+    }
+
+    .code-keyword { color: #a855f7; }
+    .code-fn      { color: #38bdf8; }
+    .code-str     { color: #f97316; }
+    .code-num     { color: #fb7185; }
+    .code-comm    { color: #6b7280; }
+
+    .hero-shape {
+      position: absolute;
+      border-radius: 999px;
+      filter: blur(8px);
+      opacity: 0.7;
+      mix-blend-mode: screen;
+    }
+
+    .hero-shape.a {
+      width: 120px;
+      height: 120px;
+      background: radial-gradient(circle, rgba(236,72,153,0.8), transparent 65%);
+      top: 55%;
+      left: -10%;
+    }
+
+    .hero-shape.b {
+      width: 140px;
+      height: 140px;
+      background: radial-gradient(circle, rgba(56,189,248,0.8), transparent 65%);
+      top: -12%;
+      right: -12%;
+    }
+
+    .hero-shape.c {
+      width: 90px;
+      height: 90px;
+      background: radial-gradient(circle, rgba(52,211,153,0.8), transparent 65%);
+      bottom: -12%;
+      right: 20%;
+    }
+
+    /* Sections */
+
+    section {
+      padding: 2.4rem 0 1.6rem;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 1rem;
+      margin-bottom: 1.6rem;
+    }
+
+    .section-title {
+      font-size: 1.4rem;
+    }
+
+    .section-sub {
+      font-size: 0.9rem;
+      color: var(--muted);
+      max-width: 32rem;
+    }
+
+    .pill {
+      font-size: 0.75rem;
+      padding: 0.18rem 0.65rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.7);
+      color: #e5e7eb;
+    }
+
+    /* Features */
+
+    #features .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1.4rem;
+    }
+
+    .card {
+      border-radius: var(--radius-lg);
+      background: rgba(15,23,42,0.9);
+      border: 1px solid rgba(31,41,55,0.9);
+      padding: 1.1rem 1rem;
+      box-shadow: 0 20px 48px rgba(15,23,42,0.75);
+      font-size: 0.88rem;
+      color: var(--muted);
+      position: relative;
+      overflow: hidden;
+      transform: translateY(20px);
+      opacity: 0;
+    }
+
+    .card h3 {
+      font-size: 0.98rem;
+      margin-bottom: 0.3rem;
+      color: #f9fafb;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.4rem;
+    }
+
+    .card-tag {
+      font-size: 0.7rem;
+      padding: 0.1rem 0.45rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.8);
+    }
+
+    .card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 0 0, rgba(129,140,248,0.3), transparent 60%);
+      opacity: 0;
+      transition: opacity 0.3s var(--easing);
+      pointer-events: none;
+    }
+
+    .card:hover::after {
+      opacity: 1;
+    }
+
+    /* Playground */
+
+    .playground-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.1fr);
+      gap: 2rem;
+      align-items: center;
+    }
+
+    .playground-controls {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .playground-controls p {
+      margin-bottom: 0.8rem;
+    }
+
+    .btn-small {
+      padding: 0.5rem 0.9rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.7);
+      background: rgba(15,23,42,0.95);
+      color: #e5e7eb;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s var(--easing);
+      margin-right: 0.5rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .btn-small:hover {
+      border-color: #ff6bcb;
+      background: rgba(15,23,42,1);
+      transform: translateY(-1px);
+      box-shadow: 0 10px 28px rgba(15,23,42,0.85);
+    }
+
+    .playground-scene {
+      border-radius: 1.6rem;
+      background: radial-gradient(circle at 0 0, rgba(248,250,252,0.05), transparent 60%),
+                  rgba(15,23,42,0.95);
+      border: 1px solid rgba(31,41,55,0.9);
+      box-shadow: var(--shadow-soft);
+      padding: 1.2rem;
+      position: relative;
+      height: 260px;
+      overflow: hidden;
+    }
+
+    .playground-shape {
+      width: 70px;
+      height: 70px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, #ff6bcb, #4f46e5);
+      box-shadow: 0 20px 40px rgba(79,70,229,0.8);
+      position: absolute;
+      top: 40%;
+      left: 10%;
+    }
+
+    .playground-circle {
+      width: 50px;
+      height: 50px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #22c55e, #0ea5e9);
+      position: absolute;
+      bottom: 16%;
+      right: 12%;
+      box-shadow: 0 16px 32px rgba(34,197,94,0.7);
+    }
+
+    /* Docs */
+
+    #docs .docs-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.1fr);
+      gap: 2rem;
+    }
+
+    .docs-block {
+      border-radius: var(--radius-lg);
+      background: rgba(15,23,42,0.95);
+      border: 1px solid rgba(31,41,55,0.9);
+      padding: 1rem 1.1rem;
+      box-shadow: 0 20px 48px rgba(15,23,42,0.75);
+      font-size: 0.86rem;
+      color: var(--muted);
+      transform: translateY(20px);
+      opacity: 0;
+    }
+
+    .docs-block h3 {
+      font-size: 0.95rem;
+      margin-bottom: 0.4rem;
+      color: #e5e7eb;
+    }
+
+    .docs-list {
+      list-style: none;
+      margin-top: 0.4rem;
+    }
+
+    .docs-list li {
+      margin-bottom: 0.25rem;
+    }
+
+    /* Contact */
+
+    #contact .contact-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+      gap: 2rem;
+      align-items: flex-start;
+    }
+
+    .contact-form {
+      border-radius: var(--radius-lg);
+      background: rgba(15,23,42,0.95);
+      border: 1px solid rgba(31,41,55,0.9);
+      padding: 1.2rem 1.1rem;
+      box-shadow: 0 20px 48px rgba(15,23,42,0.75);
+      display: grid;
+      gap: 0.8rem;
+      font-size: 0.86rem;
+    }
+
+    .field {
+      display: grid;
+      gap: 0.25rem;
+    }
+
+    .field label {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .field input,
+    .field textarea {
+      border-radius: 0.9rem;
+      border: 1px solid rgba(55,65,81,0.9);
+      background: rgba(15,23,42,0.95);
+      padding: 0.55rem 0.8rem;
+      color: #e5e7eb;
+      font-size: 0.86rem;
+      outline: none;
+      resize: vertical;
+      transition: border-color 0.2s var(--easing), box-shadow 0.2s var(--easing), background 0.2s var(--easing);
+    }
+
+    .field input::placeholder,
+    .field textarea::placeholder {
+      color: #6b7280;
+    }
+
+    .field input:focus,
+    .field textarea:focus {
+      border-color: #ff6bcb;
+      box-shadow: 0 0 0 1px rgba(236,72,153,0.5);
+      background: #020617;
+    }
+
+    .contact-info {
+      font-size: 0.86rem;
+      color: var(--muted);
+    }
+
+    .contact-info p {
+      margin-bottom: 0.7rem;
+    }
+
+    .contact-meta {
+      list-style: none;
+    }
+
+    .contact-meta li {
+      margin-bottom: 0.35rem;
+    }
+
+    .form-feedback {
+      font-size: 0.78rem;
+      min-height: 1rem;
+      color: #9ca3af;
+    }
+
+    .form-feedback.ok {
+      color: #4ade80;
+    }
+
+    .form-feedback.err {
+      color: #fb7185;
+    }
+
+    footer {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 1.2rem 1.5rem 1.8rem;
+      font-size: 0.78rem;
+      color: #6b7280;
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      border-top: 1px solid rgba(31,41,55,0.9);
+      margin-top: 2.5rem;
+    }
+
+    footer a {
+      color: #9ca3af;
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      color: #e5e7eb;
+    }
+
+    /* Reveal */
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Responsive */
+
+    @media (max-width: 900px) {
+      header {
+        padding-inline: 1rem;
+      }
+      nav {
+        display: none;
+      }
+      .page {
+        padding-inline: 1rem;
+      }
+      #hero {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      #features .cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .playground-layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      #docs .docs-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      #contact .contact-layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    @media (max-width: 640px) {
+      #features .cards {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Background -->
+  <div class="bg-grid"></div>
+  <div class="bg-orb a"></div>
+  <div class="bg-orb b"></div>
+  <div class="bg-orb c"></div>
+
+  <div class="bg-dots">
+    <span class="bg-dot" style="top:15%;left:10%;"></span>
+    <span class="bg-dot" style="top:25%;left:60%;"></span>
+    <span class="bg-dot" style="top:65%;left:20%;"></span>
+    <span class="bg-dot" style="top:75%;left:75%;"></span>
+    <span class="bg-dot" style="top:40%;left:85%;"></span>
+  </div>
+
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <div class="logo-badge">
+        <div class="logo-inner">M</div>
+      </div>
+      <div class="logo-text">
+        <div class="logo-title">Miradia Motion</div>
+        <div class="logo-sub">Animations pour votre plateforme</div>
+      </div>
+    </div>
+    <nav>
+      <a href="#hero" class="active">Accueil</a>
+      <a href="#features">Features</a>
+      <a href="#playground">Playground</a>
+      <a href="#docs">Docs</a>
+      <a href="#contact">Contact</a>
+    </nav>
+    <button class="nav-cta" onclick="scrollToSection('#contact')">
+      DEMO GRATUITE
+    </button>
+  </header>
+
+  <main class="page">
+    <!-- Hero -->
+    <section id="hero">
+      <div class="hero-left">
+        <div class="hero-badge">
+          <span class="hero-dot"></span>
+          <span id="hero-badge-text">Engine d’animation pour Plateforme Miradia</span>
+        </div>
+        <h1 class="hero-title" id="hero-title">
+          Donnez du mouvement à vos
+          <span class="accent">interfaces Miradia</span>.
+        </h1>
+        <p class="hero-subtitle">
+          Miradia Motion est une couche d’animation basée sur <strong>anime.js</strong> qui vous
+          permet de scénariser des transitions, des micro-interactions et des effets de scroll
+          fluides sur votre plateforme.
+        </p>
+        <div class="hero-buttons">
+          <button class="btn-primary" onclick="scrollToSection('#playground')">
+            ▶ Voir les animations
+          </button>
+          <button class="btn-ghost" onclick="scrollToSection('#docs')">
+            Documentation rapide
+          </button>
+        </div>
+        <div class="hero-meta">
+          <span><span class="hero-meta-dot"></span> Timelines, stagger, easing custom</span>
+          <span>✨ Pensé pour les dashboards Miradia</span>
+        </div>
+      </div>
+
+      <div class="hero-right">
+        <div class="hero-panel reveal" id="hero-panel">
+          <div class="hero-panel-header">
+            <div class="hero-dots">
+              <span></span><span></span><span></span>
+            </div>
+            <div class="hero-panel-title">demo.js • Miradia Motion</div>
+          </div>
+          <pre><code>
+<span class="code-line"><span class="code-comm">// Timeline Miradia Motion</span></span>
+<span class="code-line"><span class="code-keyword">const</span> tl = <span class="code-fn">anime</span>.timeline({</span>
+<span class="code-line">  easing: <span class="code-str">'cubicBezier(.4, 0, .2, 1)'</span>,</span>
+<span class="code-line">  duration: <span class="code-num">650</span>,</span>
+<span class="code-line">});</span>
+<span class="code-line"></span>
+<span class="code-line">tl</span>
+<span class="code-line">  .add({</span>
+<span class="code-line">    targets: <span class="code-str">'.hero-letter'</span>,</span>
+<span class="code-line">    translateY: [<span class="code-num">40</span>, <span class="code-num">0</span>],</span>
+<span class="code-line">    opacity: [<span class="code-num">0</span>, <span class="code-num">1</span>],</span>
+<span class="code-line">    delay: <span class="code-fn">anime</span>.stagger(<span class="code-num">35</span>),</span>
+<span class="code-line">  })</span>
+<span class="code-line">  .add({</span>
+<span class="code-line">    targets: <span class="code-str">'.playground-shape'</span>,</span>
+<span class="code-line">    translateX: <span class="code-num">180</span>,</span>
+<span class="code-line">    rotate: <span class="code-num">45</span>,</span>
+<span class="code-line">    scale: <span class="code-num">1.1</span>,</span>
+<span class="code-line">  });</span>
+          </code></pre>
+
+          <div class="hero-shape a"></div>
+          <div class="hero-shape b"></div>
+          <div class="hero-shape c"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section id="features">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Features principales</h2>
+          <p class="section-sub">
+            Inspirez-vous de la philosophie d’anime.js pour chorégraphier vos animations Miradia :
+            timelines, stagger, easing custom, scroll-reactif.
+          </p>
+        </div>
+        <div class="pill">Construit sur anime.js</div>
+      </div>
+
+      <div class="cards">
+        <article class="card reveal">
+          <h3>
+            Timelines orchestrées
+            <span class="card-tag">timeline()</span>
+          </h3>
+          <p>
+            Enchaînez plusieurs animations (intro, hover, scroll) sur un seul
+            composant Miradia grâce à des timelines lisibles.
+          </p>
+        </article>
+        <article class="card reveal">
+          <h3>
+            Stagger & séquencement
+            <span class="card-tag">stagger()</span>
+          </h3>
+          <p>
+            Faites apparaître listes, cartes ou lettres une par une avec des délais échelonnés
+            pour un rendu propre et premium.
+          </p>
+        </article>
+        <article class="card reveal">
+          <h3>
+            Easing avancé
+            <span class="card-tag">cubicBezier</span>
+          </h3>
+          <p>
+            Utilisez des courbes d’accélération fluides comme sur les sites modernes,
+            au lieu des animations linéaires “plates”.
+          </p>
+        </article>
+        <article class="card reveal">
+          <h3>
+            Réactivité au scroll
+            <span class="card-tag">Intersection</span>
+          </h3>
+          <p>
+            Lancez vos animations lorsque les sections entrent à l’écran, pour garder l’interface
+            légère et vivante.
+          </p>
+        </article>
+        <article class="card reveal">
+          <h3>
+            Micro-interactions
+            <span class="card-tag">hover / click</span>
+          </h3>
+          <p>
+            Boutons, cartes, modales : ajoutez des réactions visuelles
+            discrètes qui guident l’utilisateur.
+          </p>
+        </article>
+        <article class="card reveal">
+          <h3>
+            Intégration Miradia
+            <span class="card-tag">Miradia UI</span>
+          </h3>
+          <p>
+            Pensé pour s’insérer dans vos composants React / Blade existants,
+            sans casser votre architecture.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <!-- Playground -->
+    <section id="playground">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Playground interactif</h2>
+          <p class="section-sub">
+            Clique sur les presets pour voir comment anime.js peut animer un élément “carte Miradia”.
+            C’est exactement ce type de logique que tu pourras réutiliser.
+          </p>
+        </div>
+        <div class="pill">Try it live</div>
+      </div>
+
+      <div class="playground-layout">
+        <div class="playground-controls reveal">
+          <p>
+            Chaque bouton lance une animation différente sur le carré à droite
+            (position, rotation, scale, spring).
+          </p>
+          <button class="btn-small" onclick="playPreset('slide')">
+            Slide & Fade
+          </button>
+          <button class="btn-small" onclick="playPreset('bounce')">
+            Bounce
+          </button>
+          <button class="btn-small" onclick="playPreset('spin')">
+            Spin 3D
+          </button>
+          <button class="btn-small" onclick="playPreset('reset')">
+            Reset
+          </button>
+
+          <p style="margin-top:1rem;">
+            Tu peux reprendre exactement ces patterns dans un composant Miradia :
+            <code>playPreset('spin')</code> sur un hover, un clic ou un scroll.
+          </p>
+        </div>
+
+        <div class="playground-scene reveal">
+          <div class="playground-shape" id="play-shape"></div>
+          <div class="playground-circle" id="play-circle"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Docs -->
+    <section id="docs">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Docs rapides Miradia Motion</h2>
+          <p class="section-sub">
+            Quelques patterns de base pour attaquer : structure, hooks
+            et manière de penser les animations dans votre code.
+          </p>
+        </div>
+        <div class="pill">Guide express</div>
+      </div>
+
+      <div class="docs-grid">
+        <div class="docs-block reveal">
+          <h3>1. Initialiser une timeline</h3>
+          <p>
+            Créez une timeline anime.js dans votre composant, et ajoutez-y
+            des étapes avec des <code>add()</code> successifs.
+          </p>
+          <ul class="docs-list">
+            <li>• Définir l’easing global et la durée par défaut.</li>
+            <li>• Ajouter les animations de texte, puis de cartes, etc.</li>
+            <li>• Rejouer la timeline avec un bouton “Rejouer l’animation”.</li>
+          </ul>
+        </div>
+
+        <div class="docs-block reveal">
+          <h3>2. Réagir au scroll</h3>
+          <p>
+            Utilisez <code>IntersectionObserver</code> pour déclencher
+            des timelines quand une section entre dans le viewport.
+          </p>
+          <ul class="docs-list">
+            <li>• Observez les sections avec un <code>threshold</code> à ~0.3.</li>
+            <li>• Lancez <code>anime.timeline(...)</code> une seule fois.</li>
+            <li>• Ajoutez une classe <code>.visible</code> pour le fade-in CSS.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Contact -->
+    <section id="contact">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Parler à l’équipe Miradia</h2>
+          <p class="section-sub">
+            Vous voulez intégrer ce type d’animations dans une vraie plateforme Miradia
+            (dashboard, suivi de projets, etc.) ? Envoyez-nous un message.
+          </p>
+        </div>
+        <div class="pill">Contact</div>
+      </div>
+
+      <div class="contact-layout">
+        <form class="contact-form reveal" onsubmit="event.preventDefault(); handleContact();">
+          <div class="field">
+            <label for="name">Nom & organisation</label>
+            <input id="name" type="text" placeholder="Ex. : Aina — Plateforme Miradia" />
+          </div>
+          <div class="field">
+            <label for="email">Email</label>
+            <input id="email" type="email" placeholder="vous@organisation.org" />
+          </div>
+          <div class="field">
+            <label for="message">Message</label>
+            <textarea id="message" rows="4" placeholder="Expliquez votre besoin en quelques lignes..."></textarea>
+          </div>
+          <button type="submit" class="btn-primary" id="contact-btn">
+            Envoyer le message
+          </button>
+          <p class="form-feedback" id="form-feedback"></p>
+        </form>
+
+        <div class="contact-info reveal">
+          <p>
+            Nous pouvons vous aider à concevoir une bibliothèque d’animations Miradia
+            basée sur anime.js, adaptée à votre stack (Laravel, React, etc.).
+          </p>
+          <ul class="contact-meta">
+            <li><strong>Email :</strong> contact@miradia-motion.dev (exemple)</li>
+            <li><strong>Fuseau :</strong> GMT+3 (Antananarivo)</li>
+            <li><strong>Langues :</strong> FR / EN</li>
+          </ul>
+          <p style="margin-top:0.8rem;">
+            Ajoutez ce site comme base, puis branchez vos propres composants Miradia
+            à la place du playground pour une démo 100% personnalisée.
+          </p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>© <span id="year"></span> Miradia Motion (inspiré par anime.js, code original).</span>
+    <span><a href="#hero">Retour en haut</a></span>
+  </footer>
+
+  <!-- anime.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+
+  <script>
+    // Année
+    document.getElementById("year").textContent = new Date().getFullYear();
+
+    // Smooth scroll
+    function scrollToSection(sel) {
+      const el = document.querySelector(sel);
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const offset = rect.top + window.scrollY - 72;
+      window.scrollTo({ top: offset, behavior: "smooth" });
+    }
+
+    // Split hero title en lettres
+    const heroTitle = document.getElementById("hero-title");
+    if (heroTitle) {
+      const text = heroTitle.innerHTML;
+      // On ne touche que le premier gros texte, pas le span.accent
+      const parts = text.split('<span class="accent">');
+      const mainText = parts[0].replace(/<\/span>/g, "");
+      const accentPart = parts[1] ? '<span class="accent">' + parts[1] : "";
+
+      const wrapped = mainText.replace(/(\S)/g, "<span class='hero-letter'>$1</span>");
+      heroTitle.innerHTML = wrapped + accentPart;
+    }
+
+    // Animation d'intro hero (lettres + panel)
+    window.addEventListener("load", () => {
+      const tl = anime.timeline({
+        easing: "cubicBezier(.4, 0, .2, 1)",
+        duration: 650
+      });
+
+      tl
+        .add({
+          targets: ".hero-letter",
+          translateY: [40, 0],
+          opacity: [0, 1],
+          delay: anime.stagger(35),
+        })
+        .add({
+          targets: "#hero-panel",
+          opacity: [0, 1],
+          translateY: [30, 0],
+          duration: 600
+        }, "-=400")
+        .add({
+          targets: ".hero-shape.a",
+          translateX: [-40, 0],
+          translateY: [40, 0],
+          opacity: [0, 0.8],
+          duration: 700
+        }, "-=400")
+        .add({
+          targets: [".hero-shape.b", ".hero-shape.c"],
+          translateX: [40, 0],
+          opacity: [0, 0.9],
+          delay: anime.stagger(120),
+          duration: 700
+        }, "-=600");
+    });
+
+    // BG dots flottants
+    anime({
+      targets: ".bg-dot",
+      translateY: function() { return anime.random(-40, 40); },
+      translateX: function() { return anime.random(-20, 20); },
+      opacity: [0.2, 0.6],
+      direction: "alternate",
+      easing: "easeInOutSine",
+      duration: 4000,
+      delay: anime.stagger(300),
+      loop: true
+    });
+
+    // Badge hero dynamique
+    const badge = document.getElementById("hero-badge-text");
+    if (badge) {
+      const variants = [
+        "Engine d’animation pour Plateforme Miradia",
+        "Timelines, stagger, easing avancé",
+        "Pensé pour dashboards & UI Miradia"
+      ];
+      let idx = 0;
+      setInterval(() => {
+        idx = (idx + 1) % variants.length;
+        anime({
+          targets: badge,
+          opacity: [1, 0],
+          translateY: [0, -6],
+          duration: 220,
+          easing: "easeInOutQuad",
+          complete: () => {
+            badge.textContent = variants[idx];
+            anime({
+              targets: badge,
+              opacity: [0, 1],
+              translateY: [6, 0],
+              duration: 220,
+              easing: "easeInOutQuad"
+            });
+          }
+        });
+      }, 4500);
+    }
+
+    // Reveal sections avec IntersectionObserver + anime.js sur cards/docs
+    const revealEls = document.querySelectorAll(".reveal, .card, .docs-block");
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const el = entry.target;
+        el.classList.add("visible");
+        anime({
+          targets: el,
+          opacity: [0, 1],
+          translateY: [20, 0],
+          duration: 700,
+          easing: "cubicBezier(.4, 0, .2, 1)"
+        });
+        io.unobserve(el);
+      });
+    }, { threshold: 0.25 });
+
+    revealEls.forEach((el) => io.observe(el));
+
+    // Playground
+    const playShape = document.getElementById("play-shape");
+    const playCircle = document.getElementById("play-circle");
+    let playAnimation;
+
+    function resetPlayground() {
+      anime.remove(playShape);
+      anime.remove(playCircle);
+      anime.set(playShape, {
+        translateX: 0,
+        translateY: 0,
+        rotate: 0,
+        scale: 1
+      });
+      anime.set(playCircle, {
+        translateX: 0,
+        translateY: 0,
+        scale: 1
+      });
+    }
+
+    function playPreset(name) {
+      if (!playShape || !playCircle) return;
+      resetPlayground();
+
+      if (name === "slide") {
+        playAnimation = anime.timeline({
+          easing: "cubicBezier(.4, 0, .2, 1)",
+          duration: 600
+        })
+        .add({
+          targets: playShape,
+          translateX: 210,
+          translateY: -60,
+          opacity: [0, 1]
+        })
+        .add({
+          targets: playShape,
+          translateY: 0,
+          scale: 1.05
+        });
+      } else if (name === "bounce") {
+        playAnimation = anime({
+          targets: playShape,
+          translateY: [
+            { value: -80, duration: 400, easing: "easeOutQuad" },
+            { value: 0, duration: 500, easing: "easeOutBounce" }
+          ],
+          scale: [
+            { value: 1.15, duration: 400, easing: "easeOutQuad" },
+            { value: 1, duration: 500, easing: "easeOutBounce" }
+          ]
+        });
+      } else if (name === "spin") {
+        playAnimation = anime({
+          targets: playShape,
+          translateX: 160,
+          translateY: -40,
+          rotateY: "1turn",
+          rotateZ: 45,
+          scale: 1.2,
+          duration: 900,
+          easing: "cubicBezier(.4, 0, .2, 1)"
+        });
+        anime({
+          targets: playCircle,
+          scale: [1, 1.4, 1],
+          duration: 900,
+          easing: "easeInOutSine"
+        });
+      } else if (name === "reset") {
+        resetPlayground();
+      }
+    }
+
+    // Contact pseudo-send
+    function handleContact() {
+      const name = document.getElementById("name");
+      const email = document.getElementById("email");
+      const msg = document.getElementById("message");
+      const fb = document.getElementById("form-feedback");
+      const btn = document.getElementById("contact-btn");
+
+      if (!name.value || !email.value || !msg.value) {
+        fb.textContent = "Merci de remplir tous les champs.";
+        fb.classList.remove("ok");
+        fb.classList.add("err");
+        anime({
+          targets: fb,
+          translateX: [-4, 4, -4, 4, 0],
+          duration: 400,
+          easing: "easeInOutSine"
+        });
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = "Envoi...";
+      fb.textContent = "Simulation d’envoi…";
+      fb.classList.remove("err");
+      fb.classList.remove("ok");
+
+      setTimeout(() => {
+        fb.textContent = "Message envoyé (simulation). Vous pouvez brancher ici votre vraie API.";
+        fb.classList.add("ok");
+        btn.textContent = "Envoyer le message";
+        btn.disabled = false;
+        anime({
+          targets: fb,
+          opacity: [0, 1],
+          translateY: [4, 0],
+          duration: 500,
+          easing: "easeOutQuad"
+        });
+      }, 900);
+    }
+
+    window.playPreset = playPreset;
+    window.handleContact = handleContact;
+  </script>
+</body>
+</html>

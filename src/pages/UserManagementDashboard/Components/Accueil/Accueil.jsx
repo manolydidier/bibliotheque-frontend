@@ -6,6 +6,7 @@ import HomeLanding from './HomeLanding'
 import PartnersStrip from './PartnersStrip'
 import Slide from './Slider'
 import ContactPage from './Contact'
+
 const Accueil = () => {
   
   return(
@@ -17,6 +18,7 @@ const Accueil = () => {
           <PartnersStrip/>
           <ContactPage/>
           <Footer/>
+       
       </div>
   )
  

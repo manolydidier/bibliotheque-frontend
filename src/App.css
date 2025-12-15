@@ -615,3 +615,12 @@
   background: rgba(37, 99, 235, 0.35);
 }
 
+/* Cacher la scrollbar mais garder le scroll */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE et Edge */
+  scrollbar-width: none;      /* Firefox */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;              /* Chrome, Safari, Opera */
+}

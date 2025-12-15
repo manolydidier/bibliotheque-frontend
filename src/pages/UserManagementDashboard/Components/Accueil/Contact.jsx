@@ -531,7 +531,7 @@ export default function ContactPage() {
 
           {/* Carte */}
           <aside className="flex flex-col h-full">
-            <div className="h-full bg-slate-950/75 backdrop-blur-3xl text-slate-50 rounded-3xl p-5 sm:p-6 lg:p-7 flex flex-col border border-sky-500/25 shadow-[0_18px_50px_rgba(15,23,42,0.55)] relative overflow-hidden">
+            <div className="h-full bg-slate-950/75 backdrop-blur-3xl text-slate-50 rounded-3xl p-5 sm:p-6 lg:p-7 flex flex-col border border-sky-500/25 shadow-[0_18px_50px_rgba(15,23,42,0.35)] relative overflow-hidden">
               {/* Halo glassy */}
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_0%,rgba(56,189,248,0.23),transparent_55%),radial-gradient(circle_at_90%_100%,rgba(94,234,212,0.18),transparent_55%)] opacity-70" />
 

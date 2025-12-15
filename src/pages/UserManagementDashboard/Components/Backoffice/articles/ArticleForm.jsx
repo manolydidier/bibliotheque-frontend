@@ -834,42 +834,52 @@ const tabFields = {
 
   /* ========= Sauvegarde partielle par onglet ========= */
   const savePartial = useCallback(async (tabId) => {
-    if (!isEdit || !model.id) return;
-    const fields = tabFields[tabId] || [];
-    if (fields.length === 0 && tabId !== 'media' && tabId !== 'author') return;
+   if (!isEdit || !model.id) return;
+  const fields = tabFields[tabId] || [];
+  if (fields.length === 0 && tabId !== 'media' && tabId !== 'author') return;
 
-    const wantsFiles = (tabId === 'media' && !!featFile) || (tabId === 'author' && !!avatarFile);
+  const wantsFiles = (tabId === 'media' && !!featFile) || (tabId === 'author' && !!avatarFile);
 
-    const partial = {};
-    for (const k of fields) {
-      if (k in model) partial[k] = model[k];
-    }
+  const partial = {};
+  for (const k of fields) {
+    if (k in model) partial[k] = model[k];
+  }
 
-    if (tabId === 'settings') {
-      if ('published_at' in partial) partial.published_at = partial.published_at ? toSqlDateTime(partial.published_at) : null;
-      if ('scheduled_at' in partial) partial.scheduled_at = partial.scheduled_at ? toSqlDateTime(partial.scheduled_at) : null;
-      if ('expires_at'   in partial) partial.expires_at   = partial.expires_at   ? toSqlDateTime(partial.expires_at)   : null;
+  // 🧩 Normalisation spéciale par onglet
+  if (tabId === 'content') {
+    if ('tenant_id' in partial) {
+      partial.tenant_id = partial.tenant_id
+        ? Number(partial.tenant_id)
+        : null;
     }
-    if (tabId === 'management') {
-      if ('reviewed_at' in partial) partial.reviewed_at = partial.reviewed_at ? toSqlDateTime(partial.reviewed_at) : null;
-      if ('reviewed_by' in partial) partial.reviewed_by = partial.reviewed_by ? Number(partial.reviewed_by) : null;
-    }
-    if (tabId === 'analytics') {
-      if ('reading_time' in partial) partial.reading_time = Number(partial.reading_time || 0);
-      if ('word_count'   in partial) partial.word_count   = Number(partial.word_count || 0);
-    }
-    if (tabId === 'taxonomy') {
-      if ('categories' in partial) partial.categories = ensureNumberArray(partial.categories);
-      if ('tags'       in partial) partial.tags       = ensureNumberArray(partial.tags);
-    }
-    if (tabId === 'author') {
-      if ('author_id' in partial) partial.author_id = partial.author_id ? Number(partial.author_id) : null;
-    }
+  }
 
-    Object.keys(partial).forEach(key => {
-      const v = partial[key];
-      if (v === '' || v === null) delete partial[key];
-    });
+  if (tabId === 'settings') {
+    if ('published_at' in partial) partial.published_at = partial.published_at ? toSqlDateTime(partial.published_at) : null;
+    if ('scheduled_at' in partial) partial.scheduled_at = partial.scheduled_at ? toSqlDateTime(partial.scheduled_at) : null;
+    if ('expires_at'   in partial) partial.expires_at   = partial.expires_at   ? toSqlDateTime(partial.expires_at)   : null;
+  }
+  if (tabId === 'management') {
+    if ('reviewed_at' in partial) partial.reviewed_at = partial.reviewed_at ? toSqlDateTime(partial.reviewed_at) : null;
+    if ('reviewed_by' in partial) partial.reviewed_by = partial.reviewed_by ? Number(partial.reviewed_by) : null;
+  }
+  if (tabId === 'analytics') {
+    if ('reading_time' in partial) partial.reading_time = Number(partial.reading_time || 0);
+    if ('word_count'   in partial) partial.word_count   = Number(partial.word_count || 0);
+  }
+  if (tabId === 'taxonomy') {
+    if ('categories' in partial) partial.categories = ensureNumberArray(partial.categories);
+    if ('tags'       in partial) partial.tags       = ensureNumberArray(partial.tags);
+  }
+  if (tabId === 'author') {
+    if ('author_id' in partial) partial.author_id = partial.author_id ? Number(partial.author_id) : null;
+  }
+
+  Object.keys(partial).forEach(key => {
+    const v = partial[key];
+    if (v === '' || v === null) delete partial[key];
+  });
+
 
     try {
       setIsSubmitting(true);

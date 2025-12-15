@@ -14,7 +14,8 @@ import {
   FiRefreshCw, FiPlus, FiTrash2, FiFilter as FiFilterIcon,
   FiChevronDown as FiChevronDownFi, FiChevronUp as FiChevronUpFi,
   FiGrid as FiGridIcon, FiList as FiListIcon, FiSave, FiTrash as FiTrashFeather,
-  FiCheck as FiCheckIcon, // 👈 NEW check dans le chip
+  FiCheck as FiCheckIcon,
+  FiChevronRight, // 👈 NEW check dans le chip
 } from 'react-icons/fi';
 
 import FiltersBar from './FiltersBar';
@@ -376,6 +377,38 @@ const ArticlesIndex = () => {
       has_prev: false,
     }
   });
+// Base storage (comme sur ArticleForm)
+// Base pour construire les URLs de fichiers (adapter si besoin)
+const STORAGE_BASE =
+  import.meta.env.VITE_API_BASE_STORAGE ||
+  import.meta.env.VITE_API_BASE_URL ||
+  window.location.origin;
+
+/**
+ * Construit l'URL absolue du logo de la société.
+ * - Si logo_url est un nom de fichier → /storage/logos/<fichier>
+ * - Si logo_url est déjà une URL absolue → on la renvoie telle quelle
+ * - Si logo_url contient déjà /storage/... → on préfixe avec STORAGE_BASE si besoin
+ */
+const getTenantLogoUrl = (tenant) => {
+  if (!tenant || !tenant.logo_url) return null;
+
+  const raw = String(tenant.logo_url).trim();
+
+  // Déjà une URL complète
+  if (/^https?:\/\//i.test(raw)) return raw;
+
+  // Contient déjà /storage/...
+  if (raw.includes('/storage/')) {
+    return `${STORAGE_BASE.replace(/\/$/, '')}/${raw.replace(/^\//, '')}`;
+  }
+
+  // Cas normal : juste le nom du fichier → /storage/logos/<fichier>
+  const base = STORAGE_BASE.replace(/\/$/, '');
+  const filename = raw.replace(/^\//, '');
+  return `${base}/storage/logos/${filename}`;
+};
+
 
   // 🔁 Liste des sociétés (tenants)
   const [tenants, setTenants] = useState([]);
@@ -388,7 +421,7 @@ const ArticlesIndex = () => {
         const { data } = await axios.get('/societes', { params: { per_page: 100 } });
         const list = Array.isArray(data?.data)
           ? data.data
-          : (Array.isArray(data) ? data : []);
+          : (Array.isArray(data) ? data : []);         
         setTenants(list);
       } catch (e) {
         console.error('Erreur chargement tenants', e);
@@ -752,6 +785,36 @@ const ArticlesIndex = () => {
     return () => window.removeEventListener('gridcard:colorpref', handler);
   }, []);
 
+  const tenantScrollRef = useRef(null);
+// en haut du composant
+const handleTenantWheel = useCallback((e) => {
+  // si pas de défilement vertical → on ne fait rien
+  if (e.deltaY === 0) return;
+
+  // on empêche le scroll vertical de la page
+  e.preventDefault();
+
+  // on transforme le scroll vertical en scroll horizontal
+  e.currentTarget.scrollLeft += e.deltaY;
+}, []);
+
+useEffect(() => {
+  if (!tenantScrollRef.current || !filters.tenantId) return;
+
+  const container = tenantScrollRef.current;
+  const activeChip = container.querySelector(
+    `[data-tenant-id="${filters.tenantId}"]`
+  );
+
+  if (activeChip) {
+    activeChip.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'center',
+    });
+  }
+}, [filters.tenantId]);
+  
   /* ===================
      Rendu
   =================== */
@@ -770,51 +833,72 @@ const ArticlesIndex = () => {
       `}</style>
 
       {/* ===== Header ===== */}
-      <div className="relative overflow-hidden p-5 border-b bg-gradient-to-br from-indigo-600 via-blue-600 to-sky-600 text-white">
+      <div className="relative overflow-visible p-5 border-b bg-gradient-to-br from-indigo-600 via-blue-600 to-sky-600 text-white">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10 blur-2xl" />
           <div className="absolute -bottom-20 -left-10 w-72 h-72 rounded-full bg-cyan-300/10 blur-3xl" />
         </div>
 
-        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
+       <div className="relative flex flex-col md:flex-row md:flex-wrap md:items-center justify-between gap-4">
           <div className="min-w-0">
             <h2 className="text-xl font-semibold tracking-tight">Articles</h2>
             <p className="text-sm text-white/90 mt-1">Gestion des articles du backoffice</p>
 
             {/* 👇 Badge société active sous le titre */}
-            {selectedTenant && (
-              <div className="mt-2 inline-flex items-center gap-2 text-xs text-white/90">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 border border-white/20">
-                  <FaBuilding className="opacity-90" />
-                  <span className="font-semibold">Société active :</span>
-                </span>
-                <span className="inline-flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-700/40 border border-white/30">
-                  <div className="w-6 h-6 rounded-full bg-white/90 flex items-center justify-center overflow-hidden border border-white/40">
-                    {selectedTenant.logo_url || selectedTenant.logo || selectedTenant.avatar_url || selectedTenant.avatar ? (
-                      <img
-                        src={selectedTenant.logo_url || selectedTenant.logo || selectedTenant.avatar_url || selectedTenant.avatar}
-                        alt={selectedTenant.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-[10px] font-bold text-blue-700">
-                        {selectedTenant.name?.slice(0, 2)?.toUpperCase() || '??'}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-xs font-medium truncate max-w-[180px]">
-                    {selectedTenant.name}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setFilters(f => ({ ...f, tenantId: '' }))}
-                    className="text-[11px] underline underline-offset-2 text-white/80 hover:text-white"
-                  >
-                    Effacer
-                  </button>
-                </span>
-              </div>
-            )}
+          {/* 👇 Badge société active sous le titre */}
+{selectedTenant && (
+  <div className="mt-2 inline-flex items-center gap-2 text-xs text-white/90">
+    {/* Label fixe */}
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 border border-white/20">
+      <FaBuilding className="opacity-90" />
+      <span className="font-semibold">Société active :</span>
+    </span>
+
+    {/* Contenu : soit logo, soit sigle, soit nom */}
+    {(() => {
+      const logoUrl = getTenantLogoUrl(selectedTenant);
+
+      const sigle =
+        selectedTenant.sigle ||
+        selectedTenant.acronym ||
+        selectedTenant.code ||
+        selectedTenant.short_name ||
+        selectedTenant.name?.slice(0, 2) ||
+        '';
+
+      const label = sigle || selectedTenant.name || '—';
+
+      return (
+        <span className="inline-flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-700/40 border border-white/30">
+          {logoUrl ? (
+            // ✅ Cas 1 : seulement le logo
+            <div className="w-6 h-6 rounded-full bg-white/90 flex items-center justify-center overflow-hidden border border-white/40">
+              <img
+                src={logoUrl}
+                alt={selectedTenant.name || 'Logo société'}
+                className="w-full h-full object-cover"
+              />
+            </div>
+          ) : (
+            // ✅ Cas 2 : sigle ou nom, texte seulement
+            <span className="text-xs font-medium truncate max-w-[160px]">
+              {label}
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setFilters(f => ({ ...f, tenantId: '' }))}
+            className="text-[11px] underline underline-offset-2 text-white/80 hover:text-white"
+          >
+            Effacer
+          </button>
+        </span>
+      );
+    })()}
+  </div>
+)}
+
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -916,85 +1000,104 @@ const ArticlesIndex = () => {
             </div>
 
             {/* ✅ Sélecteur de société (tenant) avec affichage plus intuitif */}
-            <div className="ml-2 max-w-xs">
-              <div className="flex items-center gap-2 text-[11px] text-white/80 mb-1">
-                <span className="inline-flex items-center gap-1">
-                  <FaBuilding className="opacity-80" />
-                  <span>Filtrer par société</span>
-                </span>
-                {filters.tenantId && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-white/15 text-[10px] font-semibold">
-                    1 filtre actif
-                  </span>
-                )}
-                {loadingTenants && <FaSpinner className="animate-spin" size={10} />}
+<div className="relative ml-2 w-full md:w-auto md:max-w-xs">
+  {/* 🏷️ Titre + badge, flottant au-dessus */}
+  <div className="absolute -top-5 left-0 flex items-center gap-2 text-[11px] text-white/80">
+    <span className="inline-flex items-center gap-1">
+      <FaBuilding className="opacity-80" />
+      <span>Filtrer par société</span>
+    </span>
+
+    {filters.tenantId && (
+      <span className="px-1.5 py-0.5 rounded-full bg-white/15 text-[10px] font-semibold">
+        1 filtre actif
+      </span>
+    )}
+
+    {loadingTenants && <FaSpinner className="animate-spin" size={10} />}
+  </div>
+
+  {/* Conteneur scrollable + gradients de hint */}
+  <div className="relative bg-black-500/20 rounded-xl">
+    {/* Hints de scroll (bords dégradés) */}
+    <div className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-blue-600 via-blue-600/50 to-transparent" />
+    <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-blue-600 via-blue-600/50 to-transparent" />
+
+    <div
+      ref={tenantScrollRef}
+      className="flex gap-2 overflow-x-auto pb-1 pt-1 no-scrollbar scroll-smooth"
+      onWheel={handleTenantWheel}
+    >
+      {/* Bouton "Toutes" */}
+      <button
+        type="button"
+        onClick={() => setFilters(f => ({ ...f, tenantId: '' }))}
+        className={`flex-shrink-0 px-3 py-1.5 rounded-full border text-xs font-medium transition
+          ${!filters.tenantId
+            ? 'bg-white text-blue-700 border-white shadow-sm'
+            : 'bg-white/10 text-white hover:bg-white/20 border-white/30'
+          }`}
+        title="Afficher toutes les sociétés"
+      >
+        Toutes
+      </button>
+
+      {tenants.map((tenant) => {
+        const isActive = String(filters.tenantId || '') === String(tenant.id);
+
+        // ✅ URL réelle du logo
+        const logoUrl = getTenantLogoUrl(tenant);
+
+        // ✅ Sigle / fallback texte
+        const sigle =
+          tenant.sigle ||
+          tenant.acronym ||
+          tenant.code ||
+          tenant.short_name ||
+          tenant.name?.slice(0, 2) ||
+          '??';
+
+        return (
+          <button
+            key={tenant.id}
+            type="button"
+            data-tenant-id={tenant.id} // pour scrollIntoView
+            onClick={() =>
+              setFilters(f => ({
+                ...f,
+                tenantId: isActive ? '' : String(tenant.id),
+              }))
+            }
+            className={`flex-shrink-0 inline-flex items-center gap-2 px-2 py-1.5 rounded-full border text-xs transition
+              ${isActive
+                ? 'bg-white text-blue-700 border-white shadow-sm'
+                : 'bg-white/10 text-white hover:bg-white/20 border-white/30'
+              }`}
+            title={`Afficher uniquement : ${tenant.name || sigle}`}
+          >
+            {/* 👉 Soit logo, soit texte, mais pas les deux */}
+            {logoUrl ? (
+              <div className="w-5 h-5 rounded-full bg-white flex items-center justify-center overflow-hidden border border-white/40">
+                <img
+                  src={logoUrl}
+                  alt={tenant.name || sigle}
+                  className="w-full h-full object-cover"
+                />
               </div>
+            ) : (
+              <span className="truncate max-w-[120px] text-left font-semibold">
+                {tenant.name || sigle.toUpperCase()}
+              </span>
+            )}
 
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {/* Bouton "Toutes" */}
-                <button
-                  type="button"
-                  onClick={() => setFilters(f => ({ ...f, tenantId: '' }))}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-full border text-xs font-medium transition
-                    ${!filters.tenantId
-                      ? 'bg-white text-blue-700 border-white shadow-sm'
-                      : 'bg-white/10 text-white hover:bg-white/20 border-white/30'
-                    }`}
-                  title="Afficher toutes les sociétés"
-                >
-                  Toutes
-                </button>
+            {isActive && <FiCheckIcon className="text-blue-700 text-sm" />}
+          </button>
+        );
+      })}
+    </div>
+  </div>
+</div>
 
-                {tenants.map((tenant) => {
-                  const isActive = String(filters.tenantId || '') === String(tenant.id);
-                  const logo =
-                    tenant.logo_url ||
-                    tenant.logo ||
-                    tenant.avatar_url ||
-                    tenant.avatar ||
-                    null;
-
-                  return (
-                    <button
-                      key={tenant.id}
-                      type="button"
-                      onClick={() =>
-                        setFilters(f => ({
-                          ...f,
-                          tenantId: isActive ? '' : String(tenant.id),
-                        }))
-                      }
-                      className={`flex-shrink-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs transition
-                        ${isActive
-                          ? 'bg-white text-blue-700 border-white shadow-sm'
-                          : 'bg-white/10 text-white hover:bg-white/20 border-white/30'
-                        }`}
-                      title={`Afficher uniquement : ${tenant.name}`}
-                    >
-                      <div className="w-6 h-6 rounded-full bg-white/90 flex items-center justify-center overflow-hidden border border-white/40">
-                        {logo ? (
-                          <img
-                            src={logo}
-                            alt={tenant.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <span className="text-[10px] font-semibold text-blue-700">
-                            {tenant.name?.slice(0, 2)?.toUpperCase() || '??'}
-                          </span>
-                        )}
-                      </div>
-                      <span className="truncate max-w-[120px] text-left">
-                        {tenant.name}
-                      </span>
-                      {isActive && (
-                        <FiCheckIcon className="text-blue-700 text-sm" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
 
             <div className="ml-2 inline-flex rounded-xl bg-white/10 p-1 border border-white/20 backdrop-blur-sm">
               <button className={`px-3 py-2 rounded-lg flex items-center gap-2 transition ${viewMode === 'table' ? 'bg-white text-blue-700 shadow-sm' : 'text-white/90 hover:bg-white/10'}`} onClick={() => setViewMode('table')} title="Vue table"><FiListIcon /> Table</button>
