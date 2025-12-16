@@ -53,6 +53,8 @@ import ContactMessagesIndex from './pages/UserManagementDashboard/Components/Bac
 import HomeMiradia from './pages/Miradia/HomeMiradia';
 import MiradiaSlidesIndex from './pages/UserManagementDashboard/Components/Backoffice/Miradia/Slide/MiradiaSlidesIndex';
 import MiradiaSlideForm from './pages/UserManagementDashboard/Components/Backoffice/Miradia/Slide/MiradiaSlideForm';
+import OrgNodesIndex from './pages/UserManagementDashboard/Components/Backoffice/Miradia/orgchart/OrgNodesIndex';
+import OrgNodeForm from './pages/UserManagementDashboard/Components/Backoffice/Miradia/orgchart/OrgNodeForm';
 
 function BootScreen() {
   return (
@@ -280,6 +282,32 @@ export default function App() {
                     </AdminRoute>
                   }
                 />
+          <Route
+            path="/orgnodescontroler"
+            element={
+              <AdminRoute>
+                <OrgNodesIndex />
+              </AdminRoute>
+            }
+          />
+
+          <Route
+            path="/orgnodes/new"
+            element={
+              <AdminRoute>
+                <OrgNodeForm />
+              </AdminRoute>
+            }
+          />
+
+          <Route
+            path="/orgnodes/:id/edit"
+            element={
+              <AdminRoute>
+                <OrgNodeForm />
+              </AdminRoute>
+            }
+          />
 
                   </Route>
                 </Route>

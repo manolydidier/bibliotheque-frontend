@@ -848,7 +848,8 @@ layout: {
     trashed: "Trash",
     userManagement: "Users & Access",
     societesBo: "Company management",
-    bureauxBo: "Office management"
+    bureauxBo: "Office management",
+      "orgNodesBo": "Organizational chart"
   },
 
   sections: {
@@ -860,7 +861,7 @@ layout: {
   menu: {
     // Dashboard
     dashboard: "Dashboard",
-
+       "orgNodesBo": "Organizational chart",
     // Content / articles
     platform: "Platform",
     articlesBo: "Articles (Back office)",
@@ -2466,7 +2467,8 @@ notfound: {
     trashed: "Corbeille",
     userManagement: "Utilisateurs & Accès",
     societesBo: "Gestion des sociétés",
-    bureauxBo: "Gestion des bureaux"
+    bureauxBo: "Gestion des bureaux",
+    "orgNodesBo": "Organigramme"
   },
 
   sections: {
@@ -2478,7 +2480,7 @@ notfound: {
   menu: {
     // Dashboard
     dashboard: "Tableau de bord",
-
+"orgNodesBo": "Organigramme",
     // Contenu / articles
     platform: "Plateforme",
     articlesBo: "Articles (Back office)",

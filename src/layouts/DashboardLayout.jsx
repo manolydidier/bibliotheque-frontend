@@ -605,6 +605,14 @@ const DashboardLayout = () => {
             link: '/messageries',
             accent: 'blue',
           },
+          {
+          id: "orgNodesBo",
+          tKey: "layout.menu.orgNodesBo",
+          icon: <FaSitemap />,
+          link: "/orgnodescontroler",
+          accent: "emerald",
+        },
+
         ],
       },
       {
@@ -856,6 +864,8 @@ const DashboardLayout = () => {
       newTitle = t('layout.titles.dashboard');
       else if (path.startsWith('/miradia-slidescontroler') || path.startsWith('/miradia-slides'))
     newTitle = t('layout.titles.miradiaSlidesBo', 'Slides MIRADIA');
+else if (path.startsWith("/orgnodescontroler") || path.startsWith("/orgnodes"))
+  newTitle = t("layout.titles.orgNodesBo", "Organigramme");
 
     else newTitle = t('layout.titles.dashboard');
     setTitle(newTitle);
@@ -1233,6 +1243,8 @@ const DashboardLayout = () => {
                       const isSocietes = item.id === 'societesBo';
                       const isBureaux = item.id === 'bureauxBo';
                       const isMiradiaSlides = item.id === 'miradiaSlidesBo';
+                      const isOrgNodes = item.id === "orgNodesBo";
+
 
                       const ContentNode = ({ isActive }) => (
                         <div
@@ -1261,12 +1273,14 @@ const DashboardLayout = () => {
                             t={t}
                             accentKey={accentKey}
                             isActive={!!isActive}
-                            showAdd={isSocietes || isBureaux || isMiradiaSlides}
+                            showAdd={isSocietes || isBureaux || isMiradiaSlides || isOrgNodes}
                             onAdd={() => {
-                              if (isSocietes) navigate('/societes/create');
-                              else if (isBureaux) navigate('/bureaux/create');
-                              else if (isMiradiaSlides) navigate('/miradia-slides/new');
+                              if (isSocietes) navigate("/societes/create");
+                              else if (isBureaux) navigate("/bureaux/create");
+                              else if (isMiradiaSlides) navigate("/miradia-slides/new");
+                              else if (isOrgNodes) navigate("/orgnodes/new");
                             }}
+
                                                     />
                                                   </div>
                           );

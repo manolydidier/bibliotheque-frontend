@@ -624,3 +624,21 @@
 .no-scrollbar::-webkit-scrollbar {
   display: none;              /* Chrome, Safari, Opera */
 }
+
+/* Voici les **principaux codes couleur (hex)** extraits du logo MIRADIA (ceux qui reviennent le plus) :
+
+### Couleurs principales
+
+* **Bleu principal (texte “MIRADIA” + silhouettes)** : **#124B7D**
+* **Bleu secondaire (contours/éléments)** : **#005D86**
+* **Bleu clair (ciel / dégradés)** : **#40A8DC**
+* **Bleu accent (plus vif)** : **#058FE4**
+* **Vert principal (Madagascar / sol)** : **#4CC04F**
+* **Jaune (soleil)** : **#FDCB00**
+
+### Neutres (pour fonds/ombres doux)
+
+* **Gris très clair** : **#DEE8EA**
+* **Gris bleuté** : **#7DA0AC**
+
+Si tu veux, je te donne aussi une palette prête à coller en CSS (variables `:root`) avec ces couleurs. */

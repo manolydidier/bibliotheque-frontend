@@ -1,578 +1,751 @@
 // src/pages/UserManagementDashboard/Components/Accueil/Slider.jsx
-import React, { useEffect, useState, useCallback } from "react";
-import {
-  FaChevronLeft,
-  FaChevronRight,
-  FaFileAlt,
-  FaBookOpen,
-  FaUsers,
-  FaBalanceScale,
-  FaWalking,
-  FaImage,
-} from "react-icons/fa";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import axios from "axios";
 
-// Base URL pour les images venant de Laravel (storage)
+/* ===============================
+   CONFIG
+================================= */
 const STORAGE_BASE =
   import.meta.env.VITE_API_BASE_STORAGE ||
   import.meta.env.VITE_API_BASE_URL ||
   window.location.origin;
 
-// Construit l’URL publique de l’image du slide Laravel
+const SLIDE_DURATION = 9000;
+const FADE_MS = 850;
+
+/* ===============================
+   HELPERS
+================================= */
 const buildSlideImageUrl = (slide) => {
+  if (slide?.image_url) return slide.image_url;
   if (!slide?.image_path) return null;
-  const raw = String(slide.image_path).trim();
 
-  // Si le backend renvoie déjà une URL complète
-  if (raw.startsWith("http://") || raw.startsWith("https://")) {
-    return raw;
-  }
-
-  const base = STORAGE_BASE.replace(/\/$/, "");
-  const path = raw.replace(/^\/?storage\//, "");
+  const base = String(STORAGE_BASE).replace(/\/$/, "");
+  const path = String(slide.image_path).replace(/^\/?storage\//, "");
   return `${base}/storage/${path}`;
 };
 
-// Mapping string => icône
-const ICON_MAP = {
-  scales: FaBalanceScale,
-  walk: FaWalking,
-  group: FaUsers,
-  file: FaFileAlt,
-  book: FaBookOpen,
-  image: FaImage,
-};
+/** Desktop only: widen active column */
+const getGridTemplate = (length, active) =>
+  Array.from({ length })
+    .map((_, i) => (i === active ? "2.2fr" : "1fr"))
+    .join(" ");
 
-const resolveIcon = (iconKey) => {
-  if (!iconKey) return FaFileAlt;
-  const k = String(iconKey).toLowerCase();
-  return ICON_MAP[k] || FaFileAlt;
-};
-
-const FADE_DURATION = 800; // ms (durée du fondu)
-const SLIDE_DURATION = 9000; // ms (durée d'affichage d'un slide)
-
+/* ===============================
+   COMPONENT
+================================= */
 export default function Slider() {
   const [slides, setSlides] = useState([]);
   const [current, setCurrent] = useState(0);
-  const [prev, setPrev] = useState(null);
-  const [tiltStyle, setTiltStyle] = useState({
-    transform: "perspective(1400px)",
-  });
-  const [isHovered, setIsHovered] = useState(false);
+  const [prevIndex, setPrevIndex] = useState(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [isTablet, setIsTablet] = useState(false);
+
   const [progress, setProgress] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
 
-  // Chargement depuis Laravel en public (fetch, aucun token)
+  const fadeTimerRef = useRef(null);
+  const autoTimerRef = useRef(null);
+  const resumeTimerRef = useRef(null);
+  const isHoveringRef = useRef(false);
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
+
+  const total = slides.length;
+
+  // Détection responsive
   useEffect(() => {
-    let isMounted = true;
+    const checkResponsive = () => {
+      const width = window.innerWidth;
+      setIsMobile(width < 768);
+      setIsTablet(width >= 768 && width < 1024);
+    };
 
-    const fetchSlides = async () => {
-      try {
-        const res = await fetch("/api/miradia-slides?all=1&per_page=20", {
-          method: "GET",
-          headers: {
-            Accept: "application/json",
-          },
-        });
+    checkResponsive();
+    window.addEventListener("resize", checkResponsive);
+    return () => window.removeEventListener("resize", checkResponsive);
+  }, []);
 
-        if (!res.ok) {
-          console.error(
-            "Erreur HTTP fetch /miradia-slides:",
-            res.status,
-            res.statusText
-          );
-          return;
-        }
+  const safeCurrent = useMemo(() => {
+    if (!total) return 0;
+    return Math.max(0, Math.min(current, total - 1));
+  }, [current, total]);
 
-        const payload = await res.json();
+  const activeSlide = slides[safeCurrent];
 
-        const raw = Array.isArray(payload)
-          ? payload
-          : Array.isArray(payload?.data)
-          ? payload.data
-          : [];
+  /* ===============================
+     FETCH
+  =============================== */
+  useEffect(() => {
+    let mounted = true;
 
-        if (!isMounted || !raw.length) return;
+    axios
+      .get("/miradia-slides", {
+        params: { all: 1 },
+        headers: { Accept: "application/json" },
+      })
+      .then((res) => {
+        const raw = Array.isArray(res.data) ? res.data : res.data?.data || [];
 
         const normalized = raw
           .filter((s) => s.is_active !== false)
-          .sort(
-            (a, b) =>
-              Number(a.position ?? 9999) - Number(b.position ?? 9999)
-          )
-          .map((s, index) => ({
-            id: s.id ?? `slide-${index}`,
+          .sort((a, b) => Number(a.position ?? 99) - Number(b.position ?? 99))
+          .map((s, i) => ({
+            id: s.id ?? i,
             title: s.title ?? "",
-            description: s.description || "",
-            stat: s.stat_label || "",
-            tag: s.tag || "",
-            icon: resolveIcon(s.icon),
-            color: s.color || "#2563eb",
-            image: buildSlideImageUrl(s) || null,
+            description: s.description ?? "",
+            tag: s.tag ?? "",
+            image: buildSlideImageUrl(s),
           }));
 
-        if (normalized.length && isMounted) {
-          setSlides(normalized);
-          setCurrent(0);
-          setPrev(null);
-        }
-      } catch (e) {
-        console.error(
-          "Erreur chargement slides Miradia (Slider accueil):",
-          e?.message || e
-        );
-      }
-    };
+        if (!mounted) return;
 
-    fetchSlides();
+        setSlides(normalized);
+        setCurrent(0);
+        setPrevIndex(null);
+      })
+      .catch((e) => {
+        console.error("Erreur fetch slides:", e?.message || e);
+      });
+
     return () => {
-      isMounted = false;
+      mounted = false;
     };
   }, []);
 
-  // Helper pour la transition
-  const changeSlide = useCallback(
-    (getNextIndex) => {
-      setCurrent((prevIndex) => {
-        const total = slides.length || 1;
-        const safePrev = typeof prevIndex === "number" ? prevIndex : 0;
-        const nextIndex = getNextIndex(safePrev, total) % total;
-
-        setPrev(safePrev);
-
-        setTimeout(() => {
-          setPrev((prevVal) => (prevVal === safePrev ? null : prevVal));
-        }, FADE_DURATION);
-
-        return nextIndex;
-      });
-    },
-    [slides.length]
-  );
-
-  // Auto-play
+  /* ===============================
+     CLEANUP TIMERS
+  =============================== */
   useEffect(() => {
-    if (isHovered) return;
-    if (!slides.length) return;
+    return () => {
+      if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
+      if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+    };
+  }, []);
 
-    const timer = setTimeout(() => {
-      changeSlide((prevIndex, total) => (prevIndex + 1) % total);
+  /* ===============================
+     TRANSITION GO TO
+  =============================== */
+  const goTo = (nextIndex) => {
+    if (!total) return;
+    const next = ((nextIndex % total) + total) % total;
+    if (next === safeCurrent) return;
+
+    if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
+
+    setPrevIndex(safeCurrent);
+    setCurrent(next);
+
+    fadeTimerRef.current = setTimeout(() => {
+      setPrevIndex(null);
+    }, FADE_MS);
+  };
+
+  const goNext = () => goTo(safeCurrent + 1);
+  const goPrev = () => goTo(safeCurrent - 1);
+
+  /* ===============================
+     TOUCH HANDLING (mobile)
+  =============================== */
+  const handleTouchStart = (e) => {
+    if (isMobile) {
+      touchStartX.current = e.touches[0].clientX;
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (isMobile) {
+      touchEndX.current = e.touches[0].clientX;
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!isMobile) return;
+
+    const threshold = 50;
+    const diff = touchStartX.current - touchEndX.current;
+
+    if (Math.abs(diff) > threshold) {
+      if (diff > 0) goNext();
+      else goPrev();
+    }
+  };
+
+  /* ===============================
+     AUTO SLIDE
+  =============================== */
+  useEffect(() => {
+    if (!total) return;
+    if (isPaused) return;
+
+    if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+
+    autoTimerRef.current = setTimeout(() => {
+      goNext();
     }, SLIDE_DURATION);
 
-    return () => clearTimeout(timer);
-  }, [current, isHovered, changeSlide, slides.length]);
+    return () => {
+      if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [safeCurrent, total, isPaused]);
 
-  // Progress bar
+  /* ===============================
+     PROGRESS
+  =============================== */
   useEffect(() => {
-    setProgress(0);
-    if (isHovered) return;
-    if (!slides.length) return;
+    if (!total) return;
+    if (isPaused) return;
 
-    let animationFrameId;
+    setProgress(0);
+
+    let raf;
     const start = performance.now();
 
     const tick = (now) => {
-      const elapsed = now - start;
-      const ratio = Math.min(elapsed / SLIDE_DURATION, 1);
-      setProgress(ratio * 100);
-
-      if (ratio < 1 && !isHovered) {
-        animationFrameId = requestAnimationFrame(tick);
-      }
+      const r = Math.min((now - start) / SLIDE_DURATION, 1);
+      setProgress(r * 100);
+      if (r < 1 && !isPaused) raf = requestAnimationFrame(tick);
     };
 
-    animationFrameId = requestAnimationFrame(tick);
+    raf = requestAnimationFrame(tick);
+    return () => raf && cancelAnimationFrame(raf);
+  }, [safeCurrent, total, isPaused]);
 
-    return () => {
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-    };
-  }, [current, isHovered, slides.length]);
-
-  const goNext = () =>
-    changeSlide((prevIndex, total) => (prevIndex + 1) % total);
-
-  const goPrev = () =>
-    changeSlide((prevIndex, total) => (prevIndex - 1 + total) % total);
-
-  const goTo = (index) =>
-    changeSlide((_prevIndex, total) =>
-      Math.max(0, Math.min(index, total - 1))
-    );
-
-  // Navigation clavier
+  /* ===============================
+     PRELOAD NEXT IMAGE
+  =============================== */
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === "ArrowRight") {
-        e.preventDefault();
-        goNext();
-      } else if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        goPrev();
-      }
-    };
+    if (!total) return;
+    const next = (safeCurrent + 1) % total;
+    const url = slides[next]?.image;
+    if (!url) return;
+    const img = new Image();
+    img.src = url;
+  }, [safeCurrent, slides, total]);
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  });
-
-  const handleMouseMove = (e) => {
-    const card = e.currentTarget;
-    const rect = card.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const midX = rect.width / 2;
-    const midY = rect.height / 2;
-
-    const rotateX = ((y - midY) / midY) * -6;
-    const rotateY = ((x - midX) / midX) * 6;
-
-    setTiltStyle({
-      transform: `perspective(1400px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
-      transition: "transform 0.12s ease-out",
-    });
+  /* ===============================
+     PAUSE ON SCROLL (content)
+  =============================== */
+  const pauseBriefly = (ms = 1200) => {
+    setIsPaused(true);
+    if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+    resumeTimerRef.current = setTimeout(() => {
+      if (!isHoveringRef.current) setIsPaused(false);
+    }, ms);
   };
 
-  const handleMouseLeave = () => {
-    setIsHovered(false);
-    setTiltStyle({
-      transform: "perspective(1400px) rotateX(0deg) rotateY(0deg)",
-      transition: "transform 0.5s ease-out",
-    });
-    setTimeout(() => {
-      setTiltStyle({
-        transform: "perspective(1400px)",
-      });
-    }, 500);
-  };
+  /* ===============================
+     ALIGN ACTIVE CONTENT (desktop only)
+  =============================== */
+  const alignClass = useMemo(() => {
+    if (isMobile) return "items-start text-left";
 
-  const handleMouseEnter = () => {
-    setIsHovered(true);
-  };
+    const pos = safeCurrent % 3;
+    if (pos === 0) return "items-start text-left";
+    if (pos === 1) return "items-center text-center";
+    return "items-end text-right";
+  }, [safeCurrent, isMobile]);
 
-  const visibleIndexes = [prev, current].filter(
-    (idx) => idx !== null && idx !== undefined && slides[idx]
-  );
+  if (!total) return null;
 
-  const totalSlides = slides.length || 1;
+  const prevBg = prevIndex !== null ? slides[prevIndex]?.image : null;
+  const curBg = activeSlide?.image;
 
   return (
     <section
-      className="
-         relative w-full
-        bg-gradient-to-br from-blue-50 via-white to-blue-50 text-slate-800
-        dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 dark:text-slate-100
-        overflow-hidden py-8 md:py-10
-      "
+      className="relative h-[calc(100vh-100px)] min-h-[520px] sm:min-h-[600px] overflow-hidden group select-none"
+      onMouseEnter={() => {
+        isHoveringRef.current = true;
+        setIsPaused(true);
+      }}
+      onMouseLeave={() => {
+        isHoveringRef.current = false;
+        setIsPaused(false);
+      }}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
       role="region"
       aria-roledescription="carousel"
-      aria-label="Signification du nom MIRADIA"
+      aria-label="MIRADIA Slider"
     >
-      {/* Animations + styles */}
-      <style>
-        {`
-          @keyframes sliderFadeIn {
-            0%   { opacity: 0; transform: translateY(4px); }
-            100% { opacity: 1; transform: translateY(0); }
-          }
-          @keyframes sliderFadeOut {
-            0%   { opacity: 1; transform: translateY(0); }
-            100% { opacity: 0; transform: translateY(-4px); }
-          }
+      {/* ===============================
+          MIRADIA THEME + RICHTEXT CSS RESPONSIVE
+      =============================== */}
+      <style>{`
+        :root{
+          --m-blue: #124B7D;
+          --m-blue-2:#005D86;
+          --m-sky:  #40A8DC;
+          --m-sky-2:#058FE4;
+          --m-green:#4CC04F;
+          --m-sun:  #FDCB00;
+        }
 
-          @keyframes floatSlow {
-            0%   { transform: translateY(0); }
-            50%  { transform: translateY(18px); }
-            100% { transform: translateY(0); }
-          }
-          @keyframes imageZoom {
-            0% { transform: scale(1.02); }
-            50% { transform: scale(1.06); }
-            100% { transform: scale(1.02); }
-          }
+        @keyframes miradiaBgZoom {
+          0%   { transform: scale(1.04); }
+          50%  { transform: scale(1.09); }
+          100% { transform: scale(1.04); }
+        }
 
-          .bubble-1 {
-            animation: floatSlow 16s ease-in-out infinite;
-          }
-          .bubble-2 {
-            animation: floatSlow 20s ease-in-out infinite;
-            animation-direction: alternate;
-          }
+        @keyframes shimmer {
+          0% { left: -100%; }
+          100% { left: 100%; }
+        }
 
-          .slide-img {
-            background-size: cover;
-            background-position: center;
-            filter: none;
-            animation: imageZoom 22s ease-in-out infinite;
-            will-change: transform, filter;
-          }
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
 
-          .glass-card {
-            background:
-              radial-gradient(circle at top left, rgba(255,255,255,0.55), rgba(148,163,184,0.15)),
-              linear-gradient(135deg, rgba(15,23,42,0.60), rgba(30,64,175,0.35));
-            backdrop-filter: blur(22px) saturate(140%);
-            -webkit-backdrop-filter: blur(22px) saturate(140%);
-            border: 1px solid rgba(255,255,255,0.35);
-            box-shadow: none;
-          }
+        /* ✅ CARD CONTENU (BLANC + BLUR) */
+        .miradia-content-card{
+          position: relative;
+          border-radius: 16px;
+          border: 1px solid rgba(255,255,255,.55);
+          background: rgba(255,255,255,.22); /* blanc glass */
+          box-shadow:
+            0 16px 45px rgba(0,0,0,.30),
+            inset 0 1px 0 rgba(255,255,255,.35);
+          padding: 18px;
+          backdrop-filter: blur(10px);        /* ✅ blur modéré */
+          -webkit-backdrop-filter: blur(10px);
+          overflow: hidden;
+        }
 
-          .dark .glass-card {
-            background:
-              radial-gradient(circle at top left, rgba(15,23,42,0.85), rgba(15,23,42,0.70)),
-              linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,64,175,0.7));
-            border: 1px solid rgba(148,163,184,0.55);
+        @media (min-width: 640px) {
+          .miradia-content-card{
+            border-radius: 18px;
+            padding: 20px;
           }
+        }
 
-          .glass-panel {
-            background:
-              radial-gradient(circle at top left, rgba(255,255,255,0.65), rgba(255,255,255,0.60));
-            backdrop-filter: blur(18px);
-            -webkit-backdrop-filter: blur(18px);
-            border: 1px solid rgba(148,163,184,0.35);
+        @media (min-width: 768px) {
+          .miradia-content-card{
+            border-radius: 20px;
+            padding: 22px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
           }
+        }
 
-          .dark .glass-panel {
-            background:
-              radial-gradient(circle at top left, rgba(15,23,42,0.85), rgba(15,23,42,0.90));
-            border: 1px solid rgba(148,163,184,0.6);
+        @media (min-width: 1024px) {
+          .miradia-content-card{
+            padding: 24px;
           }
+        }
 
-          .slider-layer {
-            position: absolute;
-            inset: 0;
+        .miradia-content-card::before{
+          content:"";
+          position:absolute;
+          inset:0;
+          border-radius: inherit;
+          background:
+            radial-gradient(ellipse at 30% 15%, rgba(64,168,220,.18), transparent 60%),
+            radial-gradient(ellipse at 80% 80%, rgba(76,192,79,.12), transparent 60%);
+          pointer-events:none;
+          z-index: 0;
+        }
+
+        /* ✅ RICHTEXT (CONTENU INCHANGÉ) */
+        .miradia-richtext{
+          line-height: 1.7;
+          color: rgba(255,255,255,.95);
+          position: relative;
+          z-index: 1;
+          font-size: 0.95rem;
+        }
+
+        @media (min-width: 640px) {
+          .miradia-richtext{ font-size: 1rem; line-height: 1.75; }
+        }
+
+        @media (min-width: 768px) {
+          .miradia-richtext{ font-size: 1.05rem; line-height: 1.8; }
+        }
+
+        @media (min-width: 1024px) {
+          .miradia-richtext{ font-size: 1.1rem; }
+        }
+
+        .miradia-richtext h1,
+        .miradia-richtext h2,
+        .miradia-richtext h3,
+        .miradia-richtext h4 {
+          margin: 1.2rem 0 0.8rem 0;
+          line-height: 1.3;
+          font-weight: 600;
+          color: white;
+          position: relative;
+          padding-left: 10px;
+        }
+
+        @media (min-width: 768px) {
+          .miradia-richtext h1,
+          .miradia-richtext h2,
+          .miradia-richtext h3,
+          .miradia-richtext h4 {
+            padding-left: 12px;
+            margin: 1.5rem 0 1rem 0;
           }
-          .slider-layer-current {
-            z-index: 2;
-            animation: sliderFadeIn ${FADE_DURATION}ms ease-in-out forwards;
-          }
-          .slider-layer-prev {
-            z-index: 1;
-            animation: sliderFadeOut ${FADE_DURATION}ms ease-in-out forwards;
-          }
+        }
 
-          /* Rich text Laravel */
-          .slider-richtext h1,
-          .slider-richtext h2,
-          .slider-richtext h3 {
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-          }
-          .slider-richtext h1 { font-size: 1.15rem; }
-          .slider-richtext h2 { font-size: 1.05rem; }
-          .slider-richtext h3 { font-size: 1rem; }
+        .miradia-richtext h1::before,
+        .miradia-richtext h2::before,
+        .miradia-richtext h3::before,
+        .miradia-richtext h4::before {
+          content: "";
+          position: absolute;
+          left: 0;
+          top: 0;
+          bottom: 0;
+          width: 3px;
+          background: linear-gradient(to bottom, var(--m-sky), var(--m-green));
+          border-radius: 2px;
+        }
 
-          .slider-richtext p {
-            margin: 0.25rem 0;
-          }
+        @media (min-width: 768px) {
+          .miradia-richtext h1::before,
+          .miradia-richtext h2::before,
+          .miradia-richtext h3::before,
+          .miradia-richtext h4::before { width: 4px; }
+        }
 
-          .slider-richtext ul,
-          .slider-richtext ol {
-            padding-left: 1.1rem;
-            margin: 0.25rem 0;
-          }
+        .miradia-richtext h1 { font-size: 1.5rem; }
+        .miradia-richtext h2 { font-size: 1.3rem; }
+        .miradia-richtext h3 { font-size: 1.2rem; }
+        .miradia-richtext h4 { font-size: 1.1rem; }
 
-          .slider-richtext li {
-            margin: 0.1rem 0;
-          }
+        @media (min-width: 768px) {
+          .miradia-richtext h1 { font-size: 1.8rem; }
+          .miradia-richtext h2 { font-size: 1.5rem; }
+          .miradia-richtext h3 { font-size: 1.3rem; }
+          .miradia-richtext h4 { font-size: 1.15rem; }
+        }
 
-          .slider-richtext strong,
-          .slider-richtext b {
-            font-weight: 700;
-          }
+        .miradia-richtext p { margin: 0.8rem 0; padding: 0.4rem 0; }
+        @media (min-width: 768px) {
+          .miradia-richtext p { margin: 1rem 0; padding: 0.5rem 0; }
+        }
 
-          .slider-richtext em,
-          .slider-richtext i {
-            font-style: italic;
-          }
+        .miradia-richtext ul,
+        .miradia-richtext ol { margin: 0.8rem 0; padding-left: 1.2rem; }
+        @media (min-width: 768px) {
+          .miradia-richtext ul,
+          .miradia-richtext ol { margin: 1rem 0; padding-left: 1.5rem; }
+        }
+        .miradia-richtext li { margin: 0.4rem 0; padding-left: 0.5rem; }
 
-          /* ⬇️ ICI : suppression du fond noir sur les <pre> */
-          .slider-richtext pre {
-            white-space: pre-wrap;
-            font-family: inherit;
-            font-size: 0.9rem;
-            background: transparent;
-            color: inherit;
-            padding: 0;
-            border-radius: 0;
-            border: none;
-            margin: 0.25rem 0;
-          }
+        .miradia-richtext pre,
+        .miradia-richtext code {
+          font-family: 'Courier New', Courier, monospace;
+          background: rgba(0,0,0,.25) !important;
+          border: 1px solid rgba(255,255,255,.18);
+          border-radius: 10px;
+          padding: 10px 12px;
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+          color: rgba(255,255,255,.92);
+          margin: 0.8rem 0;
+          font-size: 0.85rem;
+          line-height: 1.45;
+        }
 
-          .slider-richtext span[style] {
-            color: inherit;
-          }
-        `}
-      </style>
+        @media (min-width: 768px) {
+          .miradia-richtext pre,
+          .miradia-richtext code { padding: 12px 14px; font-size: 0.9rem; }
+        }
 
-      {/* Bulles décoratives */}
-      <div className="pointer-events-none absolute -top-24 -left-10 w-80 h-80 rounded-full bg-blue-300/20 dark:bg-sky-500/10 blur-3xl bubble-1" />
-      <div className="pointer-events-none absolute -bottom-32 -right-10 w-96 h-96 rounded-full bg-blue-300/20 dark:bg-sky-500/10 blur-3xl bubble-2" />
+        .miradia-richtext a {
+          color: var(--m-sky);
+          text-decoration: none;
+          border-bottom: 1px solid rgba(64,168,220,.35);
+          padding-bottom: 1px;
+          transition: all 0.25s ease;
+        }
+        .miradia-richtext a:hover {
+          color: var(--m-green);
+          border-bottom-color: rgba(76,192,79,.55);
+        }
 
-      {/* Container large */}
-      <div className="relative max-w-screen-2xl mx-auto px-2 md:px-4 lg:px-6 pb-12 md:pb-16">
-        {/* En-tête */}
-        <div className="mb-8 md:mb-10 text-center">
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 dark:text-white mb-3">
-            MIRADIA&nbsp;: marcher ensemble dans l’équité
-          </h2>
-          <div className="w-36 h-1 bg-slate-900 dark:bg-sky-400 mx-auto mb-4" />
-          <p className="text-xs md:text-sm text-slate-600 dark:text-slate-300 max-w-2xl mx-auto">
-            Un nom malagasy qui relie l’idée d’égalité (MIRA) et celle de
-            marche commune (DIA), pour avancer ensemble vers un objectif partagé.
-          </p>
-        </div>
+        /* Scrollbar */
+        .miradia-scroll::-webkit-scrollbar{ width: 7px; }
+        @media (min-width: 768px){ .miradia-scroll::-webkit-scrollbar{ width: 9px; } }
+        @media (min-width: 1024px){ .miradia-scroll::-webkit-scrollbar{ width: 10px; } }
 
-        {/* Carte principale */}
+        .miradia-scroll::-webkit-scrollbar-thumb{
+          background: linear-gradient(to bottom, var(--m-sky), var(--m-green));
+          border-radius: 999px;
+        }
+        .miradia-scroll::-webkit-scrollbar-track{
+          background: rgba(255,255,255,.10);
+          border-radius: 999px;
+          margin: 3px 0;
+        }
+
+        .animate-fadeInUp { animation: fadeInUp 0.6s ease-out both; }
+      `}</style>
+
+      {/* ===============================
+          BACKGROUND
+      =============================== */}
+      {prevBg && (
         <div
-          className="relative h-[460px] md:h-[560px] lg:h-[640px] flex items-center justify-center"
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          onMouseEnter={handleMouseEnter}
-        >
-          <div className="relative w-full h-full" style={tiltStyle}>
-            {/* Bordure dégradée externe */}
-            <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-blue-400/30 via-cyan-300/20 to-blue-500/30 dark:from-blue-500/20 dark:via-sky-500/10 dark:to-blue-700/30" />
+          className="absolute inset-0 bg-cover bg-center opacity-100"
+          style={{
+            backgroundImage: `url(${prevBg})`,
+            filter: "contrast(1.06) saturate(1.08) brightness(0.98)",
+          }}
+        />
+      )}
 
-            {/* Carte principale */}
-            <div className="absolute inset-[2px] rounded-[24px] glass-card overflow-hidden">
-              {visibleIndexes.map((index) => {
-                const slide = slides[index];
-                if (!slide) return null;
-                const Icon = slide.icon || FaFileAlt;
-                const isActive = index === current;
+      <div
+        key={curBg || "bg"}
+        className="absolute inset-0 bg-cover bg-center animate-[miradiaBgZoom_18s_ease-in-out_infinite]"
+        style={{
+          backgroundImage: `url(${curBg})`,
+          filter: "contrast(1.08) saturate(1.10) brightness(1.00)",
+        }}
+      />
 
-                return (
-                  <div
-                    key={slide.id}
-                    className={
-                      "slider-layer " +
-                      (isActive
-                        ? "slider-layer-current"
-                        : "slider-layer-prev")
-                    }
-                    aria-hidden={!isActive}
-                  >
-                    {/* Image de fond */}
-                    <div className="absolute inset-0">
-                      {slide.image && (
-                        <div
-                          className="absolute inset-0 slide-img"
-                          style={{
-                            backgroundImage: `url(${slide.image})`,
-                          }}
-                        />
-                      )}
-                      <div className="absolute inset-y-0 left-0 w-2/3 bg-gradient-to-r from-slate-900/40 via-slate-900/50 to-transparent" />
-                    </div>
+      {/* overlays (doux pour garder la photo claire) */}
+      <div className="absolute inset-0 bg-black/10" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-black/20 to-black/10" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(64,168,220,0.16),transparent_55%)]" />
 
-                    {/* Contenu */}
-                    <div className="relative z-10 h-full flex flex-col px-6 md:px-10 lg:px-12 py-6 md:py-8">
-                      <div className="flex-1 flex flex-col md:gap-4 lg:gap-5 h-[100%] justify-between">
-                        {/* Ligne du haut */}
-                        <div className="flex items-center justify-between">
-                          <div className="inline-flex items-center gap-2 rounded-full bg-slate-900/60 border border-white/30 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-white">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            <span className="font-semibold">
-                              {slide.tag}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-100/80 font-medium">
-                            {String(current + 1).padStart(2, "0")} /{" "}
-                            {String(totalSlides).padStart(2, "0")}
-                          </p>
-                        </div>
+      {/* ===============================
+          MOBILE NAVIGATION BUTTONS
+      =============================== */}
+      {isMobile && (
+        <>
+          <button
+            onClick={goPrev}
+            className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white hover:bg-black/70 transition-all active:scale-95 shadow-lg"
+            aria-label="Slide précédent"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <button
+            onClick={goNext}
+            className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white hover:bg-black/70 transition-all active:scale-95 shadow-lg"
+            aria-label="Slide suivant"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </>
+      )}
 
-                        {/* Bloc texte */}
-                        <div className="max-w-2xl glass-panel rounded-2xl px-4 py-3 md:px-6 md:py-5 pb-5">
-                          <h3 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-1.5 text-slate-900 dark:text-white pb-5">
-                            {slide.title}
-                          </h3>
+      {/* ===============================
+          SLIDES CONTAINER - RESPONSIVE
+      =============================== */}
+      <div
+        className={[
+          "relative z-10 h-full",
+          isMobile ? "flex flex-col" : "",
+          !isMobile ? "grid transition-[grid-template-columns] duration-700 ease-in-out" : "",
+        ].join(" ")}
+        style={{
+          gridTemplateColumns: !isMobile ? getGridTemplate(total, safeCurrent) : undefined,
+        }}
+      >
+        {slides.map((slide, idx) => {
+          const isActive = idx === safeCurrent;
+          const isVisibleMobile = isMobile ? isActive : true;
 
-                          {slide.description && (
-                            <div
-                              className="slider-richtext text-xs md:text-sm text-slate-800 dark:text-slate-100 leading-relaxed"
-                              dangerouslySetInnerHTML={{
-                                __html: slide.description,
-                              }}
-                            />
-                          )}
-                        </div>
+          return (
+            <div
+              key={slide.id}
+              onClick={() => goTo(idx)}
+              className={[
+                "relative cursor-pointer transition-all duration-700 ease-in-out",
+                "backdrop-blur-sm",
+                ...(isMobile
+                  ? [
+                      "w-full",
+                      "px-4 sm:px-5 py-4 sm:py-5",
+                      isActive ? "flex-1 min-h-[50vh] sm:min-h-[55vh]" : "h-14 sm:h-16 flex-shrink-0",
+                      "border-t border-white/10 first:border-t-0",
+                      !isActive && "opacity-70 hover:opacity-100 bg-black/20",
+                      isActive && "bg-black/20",
+                    ]
+                  : []),
+                ...(!isMobile
+                  ? [
+                      "px-4 sm:px-5 md:px-6 py-6 sm:py-7 md:py-8 lg:py-10",
+                      "border-l border-white/10 last:border-r",
+                      isActive ? "bg-black/20 shadow-2xl" : "bg-black/10 hover:bg-black/15 hover:shadow-xl",
+                    ]
+                  : []),
+              ].join(" ")}
+              style={{
+                display: isMobile && !isVisibleMobile ? "none" : "block",
+              }}
+              aria-current={isActive ? "true" : "false"}
+            >
+              {/* ===== SLIDE INACTIF ===== */}
+              {!isActive && (
+                <div className="h-full flex flex-col justify-center items-center text-center">
+                  {slide.tag && (
+                    <p className="text-[10px] sm:text-xs uppercase tracking-[0.3em] text-[var(--m-green)] mb-2 sm:mb-3 font-medium truncate max-w-full px-2">
+                      {slide.tag}
+                    </p>
+                  )}
 
-                        {/* Badges */}
-                        <div className="flex flex-wrap gap-2 items-center">
-                          {slide.stat && (
-                            <span
-                              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-semibold text-white"
-                              style={{ backgroundColor: slide.color }}
-                            >
-                              <Icon className="text-xs" />
-                              {slide.stat}
-                            </span>
-                          )}
+                  {!isMobile && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        goTo(idx);
+                      }}
+                      className="
+                        mt-3 sm:mt-4 px-4 sm:px-5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl
+                        border border-white/25
+                        text-white text-xs sm:text-sm font-medium
+                        opacity-0 translate-y-2
+                        transition-all duration-500
+                        group-hover:opacity-100 group-hover:translate-y-0
+                        hover:bg-white/10 hover:border-white/40
+                        focus:outline-none focus:ring-2 focus:ring-[var(--m-sky)]
+                      "
+                      aria-label={`Voir ${slide.title}`}
+                    >
+                      Voir
+                    </button>
+                  )}
+                </div>
+              )}
 
-                          {slide.tag && (
-                            <span className="px-3 py-1.5 rounded-full bg-slate-900/40 border border-white/20 text-[11px] text-slate-100">
-                              {slide.tag}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+              {/* ===== SLIDE ACTIF (contenu dans la card blur) ===== */}
+              {isActive && (
+                <div className={`h-full flex flex-col justify-between ${alignClass}`}>
+                  {/* TAG + TITRE (sans blur) */}
+                  <div className="w-full">
+                    {slide.tag && (
+                      <p
+                        className={[
+                          "uppercase tracking-[0.3em] text-white/90 mb-2 sm:mb-3 md:mb-4 font-medium flex items-center gap-2",
+                          "text-[10px] sm:text-xs",
+                          "drop-shadow-[0_2px_10px_rgba(0,0,0,.45)]",
+                        ].join(" ")}
+                      >
+                        <span className="inline-block w-4 sm:w-6 h-px bg-gradient-to-r from-[var(--m-green)] to-transparent"></span>
+                        {slide.tag}
+                        <span className="inline-block w-4 sm:w-6 h-px bg-gradient-to-l from-[var(--m-green)] to-transparent"></span>
+                      </p>
+                    )}
 
-                      {/* Contrôles + progress */}
-                      <div className="mt-4 md:mt-6 space-y-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={goPrev}
-                              className="w-9 h-9 rounded-full bg-slate-900/60 border border-white/30 flex items-center justify-center hover:bg-slate-900/80 transition-all"
-                              aria-label="Slide précédent"
-                            >
-                              <FaChevronLeft className="text-xs text-white" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={goNext}
-                              className="w-9 h-9 rounded-full bg-slate-900/60 border border-white/30 flex items-center justify-center hover:bg-slate-900/80 transition-all"
-                              aria-label="Slide suivant"
-                            >
-                              <FaChevronRight className="text-xs text-white" />
-                            </button>
-                          </div>
+                    <h3
+                      className={[
+                        "font-bold leading-tight text-[var(--m-sky)] drop-shadow-lg mb-3 sm:mb-4",
+                        "text-2xl sm:text-3xl md:text-4xl lg:text-5xl",
+                      ].join(" ")}
+                    >
+                      {slide.title}
+                    </h3>
+                  </div>
 
-                          <div className="flex items-center gap-2">
-                            {slides.map((s, idx) => (
-                              <button
-                                key={s.id}
-                                onClick={() => goTo(idx)}
-                                className={[
-                                  "h-2.5 rounded-full transition-all",
-                                  idx === current
-                                    ? "w-7 bg-white"
-                                    : "w-2.5 bg-slate-300/70 hover:bg-slate-100",
-                                ].join(" ")}
-                                aria-label={`Aller au slide ${idx + 1}`}
-                                aria-pressed={idx === current}
-                              />
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="w-full h-[3px] bg-slate-900/15 dark:bg-slate-100/10 rounded-full overflow-hidden backdrop-blur-[1px]">
-                          <div
-                            className="h-full bg-white/50 rounded-full transition-[width] duration-150 ease-out"
-                            style={{ width: `${progress}%` }}
-                          />
-                        </div>
-                      </div>
+                  {/* ✅ SECTION CONTENU DANS LA CARD BLUR */}
+                  <div className="mt-4 sm:mt-6 md:mt-8 w-full">
+                    <div
+                      className={[
+                        "miradia-content-card",
+                        "miradia-scroll overscroll-contain",
+                        "overflow-y-auto",
+                        "pr-2 sm:pr-3",
+                        isMobile ? "max-h-[40vh]" : "max-h-[45vh]",
+                      ].join(" ")}
+                      onWheel={() => pauseBriefly(1400)}
+                      onScroll={() => pauseBriefly(1400)}
+                    >
+                      <div
+                        className="miradia-richtext"
+                        dangerouslySetInnerHTML={{
+                          __html: slide.description || "<p></p>",
+                        }}
+                      />
                     </div>
                   </div>
-                );
-              })}
+
+                  {/* FOOTER (sans blur) */}
+                  <div className="mt-4 sm:mt-6 md:mt-8 w-full flex items-center justify-between text-white/80">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <span className="text-[10px] sm:text-xs uppercase tracking-[0.2em] sm:tracking-[0.3em]">
+                        Slide {idx + 1} / {total}
+                      </span>
+                    </div>
+
+                    {isPaused && (
+                      <span className="text-[10px] sm:text-xs uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[var(--m-sun)] font-medium flex items-center gap-1 sm:gap-2">
+                        <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-[var(--m-sun)] animate-pulse"></span>
+                        {isMobile ? "Pause" : "En pause"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Hover accent line - Desktop seulement */}
+              {!isMobile && (
+                <div
+                  className={[
+                    "pointer-events-none absolute inset-x-0 top-0 h-[3px]",
+                    "transition-all duration-500",
+                    isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-hover:scale-x-100",
+                    isActive ? "scale-x-100" : "scale-x-0",
+                  ].join(" ")}
+                  style={{
+                    background: "linear-gradient(90deg, var(--m-sky), var(--m-green), var(--m-sun))",
+                    boxShadow: "0 0 10px rgba(64,168,220,.5)",
+                  }}
+                />
+              )}
             </div>
-          </div>
+          );
+        })}
+      </div>
+
+      {/* PROGRESS BAR */}
+      <div className="absolute bottom-0 left-0 w-full z-30 bg-white/20 h-[2px] sm:h-[3px]">
+        <div
+          className="h-full transition-[width] duration-150 ease-linear relative"
+          style={{ width: `${progress}%` }}
+        >
+          <div
+            className="absolute inset-0 rounded-r-full"
+            style={{
+              background: "linear-gradient(90deg, var(--m-sky), var(--m-green), var(--m-sun))",
+            }}
+          />
+          {!isMobile && (
+            <div
+              className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-white shadow-lg"
+              style={{ boxShadow: "0 0 10px rgba(64,168,220,.8)" }}
+            />
+          )}
         </div>
       </div>
+
+      {/* SWIPE INDICATOR - Mobile seulement */}
+      {isMobile && (
+        <div className="absolute bottom-8 sm:bottom-12 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+          <div className="flex items-center gap-1 sm:gap-2 text-white/70">
+            <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span className="text-[10px] sm:text-xs font-medium">Glisser</span>
+            <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

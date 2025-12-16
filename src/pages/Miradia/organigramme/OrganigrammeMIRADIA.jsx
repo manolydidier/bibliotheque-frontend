@@ -1,0 +1,503 @@
+import React, { useEffect, useState } from "react";
+import { FaSitemap } from "react-icons/fa";
+
+/* =========================
+   PALETTE MIRADIA (logo)
+========================= */
+const MIRADIA = {
+  navy: "#124B7C",
+  teal: "#025C86",
+  sky: "#3AA6DC",
+  green: "#4CC051",
+  yellow: "#FCCA00",
+};
+
+const DATA = {
+  top: {
+    id: "top",
+    name: "Corrine Huynh",
+    surname: "RAHOELIARISOA",
+    dept: "Conseil d’Administration",
+    role: "Présidente",
+    badge: "Conseil d’Administration",
+    email: "corrine@miradia.mg",
+    phone: "+261 34 00 000 00",
+    photo: "https://randomuser.me/api/portraits/women/44.jpg",
+    level: "white",
+  },
+  second: [
+    {
+      id: "vp",
+      name: "Nathanaël",
+      surname: "RAVELOMBOLAMANANA",
+      dept: "Conseil d’Administration",
+      role: "Vice-Président",
+      badge: "Conseil d’Administration",
+      email: "nathanael@miradia.mg",
+      phone: "+261 34 00 000 01",
+      photo: "https://randomuser.me/api/portraits/men/75.jpg",
+      level: "blue",
+    },
+    {
+      id: "sg",
+      name: "Hobitina",
+      surname: "HANITRARIMBOLA",
+      dept: "Secrétariat Général",
+      role: "Secrétaire Générale",
+      badge: "Secrétariat Général",
+      email: "hobitina@miradia.mg",
+      phone: "+261 34 00 000 02",
+      photo: "https://randomuser.me/api/portraits/women/63.jpg",
+      level: "blue",
+    },
+  ],
+  third: [
+    {
+      id: "com",
+      name: "Fanamby",
+      surname: "RALANTOARIMANANA",
+      dept: "Communication",
+      role: "Conseillère en Communication",
+      badge: "Communication",
+      email: "com@miradia.mg",
+      phone: "+261 34 00 000 03",
+      photo: "https://randomuser.me/api/portraits/women/52.jpg",
+      level: "white",
+      accent: "sky",
+    },
+    {
+      id: "genre",
+      name: "Olga",
+      surname: "RABODOENINORO",
+      dept: "Genre",
+      role: "Conseillère en Genre",
+      badge: "Genre",
+      email: "genre@miradia.mg",
+      phone: "+261 34 00 000 04",
+      photo: "https://randomuser.me/api/portraits/women/7.jpg",
+      level: "white",
+      accent: "green",
+    },
+    {
+      id: "finance",
+      name: "Clarke",
+      surname: "RALIZAKA",
+      dept: "Finance",
+      role: "Conseiller en Finance",
+      badge: "Finance",
+      email: "finance@miradia.mg",
+      phone: "+261 34 00 000 05",
+      photo: "https://randomuser.me/api/portraits/men/61.jpg",
+      level: "white",
+      accent: "yellow",
+    },
+    {
+      id: "tech",
+      name: "Solo Teofilo",
+      surname: "RANDRIANAIVOMALALA",
+      dept: "Technique",
+      role: "Conseiller Technique",
+      badge: "Technique",
+      email: "tech@miradia.mg",
+      phone: "+261 34 00 000 06",
+      photo: "https://randomuser.me/api/portraits/men/22.jpg",
+      level: "white",
+      accent: "teal",
+    },
+  ],
+};
+
+function cx(...a) {
+  return a.filter(Boolean).join(" ");
+}
+
+function initials(fullName) {
+  const parts = String(fullName || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  const a = parts[0]?.[0] || "M";
+  const b = parts[1]?.[0] || parts[0]?.[1] || "I";
+  return (a + b).toUpperCase();
+}
+
+/* =========================
+   BACKGROUND BUBBLES
+========================= */
+function AnimatedBackground() {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      <div
+        className="absolute -top-24 -left-24 h-80 w-80 rounded-full blur-3xl opacity-60 dark:opacity-30 animate-[float1_12s_ease-in-out_infinite]"
+        style={{
+          background: `radial-gradient(circle at 30% 30%, ${MIRADIA.sky}55, transparent 60%)`,
+        }}
+      />
+      <div
+        className="absolute top-1/3 -right-24 h-96 w-96 rounded-full blur-3xl opacity-55 dark:opacity-28 animate-[float2_14s_ease-in-out_infinite]"
+        style={{
+          background: `radial-gradient(circle at 30% 30%, ${MIRADIA.green}55, transparent 60%)`,
+        }}
+      />
+      <div
+        className="absolute -bottom-28 left-1/3 h-[520px] w-[520px] rounded-full blur-3xl opacity-45 dark:opacity-22 animate-[float3_16s_ease-in-out_infinite]"
+        style={{
+          background: `radial-gradient(circle at 30% 30%, ${MIRADIA.yellow}44, transparent 60%)`,
+        }}
+      />
+
+      <style>{`
+        @keyframes float1 { 0%,100%{ transform: translate(0,0) } 50%{ transform: translate(20px,18px) } }
+        @keyframes float2 { 0%,100%{ transform: translate(0,0) } 50%{ transform: translate(-18px,22px) } }
+        @keyframes float3 { 0%,100%{ transform: translate(0,0) } 50%{ transform: translate(12px,-20px) } }
+      `}</style>
+    </div>
+  );
+}
+
+/* =========================
+   CONNECTORS (gradient)
+========================= */
+function VConnector({ h = 28 }) {
+  return (
+    <div className="flex justify-center">
+      <div style={{ height: h }} className="w-[2px]">
+        <div
+          className="h-full w-[2px] rounded-full opacity-90 dark:opacity-55"
+          style={{
+            background: `linear-gradient(${MIRADIA.sky}66, ${MIRADIA.teal}44)`,
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function HConnector({ count = 2 }) {
+  return (
+    <div className="relative mx-auto w-full max-w-5xl">
+      <div
+        className="absolute left-1/2 top-0 -translate-x-1/2 w-[min(920px,92%)] h-[2px] rounded-full opacity-90 dark:opacity-55"
+        style={{
+          background: `linear-gradient(90deg, ${MIRADIA.green}55, ${MIRADIA.sky}77, ${MIRADIA.yellow}55)`,
+        }}
+      />
+      <div className="flex justify-center gap-10 md:gap-12 lg:gap-14 pt-0">
+        {Array.from({ length: count }).map((_, i) => (
+          <div key={i} className="relative">
+            <div
+              className="absolute left-1/2 top-0 -translate-x-1/2 h-6 w-[2px] rounded-full opacity-90 dark:opacity-55"
+              style={{
+                background: `linear-gradient(${MIRADIA.sky}66, ${MIRADIA.teal}44)`,
+              }}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="h-6" />
+    </div>
+  );
+}
+
+/* =========================
+   AVATAR (fallback initials)
+========================= */
+function Avatar({ person, ringColor }) {
+  const [broken, setBroken] = useState(false);
+  const full = `${person.name} ${person.surname}`;
+
+  return (
+    <div className="absolute -top-7 left-1/2 -translate-x-1/2">
+      {broken ? (
+        <div
+          className="h-14 w-14 rounded-full grid place-items-center font-extrabold text-sm bg-white text-slate-900 dark:bg-[#071223] dark:text-slate-50"
+          style={{ boxShadow: "0 10px 20px rgba(0,0,0,0.12)" }}
+        >
+          {initials(full)}
+        </div>
+      ) : (
+        <img
+          src={person.photo}
+          alt={full}
+          onError={() => setBroken(true)}
+          className="h-14 w-14 rounded-full object-cover transition-transform duration-200 group-hover:scale-[1.06]"
+          style={{ boxShadow: "0 12px 28px rgba(0,0,0,0.14)" }}
+        />
+      )}
+
+      <div
+        className="pointer-events-none absolute inset-0 rounded-full"
+        style={{ boxShadow: `0 0 0 4px ${ringColor}` }}
+      />
+      <div
+        className="pointer-events-none absolute inset-0 rounded-full"
+        style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.18)" }}
+      />
+    </div>
+  );
+}
+
+function InfoHoverIcon() {
+  return (
+    <div className="absolute right-3 top-3 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="h-8 w-8 rounded-full grid place-items-center bg-white/70 dark:bg-white/10 ring-1 ring-black/5 dark:ring-white/10 backdrop-blur">
+        <span className="text-slate-700 dark:text-slate-200 text-[12px] font-black">
+          i
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* =========================
+   CARD (wrap, pas de tronquage)
+========================= */
+function PersonCard({ person, onOpen }) {
+  const isBlue = person.level === "blue";
+
+  const accent = person.accent || "sky";
+  const accentColor =
+    accent === "yellow"
+      ? MIRADIA.yellow
+      : accent === "green"
+      ? MIRADIA.green
+      : accent === "teal"
+      ? MIRADIA.teal
+      : MIRADIA.sky;
+
+  const ringColor = isBlue ? MIRADIA.sky : accentColor;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(person)}
+      className={cx(
+        "group relative",
+        "w-[250px] max-w-[46vw]",           // un peu plus large => plus de texte visible
+        "rounded-2xl px-4 pt-9 pb-4 text-center",
+        "cursor-pointer",
+        "outline-none focus-visible:ring-4 focus-visible:ring-offset-2",
+        "focus-visible:ring-[#3AA6DC]/40 focus-visible:ring-offset-transparent",
+        "transition-all duration-200",
+        "hover:-translate-y-1 hover:shadow-[0_26px_85px_rgba(2,92,134,0.25)]",
+        "backdrop-blur-xl",
+        isBlue
+          ? "bg-gradient-to-br from-[#025C86] via-[#124B7C] to-[#3AA6DC] text-white ring-1 ring-white/15"
+          : "bg-white/75 dark:bg-white/6 text-slate-900 dark:text-slate-50 ring-1 ring-black/5 dark:ring-white/10"
+      )}
+      aria-label={`Voir les détails de ${person.name} ${person.surname}`}
+    >
+      <Avatar person={person} ringColor={ringColor} />
+      <InfoHoverIcon />
+
+      <div className="text-[13px] font-semibold leading-tight break-words">
+        {person.name} <span className="font-extrabold">{person.surname}</span>
+      </div>
+
+      {/* dept complet */}
+      <div className={cx("mt-1 text-[11px] leading-snug break-words", isBlue ? "text-white/80" : "text-slate-600 dark:text-slate-300")}>
+        {person.dept}
+      </div>
+
+      {/* rôle complet : “Conseillère en Communication”, etc */}
+      <div className={cx("mt-1 text-[13px] font-extrabold leading-snug break-words", isBlue ? "text-white" : "text-[#124B7C] dark:text-[#3AA6DC]")}>
+        {person.role}
+      </div>
+
+      {/* badge complet : Communication / Genre / Finance / Technique */}
+      <div className="mt-2 flex justify-center">
+        <span
+          className={cx(
+            "inline-flex items-center justify-center rounded-full px-3 py-1 text-[11px] font-semibold",
+            isBlue ? "bg-white/15 text-white ring-1 ring-white/25" : "text-[#071223] dark:text-[#071223]"
+          )}
+          style={isBlue ? undefined : { backgroundColor: accentColor }}
+        >
+          {person.badge}
+        </span>
+      </div>
+
+      {/* glow hover */}
+      <div
+        className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"
+        style={{
+          background: `radial-gradient(circle at 40% 20%, ${accentColor}22, transparent 55%)`,
+        }}
+      />
+    </button>
+  );
+}
+
+/* =========================
+   MODAL
+========================= */
+function Modal({ open, person, onClose }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open || !person) return null;
+
+  const full = `${person.name} ${person.surname}`;
+  const mail = person.email || "";
+  const tel = person.phone || "";
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <button
+        className="absolute inset-0 bg-black/35 dark:bg-black/60"
+        onClick={onClose}
+        aria-label="Fermer le modal"
+      />
+
+      <div className="absolute left-1/2 top-1/2 w-[520px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2">
+        <div className="rounded-3xl bg-white/85 dark:bg-[#071223]/70 ring-1 ring-black/5 dark:ring-white/10 backdrop-blur-2xl shadow-[0_40px_120px_rgba(0,0,0,0.35)]">
+          <div className="p-5 flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="text-base font-extrabold text-slate-900 dark:text-slate-50 break-words">
+                {full}
+              </div>
+              <div className="text-sm text-slate-600 dark:text-slate-300 break-words">
+                {person.role} • {person.dept}
+              </div>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="rounded-2xl px-3 py-2 text-sm font-semibold bg-white/70 hover:bg-white ring-1 ring-black/5
+                         dark:bg-white/10 dark:hover:bg-white/15 dark:ring-white/10 focus-visible:ring-4 focus-visible:ring-[#3AA6DC]/40"
+            >
+              Fermer
+            </button>
+          </div>
+
+          <div className="px-5 pb-5 grid gap-3">
+            <div className="rounded-2xl p-4 bg-white/70 dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10">
+              <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                Contact
+              </div>
+
+              <div className="mt-3 space-y-2 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-slate-600 dark:text-slate-300">Email</span>
+                  {mail ? (
+                    <a
+                      className="font-semibold text-[#025C86] dark:text-[#3AA6DC] hover:underline focus-visible:ring-4 focus-visible:ring-[#3AA6DC]/40 rounded"
+                      href={`mailto:${mail}`}
+                    >
+                      {mail}
+                    </a>
+                  ) : (
+                    <span className="text-slate-500 dark:text-slate-400">—</span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-slate-600 dark:text-slate-300">Téléphone</span>
+                  {tel ? (
+                    <a
+                      className="font-semibold text-[#025C86] dark:text-[#3AA6DC] hover:underline focus-visible:ring-4 focus-visible:ring-[#3AA6DC]/40 rounded"
+                      href={`tel:${tel.replace(/\s+/g, "")}`}
+                    >
+                      {tel}
+                    </a>
+                  ) : (
+                    <span className="text-slate-500 dark:text-slate-400">—</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="text-sm text-slate-600 dark:text-slate-300">
+              Cliquez sur n’importe quelle carte pour voir les détails de contact.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================
+   TITLE (cohérent MIRADIA)
+========================= */
+function TitleBlock() {
+  return (
+    <div className="w-full">
+      <div className="rounded-3xl overflow-hidden ring-1 ring-black/5 dark:ring-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.18)]">
+        <div
+          className="px-6 py-10 text-center text-white"
+          style={{
+            background: `linear-gradient(135deg, ${MIRADIA.teal}, ${MIRADIA.navy} 55%, ${MIRADIA.sky})`,
+          }}
+        >
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">
+            Notre organisation
+          </h2>
+          <div
+            className="w-36 h-1 mx-auto mb-6 rounded-full"
+            style={{ background: `linear-gradient(90deg, ${MIRADIA.green}, ${MIRADIA.yellow})` }}
+          />
+          <p className="text-white/85 max-w-2xl mx-auto">
+            Cliquez sur une carte pour afficher les détails de contact (email, téléphone).
+          </p>
+
+          <div className="mt-8 bg-white/10 p-5 rounded-2xl backdrop-blur-lg max-w-3xl mx-auto">
+            <h3 className="flex items-center justify-center text-xl md:text-2xl font-semibold">
+              <FaSitemap className="mr-3 text-white" />
+              Organigramme
+            </h3>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================
+   PAGE
+========================= */
+export default function OrganigrammeMIRADIAPro() {
+  const [selected, setSelected] = useState(null);
+
+  return (
+    <div className="min-h-screen w-full bg-[#eef5fb] dark:bg-[#050B14]">
+      <div className="relative">
+        <AnimatedBackground />
+
+        <div className="relative mx-auto w-full max-w-6xl px-4 py-8">
+          <TitleBlock />
+
+          <div className="mt-12">
+            <div className="flex justify-center">
+              <PersonCard person={DATA.top} onOpen={setSelected} />
+            </div>
+
+            <VConnector h={30} />
+            <HConnector count={2} />
+
+            <div className="flex flex-wrap justify-center gap-10 md:gap-12 lg:gap-14">
+              {DATA.second.map((p) => (
+                <PersonCard key={p.id} person={p} onOpen={setSelected} />
+              ))}
+            </div>
+
+            <VConnector h={32} />
+            <HConnector count={4} />
+
+            <div className="flex flex-wrap justify-center gap-10 md:gap-12 lg:gap-14">
+              {DATA.third.map((p) => (
+                <PersonCard key={p.id} person={p} onOpen={setSelected} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <Modal open={Boolean(selected)} person={selected} onClose={() => setSelected(null)} />
+    </div>
+  );
+}
