@@ -612,6 +612,13 @@ const DashboardLayout = () => {
           link: "/orgnodescontroler",
           accent: "emerald",
         },
+ {
+      id: "cmsSectionsBo",
+      tKey: "layout.menu.cmsSectionsBo",
+      icon: <FaCog />,
+      link: "/cms-sectionscontroler",
+      accent: "indigo",
+    },
 
         ],
       },
@@ -866,6 +873,8 @@ const DashboardLayout = () => {
     newTitle = t('layout.titles.miradiaSlidesBo', 'Slides MIRADIA');
 else if (path.startsWith("/orgnodescontroler") || path.startsWith("/orgnodes"))
   newTitle = t("layout.titles.orgNodesBo", "Organigramme");
+else if (path.startsWith("/cms-sectionscontroler") || path.startsWith("/cms-sections"))
+  newTitle = t("layout.titles.cmsSectionsBo", "CMS Sections");
 
     else newTitle = t('layout.titles.dashboard');
     setTitle(newTitle);
@@ -1244,6 +1253,7 @@ else if (path.startsWith("/orgnodescontroler") || path.startsWith("/orgnodes"))
                       const isBureaux = item.id === 'bureauxBo';
                       const isMiradiaSlides = item.id === 'miradiaSlidesBo';
                       const isOrgNodes = item.id === "orgNodesBo";
+                      const isCmsSections = item.id === "cmsSectionsBo";
 
 
                       const ContentNode = ({ isActive }) => (
@@ -1267,19 +1277,24 @@ else if (path.startsWith("/orgnodescontroler") || path.startsWith("/orgnodes"))
                               ? 'Messagerie'
                               : item.id === 'miradiaSlidesBo'
                               ? 'Miradia Slides'
+                              : item.id === "cmsSectionsBo"
+                              ? "CMS Sections"
+
                               : undefined
                           }
 
                             t={t}
                             accentKey={accentKey}
                             isActive={!!isActive}
-                            showAdd={isSocietes || isBureaux || isMiradiaSlides || isOrgNodes}
-                            onAdd={() => {
-                              if (isSocietes) navigate("/societes/create");
-                              else if (isBureaux) navigate("/bureaux/create");
-                              else if (isMiradiaSlides) navigate("/miradia-slides/new");
-                              else if (isOrgNodes) navigate("/orgnodes/new");
-                            }}
+                            showAdd={isSocietes || isBureaux || isMiradiaSlides || isOrgNodes || isCmsSections}
+                           onAdd={() => {
+  if (isSocietes) navigate("/societes/create");
+  else if (isBureaux) navigate("/bureaux/create");
+  else if (isMiradiaSlides) navigate("/miradia-slides/new");
+  else if (isOrgNodes) navigate("/orgnodes/new");
+  else if (isCmsSections) navigate("/cms-sections/new");
+}}
+
 
                                                     />
                                                   </div>

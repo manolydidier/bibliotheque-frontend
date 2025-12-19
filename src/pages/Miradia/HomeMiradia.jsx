@@ -8,9 +8,11 @@ import Slide from './Slider';
 import NavBarMiradia from '../../component/navbar/NavbarMiradia';
 import Footer from './Footer';
 import ContactPage from '../UserManagementDashboard/Components/Accueil/Contact';
-import Objectif from '../UserManagementDashboard/Components/Accueil/objectif';
-import PartnersStrip from '../UserManagementDashboard/Components/Accueil/PartnersStrip';
+
+
 import OrganigrammeMIRADIA from './organigramme/OrganigrammeMIRADIA';
+import PartnersStrip from './partenairemiradia/PartnersStrip';
+import Objectif from './objectifmiradia/Objectif';
 
 const HomeMiradia = () => {
   const { t } = useTranslation();

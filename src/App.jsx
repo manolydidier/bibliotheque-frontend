@@ -55,6 +55,8 @@ import MiradiaSlidesIndex from './pages/UserManagementDashboard/Components/Backo
 import MiradiaSlideForm from './pages/UserManagementDashboard/Components/Backoffice/Miradia/Slide/MiradiaSlideForm';
 import OrgNodesIndex from './pages/UserManagementDashboard/Components/Backoffice/Miradia/orgchart/OrgNodesIndex';
 import OrgNodeForm from './pages/UserManagementDashboard/Components/Backoffice/Miradia/orgchart/OrgNodeForm';
+import CmsSectionForm from './pages/UserManagementDashboard/Components/Backoffice/Miradia/cms/CmsSectionForm';
+import CmsSectionsIndex from './pages/UserManagementDashboard/Components/Backoffice/Miradia/cms/CmsSectionsIndex';
 
 function BootScreen() {
   return (
@@ -308,6 +310,33 @@ export default function App() {
               </AdminRoute>
             }
           />
+          <Route
+  path="/cms-sectionscontroler"
+  element={
+    <AdminRoute>
+      <CmsSectionsIndex />
+    </AdminRoute>
+  }
+/>
+
+<Route
+  path="/cms-sections/new"
+  element={
+    <AdminRoute>
+      <CmsSectionForm />
+    </AdminRoute>
+  }
+/>
+
+<Route
+  path="/cms-sections/:id/edit"
+  element={
+    <AdminRoute>
+      <CmsSectionForm />
+    </AdminRoute>
+  }
+/>
+
 
                   </Route>
                 </Route>

@@ -112,9 +112,7 @@ const stripHtml = (html) =>
 
 const normalizeNames = (arr) =>
   (Array.isArray(arr) ? arr : [])
-    .map((x) =>
-      typeof x === "string" ? x : x?.name || x?.role || x?.slug || ""
-    )
+    .map((x) => (typeof x === "string" ? x : x?.name || x?.role || x?.slug || ""))
     .map((s) => String(s).trim())
     .filter(Boolean);
 
@@ -140,9 +138,7 @@ const resolveAvatarSrc = (avatarPreview, avatar_path) => {
   const raw = String(avatar_path || "").trim();
   if (!raw) return "";
   if (/^https?:\/\//i.test(raw)) return raw;
-  return `/storage/${raw
-    .replace(/^\/?storage\//, "")
-    .replace(/^storage\//, "")}`;
+  return `/storage/${raw.replace(/^\/?storage\//, "").replace(/^storage\//, "")}`;
 };
 
 const logAxiosError = (prefix, err) => {
@@ -170,7 +166,6 @@ const extractOrgNode = (payload) => {
     if (c && (c.id != null || c.title)) return c;
   }
 
-  // ton cas actuel: { user:null, parent:null } => rien à hydrater
   return null;
 };
 
@@ -197,7 +192,6 @@ const toFormData = (payload, files = {}) => {
   for (const key of allowedKeys) {
     if (!(key in payload)) continue;
     const v = payload[key];
-
     if (v === undefined || v === null || v === "") continue;
 
     if (typeof v === "boolean") fd.append(key, v ? "1" : "0");
@@ -299,11 +293,7 @@ export default function OrgNodeForm() {
 
   
 
-  // si connecté après coup
-  useEffect(() => {
-    if (!model.user_id && meId) setModel((p) => ({ ...p, user_id: meId }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meId]);
+ 
 
   // lock scroll on modal
   useEffect(() => {
@@ -347,8 +337,6 @@ export default function OrgNodeForm() {
           headers: { "Cache-Control": "no-store" },
         });
 
-     
-
         const list = Array.isArray(res?.data?.data)
           ? res.data.data
           : Array.isArray(res?.data)
@@ -373,14 +361,13 @@ export default function OrgNodeForm() {
           headers: { "Cache-Control": "no-store" },
         });
 
-     
-
         const list = Array.isArray(res?.data?.data)
           ? res.data.data
           : Array.isArray(res?.data)
           ? res.data
           : [];
 
+        
         setAdminUsers(list);
       } catch (err) {
         logAxiosError("[OrgNodeForm] GET /admin-users failed", err);
@@ -400,8 +387,6 @@ export default function OrgNodeForm() {
       headers: { "Cache-Control": "no-store" },
     });
 
-
-
     setDebugShowRaw(res?.data ?? null);
 
     const node = extractOrgNode(res?.data);
@@ -415,7 +400,6 @@ export default function OrgNodeForm() {
     (async () => {
       try {
         const node = await fetchOrgNodeDirect(idOrSlug);
-     
 
         if (node && (node.id != null || node.title)) {
           const hydrated = hydrateFromNode(node, meId);
@@ -430,7 +414,6 @@ export default function OrgNodeForm() {
           return;
         }
 
-        // si show ne renvoie pas le noeud -> fallback plus tard via parents
         setDebugPickedFrom("show(empty)");
       } catch (err) {
         logAxiosError("[OrgNodeForm] GET /orgnodes/:id failed", err);
@@ -454,8 +437,6 @@ export default function OrgNodeForm() {
 
     const fallback = parents.find((p) => String(p.id) === String(idOrSlug));
     if (!fallback) return;
-
-
 
     const hydrated = hydrateFromNode(fallback, meId);
     setModel((prev) => ({ ...prev, ...hydrated }));
@@ -494,7 +475,10 @@ export default function OrgNodeForm() {
     );
   };
 
-  useEffect(() => () => toastTimerRef.current && clearTimeout(toastTimerRef.current), []);
+  useEffect(
+    () => () => toastTimerRef.current && clearTimeout(toastTimerRef.current),
+    []
+  );
 
   /* ===============================
      VALIDATION + METRICS
@@ -607,118 +591,124 @@ export default function OrgNodeForm() {
   /* ===============================
      SUBMIT
   ================================= */
-  const handleSubmit = async (e) => {
-    e?.preventDefault?.();
-    setIsSubmitting(true);
-    setErrors({});
+ const handleSubmit = async (e) => {
+  e?.preventDefault?.();
+  setIsSubmitting(true);
+  setErrors({});
 
-    try {
-      const payload = {
-        title: model.title || "",
-        user_id: canAssignUserId ? String(model.user_id || "") : undefined,
-        parent_id: model.parent_id || "",
-        department: model.department || "",
-        badge: model.badge || "",
-        subtitle: model.subtitle || "",
-        bio: model.bio || "",
-        level: Number(model.level ?? 1),
-        accent: model.accent || "",
-        sort_order: Number(model.sort_order ?? 0),
-        pos_x: Number(model.pos_x ?? 0),
-        pos_y: Number(model.pos_y ?? 0),
-        is_active: !!model.is_active,
-      };
+  try {
+    const payload = {
+      title: model.title || "",
+      user_id: String(model.user_id || ""),
+      parent_id: model.parent_id || "",
+      department: model.department || "",
+      badge: model.badge || "",
+      subtitle: model.subtitle || "",
+      bio: model.bio || "",
+      level: Number(model.level ?? 1),
+      accent: model.accent || "",
+      sort_order: Number(model.sort_order ?? 0),
+      pos_x: Number(model.pos_x ?? 0),
+      pos_y: Number(model.pos_y ?? 0),
+      is_active: !!model.is_active,
+    };
 
-      const fd = toFormData(payload, { avatar: avatarFile || null });
+   
 
-      let res;
-      if (isEdit && model.id) {
-        res = await api.post(`/orgnodes/${model.id}?_method=PATCH`, fd, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-      } else {
-        res = await api.post("/orgnodes", fd, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-      }
+    const fd = toFormData(payload, { avatar: avatarFile || null });
 
-      const data = res?.data?.data ?? res?.data ?? {};
-      setModel((prev) => ({ ...prev, ...(data || {}) }));
+   
 
-      if (isEdit) {
-        const nextBaseline = {
-          ...baseline,
-          ...model,
-          ...(data || {}),
-          user_id:
-            (data?.user_id != null ? String(data.user_id) : model.user_id) || "",
-        };
-        setBaseline(nextBaseline);
-      } else if (data?.id) {
-        const created = {
-          ...model,
-          ...(data || {}),
-          id: data.id,
-          user_id:
-            (data?.user_id != null ? String(data.user_id) : model.user_id) || "",
-        };
-        setBaseline(created);
-        didSetBaselineRef.current = true;
-      }
+    let res;
 
-      showToast(isEdit ? "Noeud mis à jour ✅" : "Noeud créé ✅", "success");
+    if (isEdit && model.id) {
+      // ✅ IMPORTANT: PHP/Laravel ne parse pas bien multipart PUT -> utiliser _method=PUT
+      fd.append("_method", "PUT");
 
-      if (!isEdit) {
-        setModel((prev) => ({
-          ...prev,
-          id: null,
-          parent_id: "",
-          title: "",
-          department: "",
-          badge: "",
-          subtitle: "",
-          bio: "",
-          level: 1,
-          accent: "sky",
-          sort_order: 0,
-          pos_x: 0,
-          pos_y: 0,
-          is_active: true,
-          avatar_path: "",
-          user_id: meId || "",
-        }));
-        setAvatarFile(null);
-        setParentSearch("");
-        setBaseline(null);
-        didSetBaselineRef.current = false;
-      } else {
-        setAvatarFile(null);
-      }
-    } catch (err) {
-      if (err?.response?.status === 422 && err?.response?.data?.errors) {
-        const es = err.response.data.errors || {};
-        setErrors(es);
-        showToast("Validation: corrige les champs en rouge.", "error");
-
-        const first = Object.keys(es)[0];
-        if (first === "title" && titleRef.current) titleRef.current.focus();
-        else if (first === "user_id" && userRef.current) userRef.current.focus();
-        else if (first === "parent_id" && parentRef.current) parentRef.current.focus();
-      } else {
-        logAxiosError("[OrgNodeForm] SAVE failed", err);
-        setToast({
-          open: true,
-          msg:
-            err?.response?.data?.message ||
-            err.message ||
-            "Erreur lors de l’enregistrement",
-          type: "error",
-        });
-      }
-    } finally {
-      setIsSubmitting(false);
+      res = await api.post(`/orgnodes/${model.id}`, fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+    } else {
+      res = await api.post("/orgnodes", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
     }
-  };
+
+    const data = res?.data?.data ?? res?.data ?? {};
+   
+
+    setModel((prev) => ({ ...prev, ...(data || {}) }));
+
+    if (isEdit) {
+      const nextBaseline = {
+        ...baseline,
+        ...model,
+        ...(data || {}),
+        user_id: (data?.user_id != null ? String(data.user_id) : model.user_id) || "",
+      };
+      setBaseline(nextBaseline);
+    } else if (data?.id) {
+      const created = {
+        ...model,
+        ...(data || {}),
+        id: data.id,
+        user_id: (data?.user_id != null ? String(data.user_id) : model.user_id) || "",
+      };
+      setBaseline(created);
+      didSetBaselineRef.current = true;
+    }
+
+    showToast(isEdit ? "Noeud mis à jour ✅" : "Noeud créé ✅", "success");
+
+    if (!isEdit) {
+      setModel((prev) => ({
+        ...prev,
+        id: null,
+        parent_id: "",
+        title: "",
+        department: "",
+        badge: "",
+        subtitle: "",
+        bio: "",
+        level: 1,
+        accent: "sky",
+        sort_order: 0,
+        pos_x: 0,
+        pos_y: 0,
+        is_active: true,
+        avatar_path: "",
+        user_id: meId || "",
+      }));
+      setAvatarFile(null);
+      setParentSearch("");
+      setBaseline(null);
+      didSetBaselineRef.current = false;
+    } else {
+      setAvatarFile(null);
+    }
+  } catch (err) {
+    if (err?.response?.status === 422 && err?.response?.data?.errors) {
+      const es = err.response.data.errors || {};
+      setErrors(es);
+      showToast("Validation: corrige les champs en rouge.", "error");
+
+      const first = Object.keys(es)[0];
+      if (first === "title" && titleRef.current) titleRef.current.focus();
+      else if (first === "user_id" && userRef.current) userRef.current.focus();
+      else if (first === "parent_id" && parentRef.current) parentRef.current.focus();
+    } else {
+      logAxiosError("[OrgNodeForm] SAVE failed", err);
+      setToast({
+        open: true,
+        msg: err?.response?.data?.message || err.message || "Erreur lors de l’enregistrement",
+        type: "error",
+      });
+    }
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+
 
   /* ===============================
      RENDER
@@ -811,7 +801,6 @@ export default function OrgNodeForm() {
                   </span>
                 )}
 
-                {/* DEBUG mini badge */}
                 {isEdit && (
                   <button
                     type="button"
@@ -882,7 +871,12 @@ export default function OrgNodeForm() {
                     ref={userRef}
                     className={`${inputBase} ${errors.user_id ? inputError : ""}`}
                     value={model.user_id || ""}
-                    onChange={(e) => onChange("user_id", e.target.value)}
+                    onChange={(e) => {
+                      const nextId = e.target.value;
+                      const picked = adminUsers.find((u) => String(u.id) === String(nextId));
+                  
+                      onChange("user_id", nextId);
+                    }}
                   >
                     <option value="">— Sélectionner un admin —</option>
                     {adminUsers.map((u) => (
@@ -1026,9 +1020,7 @@ export default function OrgNodeForm() {
                   type="number"
                   className={`${inputBase} ${errors.sort_order ? inputError : ""}`}
                   value={model.sort_order}
-                  onChange={(e) =>
-                    onChange("sort_order", parseInt(e.target.value, 10) || 0)
-                  }
+                  onChange={(e) => onChange("sort_order", parseInt(e.target.value, 10) || 0)}
                 />
                 <FieldError name="sort_order" errors={errors} />
               </div>
@@ -1299,52 +1291,6 @@ export default function OrgNodeForm() {
           </section>
         </form>
       </main>
-
-      {/* Barre d’actions fixe (UX) */}
-      <div className="fixed left-0 right-0 bottom-0 z-[120] hidden">
-        <div className="mx-auto max-w-[1400px] px-4 lg:px-8 pb-5">
-          <div className="rounded-2xl bg-white/90 backdrop-blur border border-slate-200 shadow-lg p-3 flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              className="px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold inline-flex items-center gap-2"
-            >
-              <FiArrowLeft /> Retour
-            </button>
-
-            <div className="hidden md:block text-xs text-slate-500">
-              {isEdit ? "Modification" : "Création"} •{" "}
-              {!isValid
-                ? "Titre requis"
-                : isEdit
-                ? isDirty
-                  ? "Modifications en attente"
-                  : "À jour"
-                : "Prêt à sauvegarder"}
-            </div>
-
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={isSubmitting || !isValid || (isEdit && !isDirty)}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-semibold shadow ${
-                !isValid || isSubmitting || (isEdit && !isDirty)
-                  ? "bg-slate-400 cursor-not-allowed"
-                  : ""
-              }`}
-              style={
-                !isValid || isSubmitting || (isEdit && !isDirty)
-                  ? {}
-                  : { background: "linear-gradient(90deg,#11528f,#00a0d6)" }
-              }
-              title={isEdit && !isDirty ? "Aucune modification à enregistrer" : undefined}
-            >
-              <FiSave className="w-4 h-4" />
-              {isSubmitting ? "Enregistrement…" : "Sauvegarder"}
-            </button>
-          </div>
-        </div>
-      </div>
 
       {/* modal plein écran */}
       {isEditorModalOpen && (
