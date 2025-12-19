@@ -13,6 +13,9 @@ const STORAGE_BASE =
 const SLIDE_DURATION = 9000;
 const FADE_MS = 850;
 
+/* ✅ NEW: délai avant apparition du contenu quand un slide devient actif */
+const REVEAL_DELAY_MS = 380;
+
 /* ===============================
    HELPERS
 ================================= */
@@ -43,6 +46,10 @@ export default function Slider() {
 
   const [progress, setProgress] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+
+  /* ✅ NEW: contrôle reveal du contenu (tag/titre/card/footer) */
+  const [revealContent, setRevealContent] = useState(false);
+  const revealTimerRef = useRef(null);
 
   const fadeTimerRef = useRef(null);
   const autoTimerRef = useRef(null);
@@ -121,8 +128,26 @@ export default function Slider() {
       if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
       if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
       if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
     };
   }, []);
+
+  /* ===============================
+     ✅ REVEAL CONTENT (doucement après activation)
+  =============================== */
+  useEffect(() => {
+    // à chaque changement de slide actif, on cache puis on révèle doucement
+    setRevealContent(false);
+    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+
+    revealTimerRef.current = setTimeout(() => {
+      setRevealContent(true);
+    }, REVEAL_DELAY_MS);
+
+    return () => {
+      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    };
+  }, [safeCurrent]);
 
   /* ===============================
      TRANSITION GO TO
@@ -151,6 +176,7 @@ export default function Slider() {
   const handleTouchStart = (e) => {
     if (isMobile) {
       touchStartX.current = e.touches[0].clientX;
+      touchEndX.current = e.touches[0].clientX;
     }
   };
 
@@ -290,14 +316,40 @@ export default function Slider() {
           100% { transform: scale(1.04); }
         }
 
-        @keyframes shimmer {
-          0% { left: -100%; }
-          100% { left: 100%; }
-        }
-
         @keyframes fadeInUp {
           from { opacity: 0; transform: translateY(20px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ===========================
+           ✅ NEW: apparition plus douce depuis le bas
+           - durée plus longue
+           - easing plus smooth
+           - +stagger via classes
+        =========================== */
+        @keyframes miradiaRiseInSoft {
+          0%   { opacity: 0; transform: translate3d(0, 26px, 0); }
+          70%  { opacity: 1; transform: translate3d(0, 2px, 0); }
+          100% { opacity: 1; transform: translate3d(0, 0, 0); }
+        }
+
+        .rise-hold{
+          opacity: 0;
+          transform: translate3d(0, 22px, 0);
+        }
+
+        .rise-show{
+          animation: miradiaRiseInSoft 1100ms cubic-bezier(.18,.90,.18,1) both;
+          will-change: transform, opacity;
+        }
+
+        .rise-d1{ animation-delay: 140ms; }
+        .rise-d2{ animation-delay: 360ms; }
+        .rise-d3{ animation-delay: 600ms; }
+
+        @media (prefers-reduced-motion: reduce){
+          .rise-hold{ opacity: 1 !important; transform: none !important; }
+          .rise-show, .rise-d1, .rise-d2, .rise-d3{ animation: none !important; }
         }
 
         /* ✅ CARD CONTENU (BLANC + BLUR) */
@@ -625,8 +677,8 @@ export default function Slider() {
               {/* ===== SLIDE ACTIF (contenu dans la card blur) ===== */}
               {isActive && (
                 <div className={`h-full flex flex-col justify-between ${alignClass}`}>
-                  {/* TAG + TITRE (sans blur) */}
-                  <div className="w-full">
+                  {/* TAG + TITRE (apparition douce) */}
+                  <div className={`w-full ${revealContent ? "rise-show rise-d1" : "rise-hold"}`}>
                     {slide.tag && (
                       <p
                         className={[
@@ -651,8 +703,8 @@ export default function Slider() {
                     </h3>
                   </div>
 
-                  {/* ✅ SECTION CONTENU DANS LA CARD BLUR */}
-                  <div className="mt-4 sm:mt-6 md:mt-8 w-full">
+                  {/* ✅ SECTION CONTENU DANS LA CARD BLUR (apparition douce) */}
+                  <div className={`mt-4 sm:mt-6 md:mt-8 w-full ${revealContent ? "rise-show rise-d2" : "rise-hold"}`}>
                     <div
                       className={[
                         "miradia-content-card",
@@ -673,8 +725,13 @@ export default function Slider() {
                     </div>
                   </div>
 
-                  {/* FOOTER (sans blur) */}
-                  <div className="mt-4 sm:mt-6 md:mt-8 w-full flex items-center justify-between text-white/80">
+                  {/* FOOTER (apparition douce) */}
+                  <div
+                    className={[
+                      "mt-4 sm:mt-6 md:mt-8 w-full flex items-center justify-between text-white/80",
+                      revealContent ? "rise-show rise-d3" : "rise-hold",
+                    ].join(" ")}
+                  >
                     <div className="flex items-center gap-2 sm:gap-3">
                       <span className="text-[10px] sm:text-xs uppercase tracking-[0.2em] sm:tracking-[0.3em]">
                         Slide {idx + 1} / {total}
@@ -713,10 +770,7 @@ export default function Slider() {
 
       {/* PROGRESS BAR */}
       <div className="absolute bottom-0 left-0 w-full z-30 bg-white/20 h-[2px] sm:h-[3px]">
-        <div
-          className="h-full transition-[width] duration-150 ease-linear relative"
-          style={{ width: `${progress}%` }}
-        >
+        <div className="h-full transition-[width] duration-150 ease-linear relative" style={{ width: `${progress}%` }}>
           <div
             className="absolute inset-0 rounded-r-full"
             style={{

@@ -43,3 +43,30 @@
   outline: 2px solid rgb(59 130 246 / 0.6); /* bleu-500/60 */
   outline-offset: 2px;
 }
+/* cms */
+.cms-frame { line-height: 0 !important; }
+.cms-frame iframe {
+  display: block !important;
+  vertical-align: top !important;
+  width: 100% !important;
+  border: 0 !important;
+}
+
+/* Cache le badge "Fond actif : ..." dans StickyBg */
+div.pointer-events-none[class*="absolute"][class*="left-4"][class*="bottom-4"]
+  > div:has(> span + :is(#text, *)) {
+  display: none !important;
+}
+
+/* lien dans l'organigramme , le lien va etre apparu plus lentement  */
+.org-link{
+  transition:
+    stroke-dashoffset 820ms cubic-bezier(.2,.8,.2,1),
+    opacity 2600ms ease;
+  will-change: stroke-dashoffset, opacity;
+}
+.org-link--on{
+  transition:
+    stroke-dashoffset 900ms cubic-bezier(.2,.8,.2,1),
+    opacity 2400ms ease;
+}

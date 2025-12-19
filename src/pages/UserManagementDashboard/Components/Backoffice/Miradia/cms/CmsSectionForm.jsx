@@ -484,15 +484,43 @@ export default function CmsSectionForm() {
     return parts.join(" / ");
   }, [model.template, model.section, model.locale]);
 
+  // ✅ même CSS que dans GrapesEditorModal (canvas.styles)
+const IS_PROD =
+  (typeof import.meta !== "undefined" && import.meta.env?.PROD) ||
+  (typeof process !== "undefined" && process.env?.NODE_ENV === "production");
+
+const TAILWIND_HREF = IS_PROD ? "/assets/index.css" : "/src/index.css";
+
+// ✅ pour que les images/liens relatifs marchent (ex: /storage/..., ./img.png)
+const BASE_HREF = `${window.location.origin}/`;
+
+// ✅ si tu utilises dark mode dans l’app
+const isDark = document.documentElement.classList.contains("dark");
+
+
   const previewSrcDoc = useMemo(() => {
-    return `<!doctype html><html><head><meta charset="utf-8"/>
-      <meta name="viewport" content="width=device-width,initial-scale=1"/>
-      <style>${model.css || ""}</style>
-      </head><body>
-      ${model.html || ""}
-      <script>${model.js || ""}<\/script>
-      </body></html>`;
-  }, [model.html, model.css, model.js]);
+  return `<!doctype html>
+<html class="${isDark ? "dark" : ""}">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <base href="${BASE_HREF}" />
+
+  <!-- ✅ Tailwind / index.css (obligatoire pour tes classes Tailwind) -->
+  <link rel="stylesheet" href="${TAILWIND_HREF}" />
+
+  <!-- ✅ CSS généré par Grapes -->
+  <style>${model.css || ""}</style>
+</head>
+<body class="min-h-screen">
+  ${model.html || ""}
+
+  <!-- ✅ JS généré par Grapes -->
+  <script>${model.js || ""}<\/script>
+</body>
+</html>`;
+}, [model.html, model.css, model.js, isDark]);
+
 
   // wrapper glitch: on l’applique uniquement si erreur + glitchOn
   const glitchWrapClass = (fieldName) =>

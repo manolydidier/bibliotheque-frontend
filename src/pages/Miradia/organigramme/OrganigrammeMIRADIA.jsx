@@ -120,8 +120,7 @@ const toPerson = (node) => {
   const name = split[0] || "—";
   const surname = split.slice(1).join(" ") || "";
 
-  const photo =
-    resolveStorageUrl(node?.avatar_path) || resolveStorageUrl(u?.avatar_url) || "";
+  const photo = resolveStorageUrl(node?.avatar_path) || resolveStorageUrl(u?.avatar_url) || "";
 
   const depth = Math.max(0, Number(node?.level ?? 1) - 1);
 
@@ -167,34 +166,27 @@ function AnimatedBackground() {
           background: `radial-gradient(circle at 30% 30%, ${MIRADIA.yellow}44, transparent 60%)`,
         }}
       />
-      
+
       {/* NOUVEAUX BLOBS POUR MODE DARK */}
       <div className="hidden dark:block">
-        {/* Blob violet profond */}
         <div
           className="absolute top-1/4 -left-12 h-[400px] w-[400px] rounded-full blur-3xl opacity-10 animate-[float4_20s_ease-in-out_infinite]"
           style={{
             background: `radial-gradient(circle at 40% 40%, #7C3AED33, transparent 65%)`,
           }}
         />
-        
-        {/* Blob indigo */}
         <div
           className="absolute bottom-1/4 -right-12 h-[450px] w-[450px] rounded-full blur-3xl opacity-08 animate-[float5_22s_ease-in-out_infinite]"
           style={{
             background: `radial-gradient(circle at 60% 60%, #4F46E533, transparent 70%)`,
           }}
         />
-        
-        {/* Blob cyan profond */}
         <div
           className="absolute top-3/4 left-1/4 h-[380px] w-[380px] rounded-full blur-3xl opacity-12 animate-[float6_18s_ease-in-out_infinite]"
           style={{
             background: `radial-gradient(circle at 20% 80%, #0EA5E933, transparent 60%)`,
           }}
         />
-        
-        {/* Blob rose très subtil */}
         <div
           className="absolute top-1/2 left-3/4 h-[300px] w-[300px] rounded-full blur-3xl opacity-06 animate-[float7_24s_ease-in-out_infinite]"
           style={{
@@ -207,7 +199,6 @@ function AnimatedBackground() {
         @keyframes float1 { 0%,100%{ transform: translate(0,0) } 50%{ transform: translate(18px,14px) } }
         @keyframes float2 { 0%,100%{ transform: translate(0,0) } 50%{ transform: translate(-14px,18px) } }
         @keyframes float3 { 0%,100%{ transform: translate(0,0) } 50%{ transform: translate(10px,-16px) } }
-        /* Nouvelles animations pour les blobs dark */
         @keyframes float4 { 0%,100%{ transform: translate(0,0) } 50%{ transform: translate(25px,-8px) } }
         @keyframes float5 { 0%,100%{ transform: translate(0,0) } 50%{ transform: translate(-20px,12px) } }
         @keyframes float6 { 0%,100%{ transform: translate(0,0) } 50%{ transform: translate(12px,22px) } }
@@ -291,7 +282,7 @@ function Avatar({ person, ringColor, reveal }) {
     <div
       className={cx(
         "absolute -top-7 left-1/2 -translate-x-1/2",
-        "transition-all duration-300",
+        "transition-all duration-[720ms] ease-[cubic-bezier(.2,.8,.2,1)]",
         reveal ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1"
       )}
     >
@@ -311,7 +302,7 @@ function Avatar({ person, ringColor, reveal }) {
             onLoad={() => setLoaded(true)}
             className={cx(
               "h-full w-full object-cover",
-              "transition-transform duration-300",
+              "transition-[transform,opacity] duration-[700ms] ease-[cubic-bezier(.2,.8,.2,1)]",
               "group-hover:scale-[1.06] group-hover:rotate-[0.8deg]",
               loaded ? "opacity-100" : "opacity-0"
             )}
@@ -320,30 +311,32 @@ function Avatar({ person, ringColor, reveal }) {
         </div>
       )}
 
-      <div
-        className="pointer-events-none absolute inset-0 rounded-2xl"
-        style={{ boxShadow: `0 0 0 4px ${ringColor}` }}
-      />
-      <div
-        className="pointer-events-none absolute inset-0 rounded-2xl"
-        style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.18)" }}
-      />
+      <div className="pointer-events-none absolute inset-0 rounded-2xl" style={{ boxShadow: `0 0 0 4px ${ringColor}` }} />
+      <div className="pointer-events-none absolute inset-0 rounded-2xl" style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.18)" }} />
     </div>
   );
 }
 
 /* =========================
    CARD (reveal on visible)
+   ✅ NEW: hover parent => show links
 ========================= */
-function PersonCard({ person, onOpen, reveal = false }) {
+function PersonCard({ person, onOpen, reveal = false, onHover }) {
   const accentColor = getAccentColor(person.accent);
   const isTop = person.depth === 0;
   const ringColor = isTop ? MIRADIA.sky : accentColor;
+
+  const handleEnter = () => onHover?.(person.id);
+  const handleLeave = () => onHover?.(null);
 
   return (
     <button
       type="button"
       onClick={() => onOpen(person)}
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+      onFocus={handleEnter}
+      onBlur={handleLeave}
       className={cx(
         "group relative",
         "w-[260px]",
@@ -352,10 +345,8 @@ function PersonCard({ person, onOpen, reveal = false }) {
         "backdrop-blur-xl",
         "ring-1 ring-black/5 dark:ring-white/10",
         isTop ? "" : "bg-white/80 dark:bg-white/5",
-        "transition-[transform,opacity,filter] duration-300 will-change-transform",
-        reveal
-          ? "opacity-100 translate-y-0 scale-100 blur-0"
-          : "opacity-0 translate-y-2 scale-[0.985] blur-[1px]",
+       "transition-[transform,opacity,filter] duration-[720ms] ease-[cubic-bezier(.2,.8,.2,1)] will-change-transform",
+        reveal ? "opacity-100 translate-y-0 scale-100 blur-0" : "opacity-0 translate-y-2 scale-[0.985] blur-[1px]",
         "hover:-translate-y-2 hover:scale-[1.015] hover:rotate-[0.15deg]"
       )}
       style={{
@@ -374,15 +365,17 @@ function PersonCard({ person, onOpen, reveal = false }) {
       <div
         className="pointer-events-none absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
         style={{
-          background: `radial-gradient(circle at 45% 18%, ${hexToRgba(
-            accentColor,
-            0.16
-          )}, transparent 62%)`,
+          background: `radial-gradient(circle at 45% 18%, ${hexToRgba(accentColor, 0.16)}, transparent 62%)`,
         }}
       />
 
       <div className={cx("transition-opacity duration-300", reveal ? "opacity-100" : "opacity-0")}>
-        <div className={cx("text-[13px] font-semibold leading-tight break-words", isTop ? "text-white" : "text-slate-900 dark:text-slate-50")}>
+        <div
+          className={cx(
+            "text-[13px] font-semibold leading-tight break-words",
+            isTop ? "text-white" : "text-slate-900 dark:text-slate-50"
+          )}
+        >
           {person.name} <span className="font-extrabold">{person.surname}</span>
         </div>
 
@@ -390,7 +383,12 @@ function PersonCard({ person, onOpen, reveal = false }) {
           {person.dept || "—"}
         </div>
 
-        <div className={cx("mt-1 text-[13px] font-extrabold leading-snug break-words", isTop ? "text-white" : "text-[#124B7C] dark:text-[#3AA6DC]")}>
+        <div
+          className={cx(
+            "mt-1 text-[13px] font-extrabold leading-snug break-words",
+            isTop ? "text-white" : "text-[#124B7C] dark:text-[#3AA6DC]"
+          )}
+        >
           {person.role || "—"}
         </div>
 
@@ -400,7 +398,9 @@ function PersonCard({ person, onOpen, reveal = false }) {
               className={cx(
                 "inline-flex items-center justify-center rounded-full px-3 py-1 text-[11px] font-semibold",
                 "transition-transform duration-300 group-hover:scale-[1.02]",
-                isTop ? "bg-white/15 text-white ring-1 ring-white/25" : "text-[#071223] dark:text-slate-50 ring-1 ring-black/5 dark:ring-white/10"
+                isTop
+                  ? "bg-white/15 text-white ring-1 ring-white/25"
+                  : "text-[#071223] dark:text-slate-50 ring-1 ring-black/5 dark:ring-white/10"
               )}
               style={isTop ? undefined : { backgroundColor: hexToRgba(accentColor, 0.18) }}
             >
@@ -502,9 +502,7 @@ function Modal({ open, person, onClose }) {
               </div>
 
               <div className="min-w-0">
-                <div className="text-[18px] font-extrabold text-slate-900 dark:text-slate-50 truncate">
-                  {full}
-                </div>
+                <div className="text-[18px] font-extrabold text-slate-900 dark:text-slate-50 truncate">{full}</div>
                 <div className="mt-0.5 text-sm text-slate-700/90 dark:text-slate-200/80 truncate">
                   {role}
                   {dept ? ` • ${dept}` : ""}
@@ -539,9 +537,7 @@ function Modal({ open, person, onClose }) {
 
           <div className="px-6 pb-6 grid gap-4">
             <div className="rounded-2xl p-4 bg-black/3 dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10 hover:bg-black/5 dark:hover:bg-white/7 transition-colors">
-              <div className="text-[11px] font-black tracking-wide text-[#124B7C] dark:text-slate-200">
-                📧 CONTACT
-              </div>
+              <div className="text-[11px] font-black tracking-wide text-[#124B7C] dark:text-slate-200">📧 CONTACT</div>
 
               <div className="mt-3 grid gap-2 text-sm">
                 <div className="flex items-center justify-between gap-3">
@@ -558,7 +554,10 @@ function Modal({ open, person, onClose }) {
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-slate-600 dark:text-slate-300">Téléphone</span>
                   {tel ? (
-                    <a className="font-semibold hover:underline text-[#025C86] dark:text-[#3AA6DC]" href={`tel:${tel.replace(/\s+/g, "")}`}>
+                    <a
+                      className="font-semibold hover:underline text-[#025C86] dark:text-[#3AA6DC]"
+                      href={`tel:${tel.replace(/\s+/g, "")}`}
+                    >
                       {tel}
                     </a>
                   ) : (
@@ -569,17 +568,13 @@ function Modal({ open, person, onClose }) {
             </div>
 
             <div className="rounded-2xl p-4 bg-black/3 dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10 hover:bg-black/5 dark:hover:bg-white/7 transition-colors">
-              <div className="text-[11px] font-black tracking-wide text-[#124B7C] dark:text-slate-200">
-                📝 BIOGRAPHIE
-              </div>
+              <div className="text-[11px] font-black tracking-wide text-[#124B7C] dark:text-slate-200">📝 BIOGRAPHIE</div>
 
               <div className="mt-3 max-h-[60vh] overflow-auto pr-2 modal-scroll">
                 {safeBio ? (
                   <div className="rich-bio text-slate-800 dark:text-slate-100" dangerouslySetInnerHTML={{ __html: safeBio }} />
                 ) : (
-                  <div className="text-sm text-slate-600 dark:text-slate-300">
-                    Aucune biographie disponible.
-                  </div>
+                  <div className="text-sm text-slate-600 dark:text-slate-300">Aucune biographie disponible.</div>
                 )}
               </div>
             </div>
@@ -626,7 +621,7 @@ function TitleBlock() {
             style={{ background: `linear-gradient(90deg, ${MIRADIA.green}, ${MIRADIA.yellow})` }}
           />
           <p className="text-white/85 max-w-2xl mx-auto">
-            Cliquez sur une carte pour afficher les détails (contact + biographie).
+            Survolez une carte (parent) pour afficher ses liens • Cliquez pour voir les détails.
           </p>
 
           <div className="mt-7 bg-white/10 p-4 rounded-2xl backdrop-blur-lg max-w-3xl mx-auto">
@@ -649,6 +644,9 @@ export default function OrganigrammeMIRADIAPro() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [error, setError] = useState("");
+
+  // ✅ NEW: quel parent est survolé (affiche ses liens)
+  const [hoveredParentId, setHoveredParentId] = useState(null);
 
   const scrollRef = useRef(null);
 
@@ -709,7 +707,10 @@ export default function OrganigrammeMIRADIAPro() {
       };
     });
 
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
     for (const it of items) {
       if (it.x < minX) minX = it.x;
       if (it.y < minY) minY = it.y;
@@ -736,7 +737,12 @@ export default function OrganigrammeMIRADIAPro() {
       if (!child.parentId) continue;
       const parent = posById.get(child.parentId);
       if (!parent) continue;
-      links.push({ from: parent, to: child });
+      links.push({
+        from: parent,
+        to: child,
+        fromId: parent.id,
+        toId: child.id,
+      });
     }
 
     return { items: norm, links, width, height };
@@ -795,18 +801,19 @@ export default function OrganigrammeMIRADIAPro() {
           )}
 
           {!loading && !error && layout && (
-            <div className="mt-10  flex-col items-center justify-center rounded-3xl bg-white/60  dark:bg-[#0B1626]/55 backdrop-blur-xl ring-1 ring-black/5 dark:ring-white/10 p-3 sm:p-4">
-              {/* ✅ CONTENEUR SCROLL SANS PADDING INTÉRIEUR */}
+            <div className="mt-10 flex-col items-center justify-center rounded-3xl bg-white/60 dark:bg-[#0B1626]/55 backdrop-blur-xl ring-1 ring-black/5 dark:ring-white/10 p-3 sm:p-4">
+              {/* ✅ CONTENEUR SCROLL */}
               <div
                 ref={scrollRef}
-                className="org-scroll pt-24 pl-24  overflow-auto rounded-2xl flex items-center justify-center "
+                className="org-scroll pt-24 pl-24 overflow-auto rounded-2xl flex items-center justify-center"
                 style={{ height: panelHeightPx }}
+                onMouseLeave={() => setHoveredParentId(null)} // ✅ si tu sors du canvas, on cache les liens
               >
-                {/* ✅ CONTENU DIRECT SANS DIV DE PADDING SUPPLÉMENTAIRE */}
-                <div
-                  className="relative   flex items-center justify-center"
-                  style={{ width: layout.width, height: layout.height }}
-                >
+                <div className="relative flex items-center justify-center" style={{ width: layout.width, height: layout.height }}>
+                  {/* =========================
+                      LINKS: visibles UNIQUEMENT sur hover du parent
+                      Animation épurée: stroke-dashoffset + opacity + soft glow
+                  ========================= */}
                   <svg
                     className="absolute inset-0"
                     width={layout.width}
@@ -816,9 +823,18 @@ export default function OrganigrammeMIRADIAPro() {
                     <defs>
                       <linearGradient id="miradiaLink" x1="0" y1="0" x2="1" y2="0">
                         <stop offset="0%" stopColor={MIRADIA.green} stopOpacity="0.55" />
-                        <stop offset="50%" stopColor={MIRADIA.sky} stopOpacity="0.70" />
+                        <stop offset="50%" stopColor={MIRADIA.sky} stopOpacity="0.78" />
                         <stop offset="100%" stopColor={MIRADIA.yellow} stopOpacity="0.55" />
                       </linearGradient>
+
+                      {/* glow subtil */}
+                      <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+                        <feGaussianBlur stdDeviation="2.2" result="blur" />
+                        <feMerge>
+                          <feMergeNode in="blur" />
+                          <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                      </filter>
                     </defs>
 
                     {layout.links.map((l, idx) => {
@@ -830,7 +846,11 @@ export default function OrganigrammeMIRADIAPro() {
                       const dy = Math.max(52, Math.abs(y2 - y1) * 0.45);
                       const d = `M ${x1} ${y1} C ${x1} ${y1 + dy}, ${x2} ${y2 - dy}, ${x2} ${y2}`;
 
-                      const active = visibleIds.has(l.to.id);
+                      // ✅ Visible seulement si on hover le parent (l.fromId)
+                      const isActive = hoveredParentId && hoveredParentId === l.fromId;
+
+                      // (optionnel) n’afficher que si parent & child sont dans la zone visible
+                      // const isActive = hoveredParentId === l.fromId && visibleIds.has(l.fromId);
 
                       return (
                         <path
@@ -838,20 +858,23 @@ export default function OrganigrammeMIRADIAPro() {
                           d={d}
                           fill="none"
                           stroke="url(#miradiaLink)"
-                          strokeWidth="2.5"
+                          strokeWidth="2.6"
                           strokeLinecap="round"
-                          opacity={active ? 0.92 : 0}
-                          pathLength="1"
-                          strokeDasharray="1"
-                          strokeDashoffset={active ? 0 : 1}
+                          className={cx("org-link", isActive && "org-link--on")}
                           style={{
-                            transition: "stroke-dashoffset 600ms ease, opacity 280ms ease",
+                            opacity: isActive ? 0.95 : 0,
+                            strokeDasharray: 1,
+                            strokeDashoffset: isActive ? 0 : 1,
+                            filter: isActive ? "url(#softGlow)" : "none",
                           }}
                         />
                       );
                     })}
                   </svg>
 
+                  {/* =========================
+                      NODES
+                  ========================= */}
                   {layout.items.map((it) => {
                     const reveal = visibleIds.has(it.id);
 
@@ -860,24 +883,51 @@ export default function OrganigrammeMIRADIAPro() {
                         key={it.id}
                         data-oid={it.id}
                         ref={setObservedRef(it.id)}
-                        className="absolute "
+                        className="absolute"
                         style={{
                           left: it.cx,
                           top: it.cy,
                           transform: "translate(-50%, -50%)",
                         }}
                       >
-                        <PersonCard person={it.person} onOpen={setSelected} reveal={reveal} />
+                        <PersonCard
+                          person={it.person}
+                          onOpen={(p) => {
+                            // (UX) on cache les liens quand on ouvre le modal
+                            setHoveredParentId(null);
+                            setSelected(p);
+                          }}
+                          reveal={reveal}
+                          onHover={setHoveredParentId}
+                        />
                       </div>
                     );
                   })}
+
+                  <style>{`
+                    /* Animation épurée */
+                    .org-link{
+                      transition:
+                        stroke-dashoffset 520ms cubic-bezier(.2,.8,.2,1),
+                        opacity 180ms ease;
+                      will-change: stroke-dashoffset, opacity;
+                    }
+                    /* petit délai pour un look premium */
+                    .org-link--on{
+                      transition:
+                        stroke-dashoffset 560ms cubic-bezier(.2,.8,.2,1),
+                        opacity 160ms ease;
+                    }
+                    @media (prefers-reduced-motion: reduce){
+                      .org-link, .org-link--on { transition: none !important; }
+                    }
+                  `}</style>
                 </div>
               </div>
 
               <div className="mt-3 flex flex-wrap hidden items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-300">
                 <div>
-                  Astuce : ajuste <span className="font-semibold">pos_x / pos_y</span> dans la DB
-                  pour déplacer les cartes.
+                  Astuce : ajuste <span className="font-semibold">pos_x / pos_y</span> dans la DB pour déplacer les cartes.
                 </div>
                 <div className="font-semibold">
                   Membres : {stats.members} • Relations : {stats.links}
