@@ -959,6 +959,7 @@ export default function OrganigrammeMIRADIAPro() {
                     animation: none !important;
                   }
                 }
+                  
               `}</style>
             </div>
           )}

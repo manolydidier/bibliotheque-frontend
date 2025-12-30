@@ -1,15 +1,5 @@
-// ✅ src/components/cms/CmsSectionRenderer.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
-
-/**
- * CmsSectionRenderer (GENERIC)
- * - iframe srcDoc
- * - allowJs=false => strip scripts + on* handlers
- * - autoHeight via postMessage (calc corrigé)
- * - syncParentTheme (Tailwind dark:) optionnel
- * - cssFallbackFromJs optionnel (extraction BG_BY_SECTION)
- * - patchCss optionnel (au lieu de hardcoder "Miradia")
- */
+// ✅ src/components/cms/CmsSectionRenderer.jsx (INTÉGRAL) — garde cette version si tu veux heightStrategy="lastElement"
+import React, { useMemo, useRef, useEffect, useState } from "react";
 
 const DEFAULT_CANVAS_CSS =
   typeof process !== "undefined" && process.env?.NODE_ENV === "production"
@@ -17,7 +7,7 @@ const DEFAULT_CANVAS_CSS =
     : "/src/index.css";
 
 /* -------------------------
-   Sanitizers (simple & utile)
+   Sanitizers
 ------------------------- */
 function stripHtmlShell(input = "") {
   const s = String(input || "");
@@ -29,15 +19,12 @@ function stripHtmlShell(input = "") {
     .replace(/<body[\s\S]*?>/gi, "")
     .replace(/<\/body>/gi, "");
 }
-
 function stripScripts(input = "") {
   return String(input || "").replace(/<script\b[\s\S]*?>[\s\S]*?<\/script>/gi, "");
 }
-
 function stripOnHandlers(input = "") {
   return String(input || "").replace(/\son\w+\s*=\s*(".*?"|'.*?'|[^\s>]+)/gi, "");
 }
-
 function sanitizeHtmlForNoJs(html = "") {
   let out = stripHtmlShell(html);
   out = stripScripts(out);
@@ -47,7 +34,6 @@ function sanitizeHtmlForNoJs(html = "") {
 
 /* -------------------------
    Extract BG map from JS (optional fallback)
-   target: const BG_BY_SECTION = { vision:"...", mission:"...", valeurs:"..." };
 ------------------------- */
 function extractBgBySection(js = "") {
   const s = String(js || "");
@@ -56,8 +42,8 @@ function extractBgBySection(js = "") {
 
   const inside = blockMatch[1] || "";
   const out = {};
-
   const re = /["']?([a-zA-Z0-9_-]+)["']?\s*:\s*["']([^"']+)["']/g;
+
   let m;
   while ((m = re.exec(inside))) {
     const key = m[1];
@@ -69,7 +55,6 @@ function extractBgBySection(js = "") {
 
 function buildBgFallbackCss(bgMap, template) {
   if (!bgMap || !template) return "";
-  // template: (pick)=> string CSS ; pick(key) => url(...)
   const pick = (k) => (bgMap[k] ? `url(${bgMap[k]})` : "none");
   return template(pick) || "";
 }
@@ -79,35 +64,45 @@ export default function CmsSectionRenderer({
   css = "",
   js = "",
   mode = "iframe",
+
   className = "",
   style = undefined,
 
-  minHeight = 120,
-  autoHeight = true,
-  heightRendered, // (optional) fixed height if autoHeight=false
-heightRenderer,
   allowJs = false,
-
   sandbox,
+
   headHtml = "",
   canvasCssUrls = [DEFAULT_CANVAS_CSS],
   baseHref = `${typeof window !== "undefined" ? window.location.origin : ""}/`,
   previewBackground = "transparent",
 
-  // ✅ optional helpers
+  // ✅ Auto-height mode
+  autoHeight = false,
+  minHeight = 80,
+  extraBottom = 0,
+
+  // ✅ helpers
   syncParentTheme = true,
-  extraBottom = 8,
-
-  // ✅ optional: neutralise min-h-screen & h-screen from CMS
   neutralizeFullHeightUtilities = true,
-
-  // ✅ optional: append additional CSS from parent
   extraCss = "",
 
-  // ✅ optional: build fallback css from BG_BY_SECTION in js (useful when allowJs=false)
+  // ✅ Height strategy
+  heightStrategy = "lastElement", // "lastElement" | "scroll"
+
+  // ✅ optional: build fallback css from BG_BY_SECTION in js
   cssFallbackFromJs = false,
   bgFallbackCssTemplate = null,
 }) {
+  const iframeRef = useRef(null);
+
+  // ✅ stable unique id per instance
+  const instanceIdRef = useRef(
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `cms_${Math.random().toString(36).slice(2)}_${Date.now()}`
+  );
+  const instanceId = instanceIdRef.current;
+
   const safeHtml = useMemo(() => {
     if (allowJs) return stripHtmlShell(html);
     return sanitizeHtmlForNoJs(html);
@@ -123,18 +118,21 @@ heightRenderer,
     return buildBgFallbackCss(map, bgFallbackCssTemplate);
   }, [allowJs, cssFallbackFromJs, bgFallbackCssTemplate, js]);
 
-  const iframeRef = useRef(null);
-  const [frameH, setFrameH] = useState(minHeight);
-  const frameId = useMemo(() => `cms_iframe_${Math.random().toString(16).slice(2)}`, []);
+  const [iframeHeight, setIframeHeight] = useState(minHeight);
 
-  // scripts needed if autoHeight OR allowJs OR theme sync
-  const needsScripts = !!autoHeight || !!allowJs || !!syncParentTheme;
+  const needsScripts = Boolean(allowJs) || Boolean(syncParentTheme) || Boolean(autoHeight);
 
   const iframeSandbox = useMemo(() => {
     if (sandbox) return sandbox;
     if (needsScripts) return "allow-scripts allow-same-origin allow-forms allow-popups";
     return "allow-same-origin";
   }, [sandbox, needsScripts]);
+
+  // ✅ Reset height when content changes
+  useEffect(() => {
+    if (!autoHeight) return;
+    setIframeHeight(minHeight);
+  }, [autoHeight, minHeight, safeHtml, safeCss, safeJs, extraCss, bgFallbackCss]);
 
   const srcDoc = useMemo(() => {
     const linksCss = (Array.isArray(canvasCssUrls) ? canvasCssUrls : [])
@@ -144,92 +142,152 @@ heightRenderer,
 
     const baseTag = baseHref ? `<base href="${String(baseHref).replace(/\/?$/, "/")}" />` : "";
 
-    const bodyMinHeightCss = autoHeight ? "min-height:0 !important;" : `min-height:${minHeight}px;`;
-
     const fullHeightFixCss = neutralizeFullHeightUtilities
       ? `
         .min-h-screen{min-height:auto !important;}
         .h-screen{height:auto !important;}
+
         [style*="min-height: 100vh"],[style*="min-height:100vh"]{min-height:auto !important;}
+        [style*="height: 100vh"],[style*="height:100vh"]{height:auto !important;}
+        [style*="height:calc(100vh"],[style*="height: calc(100vh"]{height:auto !important;}
+        [style*="min-height:calc(100vh"],[style*="min-height: calc(100vh"]{min-height:auto !important;}
       `
       : "";
 
-    // ✅ AutoHeight script
-    const autoHeightScript = autoHeight
+    const themeSyncScript = syncParentTheme
       ? `
         <script>
-          (function() {
-            const ID = ${JSON.stringify(frameId)};
-            const EXTRA = ${Number(extraBottom || 0)};
-            let raf=null;
-
-            function computeHeight() {
-              const doc = document.documentElement;
-              const body = document.body;
-              const h = Math.max(
-                body ? body.scrollHeight : 0,
-                body ? body.offsetHeight : 0,
-                doc ? doc.scrollHeight : 0,
-                doc ? doc.offsetHeight : 0
-              );
-              return (h || 0) + EXTRA;
+          (function(){
+            function isParentDark(){
+              try{
+                var pd = window.parent && window.parent.document;
+                if(!pd) return null;
+                var pHtml = pd.documentElement;
+                var pBody = pd.body;
+                var dark =
+                  (pHtml && pHtml.classList && pHtml.classList.contains('dark')) ||
+                  (pBody && pBody.classList && pBody.classList.contains('dark'));
+                return !!dark;
+              }catch(e){ return null; }
             }
 
-            function sendH() {
-              if (raf) cancelAnimationFrame(raf);
-              raf = requestAnimationFrame(function(){
-                const h = computeHeight();
-                window.parent && window.parent.postMessage({ __cms_iframe: true, id: ID, h: h }, "*");
-              });
+            function applyTheme(){
+              try{
+                var dark = isParentDark();
+                if(dark === null){
+                  dark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                }
+                document.documentElement.classList.toggle('dark', dark);
+                if(document.body) document.body.classList.toggle('dark', dark);
+                document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+                if(document.body) document.body.style.colorScheme = dark ? 'dark' : 'light';
+              }catch(e){}
             }
 
-            window.addEventListener("load", function() {
-              sendH();
-              setTimeout(sendH, 120);
-              setTimeout(sendH, 420);
-              setTimeout(sendH, 900);
-            });
+            window.addEventListener('load', applyTheme);
 
-            window.addEventListener("resize", sendH);
-
-            const mo = new MutationObserver(sendH);
-            mo.observe(document.documentElement, {
-              childList: true,
-              subtree: true,
-              attributes: true,
-              characterData: true
-            });
-
-            setInterval(sendH, 1200);
+            try{
+              var pd = window.parent && window.parent.document;
+              if(pd){
+                var pHtml = pd.documentElement;
+                var pBody = pd.body;
+                applyTheme();
+                if(pHtml){
+                  new MutationObserver(applyTheme).observe(pHtml, { attributes:true, attributeFilter:['class'] });
+                }
+                if(pBody){
+                  new MutationObserver(applyTheme).observe(pBody, { attributes:true, attributeFilter:['class'] });
+                }
+              }
+            }catch(e){}
           })();
         </script>
       `
       : "";
 
-    // ✅ Theme sync: parent html.dark => iframe html.dark
-    const themeSyncScript = syncParentTheme
+    const autoHeightScript = autoHeight
       ? `
         <script>
           (function(){
-            function applyThemeFromParent(){
+            var ID = ${JSON.stringify(instanceId)};
+            var STRATEGY = ${JSON.stringify(heightStrategy)};
+
+            function measureScroll(){
               try{
-                var p = window.parent && window.parent.document && window.parent.document.documentElement;
-                if(!p) return;
-                var dark = p.classList.contains('dark');
-                document.documentElement.classList.toggle('dark', dark);
-                document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+                var body = document.body;
+                var html = document.documentElement;
+                var h = Math.max(
+                  body ? body.scrollHeight : 0,
+                  body ? body.offsetHeight : 0,
+                  html ? html.scrollHeight : 0,
+                  html ? html.offsetHeight : 0
+                );
+                return Math.max(0, Math.ceil(h || 0));
+              }catch(e){ return 0; }
+            }
+
+            function measureLastElement(){
+              try{
+                var body = document.body;
+                if(!body) return 0;
+
+                var els = Array.prototype.slice.call(body.querySelectorAll("*"));
+                var last = null;
+
+                for (var i = els.length - 1; i >= 0; i--) {
+                  var el = els[i];
+                  var st = window.getComputedStyle(el);
+                  if (!st) continue;
+                  if (st.display === "none" || st.visibility === "hidden") continue;
+                  last = el;
+                  break;
+                }
+
+                var target = last || body;
+                var rect = target.getBoundingClientRect();
+                var h = rect.bottom + window.scrollY;
+
+                var bs = window.getComputedStyle(body);
+                h += parseFloat(bs.paddingBottom || "0") + parseFloat(bs.marginBottom || "0");
+
+                return Math.max(0, Math.ceil(h || 0));
+              }catch(e){ return 0; }
+            }
+
+            function measure(){
+              return (STRATEGY === "scroll") ? measureScroll() : measureLastElement();
+            }
+
+            function sendHeight(){
+              try{
+                window.parent.postMessage({ type:'cms-iframe-height', id: ID, height: measure() }, '*');
               }catch(e){}
             }
-            window.addEventListener('load', applyThemeFromParent);
+
+            window.addEventListener('load', function(){
+              sendHeight();
+              requestAnimationFrame(sendHeight);
+              setTimeout(sendHeight, 120);
+              setTimeout(sendHeight, 500);
+              setTimeout(sendHeight, 900);
+            });
+
+            var t = 0;
+            var iv = setInterval(function(){
+              t += 1;
+              sendHeight();
+              if(t > 15) clearInterval(iv);
+            }, 200);
+
+            if(window.ResizeObserver){
+              var ro = new ResizeObserver(function(){ sendHeight(); });
+              ro.observe(document.documentElement);
+              if(document.body) ro.observe(document.body);
+            }
+
             try{
-              var pHtml = window.parent && window.parent.document && window.parent.document.documentElement;
-              if(pHtml){
-                applyThemeFromParent();
-                new MutationObserver(applyThemeFromParent).observe(pHtml, {
-                  attributes:true,
-                  attributeFilter:['class']
-                });
-              }
+              var mo = new MutationObserver(function(){ sendHeight(); });
+              mo.observe(document.documentElement, { childList:true, subtree:true, attributes:true });
             }catch(e){}
           })();
         </script>
@@ -248,79 +306,69 @@ heightRenderer,
   ${linksCss}
   <style>
     html,body{margin:0;padding:0;height:auto;}
-    html{
-      background:${previewBackground};
-      color-scheme: light;
-    }
+    html{ background:${previewBackground}; color-scheme: light; }
     html.dark{ color-scheme: dark; }
 
-    body{
-      background:transparent !important;
-      ${bodyMinHeightCss}
-    }
+    body{ background:transparent !important; min-height:0 !important; }
     img{max-width:100%;height:auto}
+    body > *:last-child{ margin-bottom: 0 !important; padding-bottom: 0 !important; }
 
     ${fullHeightFixCss}
 
-    /* ✅ CSS from DB */
     ${safeCss || ""}
-
-    /* ✅ extraCss from parent (page-specific tweaks) */
     ${String(extraCss || "")}
-
-    /* ✅ optional BG fallback from JS */
     ${bgFallbackCss || ""}
   </style>
 </head>
 <body>
   ${safeHtml || ""}
-  ${autoHeightScript}
   ${themeSyncScript}
+  ${autoHeightScript}
   ${cmsJs}
 </body>
 </html>`;
   }, [
+    instanceId,
     safeHtml,
     safeCss,
     safeJs,
     allowJs,
-    autoHeight,
-    frameId,
-    minHeight,
     canvasCssUrls,
     baseHref,
     previewBackground,
     headHtml,
     syncParentTheme,
-    extraBottom,
+    autoHeight,
     neutralizeFullHeightUtilities,
     extraCss,
     bgFallbackCss,
+    heightStrategy,
   ]);
 
   useEffect(() => {
-    if (mode !== "iframe") return;
+    if (!autoHeight) return;
 
-    const onMsg = (e) => {
-      const d = e?.data;
-      if (!d || !d.__cms_iframe) return;
-      if (d.id !== frameId) return;
+    const handleMessage = (event) => {
+      if (event.data?.type !== "cms-iframe-height") return;
+      if (event.data?.id !== instanceId) return;
 
-      const h = Number(d.h || 0);
-      if (!Number.isFinite(h)) return;
+      const height = Number(event.data?.height);
+      if (!Number.isFinite(height)) return;
 
-      setFrameH(Math.max(minHeight, Math.min(h, 12000)));
+      setIframeHeight(Math.max(height + extraBottom, minHeight));
     };
 
-    window.addEventListener("message", onMsg);
-    return () => window.removeEventListener("message", onMsg);
-  }, [mode, frameId, minHeight]);
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [autoHeight, minHeight, extraBottom, instanceId]);
 
   if (mode === "inline") {
     return (
       <div className={className} style={style}>
         {Array.isArray(canvasCssUrls) &&
-          canvasCssUrls.filter(Boolean).map((href) => <link key={href} rel="stylesheet" href={href} />)}
+          canvasCssUrls.filter(Boolean).map((href) => (
+            <link key={href} rel="stylesheet" href={href} />
+          ))}
         {safeCss ? <style>{safeCss}</style> : null}
         {extraCss ? <style>{extraCss}</style> : null}
         {!allowJs && bgFallbackCss ? <style>{bgFallbackCss}</style> : null}
@@ -329,17 +377,20 @@ heightRenderer,
     );
   }
 
-  const iframeHeight = autoHeight ? `${frameH}px` : heightRendered || `${minHeight}px`;
-
   return (
     <div className={className} style={style}>
       <iframe
         ref={iframeRef}
         title="cms-section"
-        className="w-full rounded-2xl border-slate-200 bg-white dark:bg-slate-950"
-        style={{ height: heightRenderer }}
         sandbox={iframeSandbox}
         srcDoc={srcDoc}
+        className="w-full rounded-2xl border border-slate-200 bg-white dark:bg-slate-950"
+        style={{
+          width: "100%",
+          height: autoHeight ? `${iframeHeight}px` : "100%",
+          display: "block",
+          border: "none",
+        }}
       />
     </div>
   );

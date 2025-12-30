@@ -5,14 +5,17 @@ import { useTranslation } from 'react-i18next';
 // ⚠️ Vérifie bien le chemin : "components" avec un S
 
 import Slide from './Slider';
-import NavBarMiradia from '../../component/navbar/NavbarMiradia';
+
 import Footer from './Footer';
-import ContactPage from '../UserManagementDashboard/Components/Accueil/Contact';
+
 
 
 import OrganigrammeMIRADIA from './organigramme/OrganigrammeMIRADIA';
 import PartnersStrip from './partenairemiradia/PartnersStrip';
 import Objectif from './objectifmiradia/Objectif';
+import DomainesIntervention from './domaineIntevention/DomainesIntervention';
+import ContactPage from './contact/Contact';
+import NavBarMiradia from '../../component/navbar/NavBarMiradia';
 
 const HomeMiradia = () => {
   const { t } = useTranslation();
@@ -214,6 +217,7 @@ const HomeMiradia = () => {
        <PartnersStrip/>
        <OrganigrammeMIRADIA/>
       <ContactPage/>
+      <DomainesIntervention/>
       <Footer/>
     </div>
   );

@@ -23,12 +23,106 @@ import {
   FiMenu,
   FiChevronsLeft,
   FiChevronsRight,
+  FiLock,
+  FiUnlock,
 } from "react-icons/fi";
 
 const TAILWIND_CANVAS_CSS =
   typeof process !== "undefined" && process.env?.NODE_ENV === "production"
     ? "/assets/index.css"
     : "/src/index.css";
+
+/* =====================
+   ✅ IMPORT HTML -> split HTML/CSS/JS
+   - <style>... => CSS
+   - <script> inline => JS
+   - supprime <link rel="stylesheet" href="/style.css"> (MIME text/html)
+===================== */
+function splitImportedHtml(rawHtml = "") {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(String(rawHtml), "text/html");
+
+  // CSS: collect <style>
+  const styleTags = Array.from(doc.querySelectorAll("style"));
+  const css = styleTags.map((s) => s.textContent || "").join("\n\n").trim();
+  styleTags.forEach((s) => s.remove());
+
+  // JS: collect inline <script> (no src)
+  const scriptTags = Array.from(doc.querySelectorAll("script"));
+  const inlineScripts = scriptTags
+    .filter((s) => !s.getAttribute("src"))
+    .map((s) => s.textContent || "")
+    .join("\n\n")
+    .trim();
+  // Remove all scripts from imported HTML (inline + src)
+  scriptTags.forEach((s) => s.remove());
+
+  // Remove any stylesheet links (avoids /style.css -> text/html MIME error)
+  const linkCss = Array.from(doc.querySelectorAll('link[rel="stylesheet"]'));
+  linkCss.forEach((l) => l.remove());
+
+  // Keep body content only
+  const html = (doc.body ? doc.body.innerHTML : doc.documentElement?.outerHTML || "").trim();
+
+  return { html, css, js: inlineScripts };
+}
+
+/* =====================
+   AJOUTS — Palette / Resize / Presets
+===================== */
+const COLOR_PALETTE = [
+  "#11528f", // Miradia
+  "#00a0d6",
+  "#0f172a",
+  "#334155",
+  "#64748b",
+  "#94a3b8",
+  "#e2e8f0",
+  "#ffffff",
+  "#22c55e",
+  "#f59e0b",
+  "#ef4444",
+  "#000000",
+];
+
+const RESIZER = {
+  tl: 0,
+  tc: 1,
+  tr: 0,
+  cl: 1,
+  cr: 1,
+  bl: 0,
+  bc: 1,
+  br: 0,
+  keyWidth: "width",
+  keyHeight: "height",
+};
+
+const PRESET_CARD = `<div class="mrd-card"><h3>Titre</h3><p>Texte…</p></div>`;
+const PRESET_BTN_PRIMARY = `<a class="mrd-btn mrd-primary" href="#">Bouton</a>`;
+const PRESET_BTN_GHOST = `<a class="mrd-btn mrd-ghost" href="#">Bouton</a>`;
+const PRESET_SECTION = `
+<section class="mrd-section">
+  <div class="mrd-wrap">
+    <h2>Titre de section</h2>
+    <p>Ton texte ici…</p>
+  </div>
+</section>
+`;
+const PRESET_GRID_2 = `
+<div class="mrd-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+  ${PRESET_CARD}
+  ${PRESET_CARD}
+</div>
+`;
+const PRESET_GRID_4 = `
+<div class="mrd-grid" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+  ${PRESET_CARD}
+  ${PRESET_CARD}
+  ${PRESET_CARD}
+  ${PRESET_CARD}
+</div>
+`;
 
 // =====================
 // STARTER (exemple)
@@ -96,8 +190,25 @@ const STARTER_CSS = `
 }
 `;
 
+/* =====================
+   UTILITAIRES (AJOUT)
+===================== */
 function cx(...a) {
   return a.filter(Boolean).join(" ");
+}
+const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+
+/** ✅ HEX -> rgba(...) avec alpha (0..1) */
+function hexToRgba(hex, alpha = 1) {
+  const h = String(hex || "").replace("#", "").trim();
+  if (h.length !== 3 && h.length !== 6) return hex;
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  const a = clamp(alpha, 0, 1);
+  if ([r, g, b].some((v) => Number.isNaN(v))) return hex;
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
 const BTN =
@@ -109,6 +220,71 @@ const TAB =
 const TAB_ON = "bg-white border-slate-200 text-slate-900 shadow-sm";
 const TAB_OFF = "bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200/60";
 
+/* =====================
+   ✅ Illustration (AJOUT)
+   - côté gauche (Blocs)
+===================== */
+const LeftBlocksIllustration = ({ compact }) => {
+  if (compact) return null;
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50 p-3 mb-3 overflow-hidden relative">
+      <div className="absolute -right-8 -top-10 w-40 h-40 rounded-full bg-sky-100 blur-2xl opacity-70" />
+      <div className="absolute -left-10 -bottom-10 w-40 h-40 rounded-full bg-emerald-100 blur-2xl opacity-60" />
+
+      <div className="flex items-start gap-3 relative z-[1]">
+        <div className="shrink-0 w-12 h-12 rounded-2xl border border-slate-200 bg-white shadow-sm flex items-center justify-center">
+          {/* SVG "blocks" */}
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M4 7.5C4 6.119 5.119 5 6.5 5h4C11.881 5 13 6.119 13 7.5v3C13 11.881 11.881 13 10.5 13h-4C5.119 13 4 11.881 4 10.5v-3Z"
+              stroke="#0ea5e9"
+              strokeWidth="1.6"
+            />
+            <path
+              d="M11 15.5c0-1.381 1.119-2.5 2.5-2.5h4c1.381 0 2.5 1.119 2.5 2.5v3c0 1.381-1.119 2.5-2.5 2.5h-4c-1.381 0-2.5-1.119-2.5-2.5v-3Z"
+              stroke="#22c55e"
+              strokeWidth="1.6"
+            />
+            <path
+              d="M13.5 6h4C18.881 6 20 7.119 20 8.5v1.5"
+              stroke="#11528f"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+            />
+            <path
+              d="M4 18.5V17c0-1.657 1.343-3 3-3h1.5"
+              stroke="#11528f"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+            />
+          </svg>
+        </div>
+
+        <div className="min-w-0">
+          <div className="text-[12px] font-extrabold text-slate-900">
+            Glisse un bloc pour construire la section
+          </div>
+          <div className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+            Astuce : clique un élément dans la page ➜ change ses styles à droite (couleur + transparence + taille).
+          </div>
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-sky-50 text-sky-700 border border-sky-100">
+              Blocs
+            </span>
+            <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100">
+              Sections
+            </span>
+            <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-100">
+              Cards
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function GrapesEditorModal({
   initialProject = "",
   initialHtml = "",
@@ -118,6 +294,9 @@ export default function GrapesEditorModal({
   onCancel,
 }) {
   const editorRef = useRef(null);
+
+  // ✅ input import HTML
+  const importInputRef = useRef(null);
 
   // Containers (React UI)
   const canvasRef = useRef(null);
@@ -135,7 +314,7 @@ export default function GrapesEditorModal({
   const [leftTab, setLeftTab] = useState("blocks"); // blocks | layers
   const [rightTab, setRightTab] = useState("styles"); // styles | traits | code
 
-  // ✅ NEW: left sidebar open/compact
+  // Left sidebar open/compact
   const [leftOpen, setLeftOpen] = useState(true);
   const [leftCompact, setLeftCompact] = useState(true);
 
@@ -153,13 +332,20 @@ export default function GrapesEditorModal({
   const [liveCss, setLiveCss] = useState(true);
   const [liveJs, setLiveJs] = useState(false); // par défaut OFF (sécurité)
 
-  // Selection info (builder-like)
+  // Selection info
   const [selectedInfo, setSelectedInfo] = useState({
     id: "",
     tag: "",
     name: "",
     path: [],
   });
+
+  /* ===== AJOUTS UI: palette + size sliders + lock ===== */
+  const [paletteMode, setPaletteMode] = useState("bg"); // bg | text | border
+  const [colorAlpha, setColorAlpha] = useState(100); // ✅ AJOUT: transparence 0..100
+  const [sizeWidthPct, setSizeWidthPct] = useState(100);
+  const [sizeHeightPx, setSizeHeightPx] = useState(200);
+  const [isLocked, setIsLocked] = useState(false);
 
   const safeProject = useMemo(() => {
     if (!initialProject) return null;
@@ -224,6 +410,21 @@ export default function GrapesEditorModal({
     } catch {}
   }, [syncFromEditor]);
 
+  /* ===== Presets rapides ===== */
+  const insertPreset = useCallback(
+    (presetHtml, presetCss = "") => {
+      const ed = editorRef.current;
+      if (!ed) return;
+      ed.addComponents(presetHtml);
+      if (presetCss) {
+        const currentCss = (ed.getCss() || "").trim();
+        ed.setStyle(`${currentCss}\n${presetCss}`.trim());
+      }
+      syncFromEditor();
+    },
+    [syncFromEditor]
+  );
+
   const setGjsDevice = useCallback((name) => {
     const ed = editorRef.current;
     if (!ed) return;
@@ -248,12 +449,65 @@ export default function GrapesEditorModal({
     } catch {}
   }, []);
 
+  /* ===== appliquer couleurs / sizes / lock ===== */
+  const applyColorToSelected = useCallback(
+    (mode, hexColor, alphaPct = 100) => {
+      const ed = editorRef.current;
+      const sel = ed?.getSelected?.();
+      if (!sel) return;
+
+      const alpha = clamp(Number(alphaPct) / 100, 0, 1);
+      const color = hexToRgba(hexColor, alpha);
+
+      if (mode === "bg") sel.addStyle({ "background-color": color });
+      if (mode === "text") sel.addStyle({ color });
+      if (mode === "border") sel.addStyle({ "border-color": color });
+
+      try {
+        const st = sel.getStyle ? sel.getStyle() : {};
+        const w = String(st?.width || "").trim();
+        const h = String(st?.height || "").trim();
+        const wPct = w.endsWith("%") ? parseInt(w, 10) : null;
+        const hPx = h.endsWith("px") ? parseInt(h, 10) : null;
+        if (Number.isFinite(wPct)) setSizeWidthPct(Math.max(10, Math.min(100, wPct)));
+        if (Number.isFinite(hPx)) setSizeHeightPx(Math.max(50, Math.min(900, hPx)));
+        setIsLocked(Boolean(sel.get && sel.get("locked")));
+      } catch {}
+    },
+    []
+  );
+
+  const updateSize = useCallback((prop, value) => {
+    const ed = editorRef.current;
+    const sel = ed?.getSelected?.();
+    if (!sel) return;
+    sel.addStyle({ [prop]: value });
+  }, []);
+
+  const toggleLockSelected = useCallback(() => {
+    const ed = editorRef.current;
+    const sel = ed?.getSelected?.();
+    if (!sel) return;
+
+    const next = !Boolean(sel.get && sel.get("locked"));
+    sel.set({
+      locked: next,
+      draggable: !next,
+      hoverable: !next,
+      selectable: true,
+      resizable: next ? false : RESIZER,
+    });
+
+    setIsLocked(next);
+  }, []);
+
   const updateSelectedInfo = useCallback(() => {
     const ed = editorRef.current;
     if (!ed) return;
     const sel = ed.getSelected();
     if (!sel) {
       setSelectedInfo({ id: "", tag: "", name: "", path: [] });
+      setIsLocked(false);
       return;
     }
 
@@ -269,12 +523,54 @@ export default function GrapesEditorModal({
       guard++;
     }
 
+    try {
+      const lockedNow = Boolean(sel.get && sel.get("locked"));
+      setIsLocked(lockedNow);
+
+      if (!lockedNow) {
+        sel.set({ resizable: RESIZER, draggable: true, hoverable: true, selectable: true });
+      }
+
+      const st = sel.getStyle ? sel.getStyle() : {};
+      const w = String(st?.width || "").trim();
+      const h = String(st?.height || "").trim();
+
+      const wPct = w.endsWith("%") ? parseInt(w, 10) : null;
+      const hPx = h.endsWith("px") ? parseInt(h, 10) : null;
+
+      if (Number.isFinite(wPct)) setSizeWidthPct(Math.max(10, Math.min(100, wPct)));
+      if (Number.isFinite(hPx)) setSizeHeightPx(Math.max(50, Math.min(900, hPx)));
+    } catch {}
+
     setSelectedInfo({
       id: sel.getId ? sel.getId() : "",
       tag: sel.get("tagName") || "div",
       name: sel.getName ? sel.getName() : "",
       path,
     });
+  }, []);
+
+  /* =====================
+     ✅ Import HTML file
+  ===================== */
+  const importHtmlFile = useCallback((file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const raw = String(reader.result || "");
+      const parts = splitImportedHtml(raw);
+
+      setHtmlCode(parts.html);
+      setCssCode(parts.css);
+      setJsCode(parts.js);
+
+      const ed = editorRef.current;
+      if (ed) {
+        ed.setComponents(parts.html || "");
+        ed.setStyle(parts.css || "");
+      }
+    };
+    reader.readAsText(file);
   }, []);
 
   // INIT GrapesJS (builder-like layout)
@@ -352,7 +648,13 @@ export default function GrapesEditorModal({
       traitManager: { appendTo: traitsRef.current },
 
       canvas: { styles: [TAILWIND_CANVAS_CSS], scripts: [] },
-      domComponents: { avoidInlineStyle: false },
+
+      domComponents: {
+        avoidInlineStyle: false,
+        defaults: {
+          resizable: RESIZER,
+        },
+      },
     });
 
     editorRef.current = ed;
@@ -373,10 +675,34 @@ export default function GrapesEditorModal({
       content: STARTER_HTML,
     });
 
+    ed.BlockManager.add("mrd-section", {
+      label: "Section",
+      category: "MIRADIA",
+      content: PRESET_SECTION,
+    });
+
     ed.BlockManager.add("mrd-card", {
       label: "Card simple",
       category: "MIRADIA",
-      content: `<div class="mrd-card"><h3>Titre</h3><p>Texte…</p></div>`,
+      content: PRESET_CARD,
+    });
+
+    ed.BlockManager.add("mrd-btn-primary", {
+      label: "Bouton (primary)",
+      category: "MIRADIA",
+      content: PRESET_BTN_PRIMARY,
+    });
+
+    ed.BlockManager.add("mrd-btn-ghost", {
+      label: "Bouton (ghost)",
+      category: "MIRADIA",
+      content: PRESET_BTN_GHOST,
+    });
+
+    ed.BlockManager.add("mrd-grid-2", {
+      label: "Grid 2 colonnes",
+      category: "MIRADIA",
+      content: PRESET_GRID_2,
     });
 
     ed.BlockManager.add("mrd-grid-3", {
@@ -389,6 +715,12 @@ export default function GrapesEditorModal({
           <div class="mrd-card"><h3>Col 3</h3><p>Texte…</p></div>
         </div>
       `,
+    });
+
+    ed.BlockManager.add("mrd-grid-4", {
+      label: "Grid 4 colonnes",
+      category: "MIRADIA",
+      content: PRESET_GRID_4,
     });
 
     ed.BlockManager.add("mrd-footer", {
@@ -506,7 +838,6 @@ export default function GrapesEditorModal({
       .join("  ›  ");
   }, [selectedInfo]);
 
-  // ✅ Grid columns (lg only) computed without breaking mobile layout
   const leftW = leftOpen ? (leftCompact ? 220 : 320) : 0;
 
   return (
@@ -532,7 +863,29 @@ export default function GrapesEditorModal({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* ✅ LEFT SIDEBAR toggle + compact */}
+          {/* ✅ Import HTML hidden input */}
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".html,text/html"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) importHtmlFile(f);
+              e.target.value = "";
+            }}
+          />
+
+          <button
+            type="button"
+            onClick={() => importInputRef.current?.click()}
+            className={cx(BTN, BTN_IDLE)}
+            title="Importer un fichier HTML (réparti en HTML/CSS/JS)"
+          >
+            <FiRefreshCw /> Import HTML
+          </button>
+
+          {/* LEFT SIDEBAR toggle + compact */}
           <button
             type="button"
             onClick={() => setLeftOpen((v) => !v)}
@@ -658,7 +1011,7 @@ export default function GrapesEditorModal({
         </div>
       </div>
 
-      {/* ===================== MAIN LAYOUT (WordPress-like) ===================== */}
+      {/* ===================== MAIN LAYOUT ===================== */}
       <div
         className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr]"
         style={{
@@ -700,7 +1053,8 @@ export default function GrapesEditorModal({
               </button>
             </div>
 
-            <div className={cx("mt-2 flex items-center gap-2", leftCompact && "mt-1")}>
+            {/* presets rapides */}
+            <div className={cx("mt-2 flex items-center gap-2 flex-wrap", leftCompact && "mt-1")}>
               <button
                 type="button"
                 onClick={insertExample}
@@ -717,13 +1071,44 @@ export default function GrapesEditorModal({
               >
                 <FiRefreshCw /> {!leftCompact && "Sync"}
               </button>
+
+              {!leftCompact && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => insertPreset(PRESET_SECTION)}
+                    className={cx(BTN, BTN_IDLE)}
+                    title="Ajouter une section"
+                  >
+                    + Section
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertPreset(PRESET_CARD)}
+                    className={cx(BTN, BTN_IDLE)}
+                    title="Ajouter une card"
+                  >
+                    + Card
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertPreset(PRESET_BTN_PRIMARY)}
+                    className={cx(BTN, BTN_IDLE)}
+                    title="Ajouter un bouton"
+                  >
+                    + Bouton
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
-          {/* ✅ IMPORTANT: mounts toujours dans le DOM */}
           <div className="flex-1 min-h-0 overflow-auto">
             <div className={cx(leftCompact ? "p-1.5" : "p-2")}>
               <div className={cx(leftTab === "blocks" ? "block" : "hidden")}>
+                {/* ✅ AJOUT: illustration à gauche (Blocs) */}
+                <LeftBlocksIllustration compact={leftCompact} />
+
                 {!leftCompact && (
                   <div className="text-[11px] text-slate-500 mb-2">
                     Glisse-dépose un bloc dans la page (style Divi/Elementor).
@@ -746,7 +1131,6 @@ export default function GrapesEditorModal({
 
         {/* ============ CANVAS ============ */}
         <main className="min-h-0 bg-slate-100 relative">
-          {/* ✅ Floating button when left sidebar hidden */}
           {!leftOpen && (
             <button
               type="button"
@@ -809,6 +1193,181 @@ export default function GrapesEditorModal({
                 <div className="text-[11px] text-slate-500 mb-2">
                   Styles : typo, spacing, size, layout…
                 </div>
+
+                {/* Palette / Taille / Lock */}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 mb-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[11px] font-extrabold text-slate-800">
+                      🎨 Palette & 📐 Taille
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={toggleLockSelected}
+                      className={cx(
+                        "px-2.5 py-1 rounded-lg border text-[11px] font-semibold bg-white hover:bg-slate-50 inline-flex items-center gap-1",
+                        isLocked ? "border-amber-200 text-amber-700" : "border-slate-200 text-slate-700"
+                      )}
+                      title={isLocked ? "Déverrouiller l’élément" : "Verrouiller l’élément"}
+                    >
+                      {isLocked ? <FiUnlock /> : <FiLock />}
+                      {isLocked ? "Unlock" : "Lock"}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaletteMode("bg")}
+                      className={cx(
+                        "px-2.5 py-1 rounded-lg border text-[11px] font-semibold",
+                        paletteMode === "bg"
+                          ? "bg-white border-slate-200 text-slate-900"
+                          : "bg-slate-100 border-slate-200 text-slate-600"
+                      )}
+                    >
+                      Fond
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaletteMode("text")}
+                      className={cx(
+                        "px-2.5 py-1 rounded-lg border text-[11px] font-semibold",
+                        paletteMode === "text"
+                          ? "bg-white border-slate-200 text-slate-900"
+                          : "bg-slate-100 border-slate-200 text-slate-600"
+                      )}
+                    >
+                      Texte
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaletteMode("border")}
+                      className={cx(
+                        "px-2.5 py-1 rounded-lg border text-[11px] font-semibold",
+                        paletteMode === "border"
+                          ? "bg-white border-slate-200 text-slate-900"
+                          : "bg-slate-100 border-slate-200 text-slate-600"
+                      )}
+                    >
+                      Bordure
+                    </button>
+                  </div>
+
+                  {/* ✅ AJOUT: slider de transparence */}
+                  <div className="mt-3 rounded-xl border border-slate-200 bg-white p-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[11px] font-bold text-slate-700">
+                        Transparence couleur
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-extrabold text-slate-900 w-10 text-right">
+                          {colorAlpha}%
+                        </span>
+                        <span
+                          className="w-6 h-6 rounded-lg border border-slate-200"
+                          style={{
+                            background:
+                              `linear-gradient(45deg, rgba(15,23,42,.08) 25%, transparent 25%),` +
+                              `linear-gradient(-45deg, rgba(15,23,42,.08) 25%, transparent 25%),` +
+                              `linear-gradient(45deg, transparent 75%, rgba(15,23,42,.08) 75%),` +
+                              `linear-gradient(-45deg, transparent 75%, rgba(15,23,42,.08) 75%),` +
+                              `linear-gradient(90deg, ${hexToRgba("#00a0d6", colorAlpha / 100)}, ${hexToRgba(
+                                "#11528f",
+                                colorAlpha / 100
+                              )})`,
+                            backgroundSize: "10px 10px, 10px 10px, 10px 10px, 10px 10px, 100% 100%",
+                            backgroundPosition: "0 0, 0 5px, 5px -5px, -5px 0px, 0 0",
+                          }}
+                          title="Preview alpha"
+                        />
+                      </div>
+                    </div>
+
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={colorAlpha}
+                      onChange={(e) => setColorAlpha(Number(e.target.value))}
+                      className="w-full mt-2"
+                    />
+
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      {[100, 85, 70, 50, 30, 15].map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => setColorAlpha(v)}
+                          className={cx(
+                            "px-2 py-1 rounded-lg border text-[10px] font-bold",
+                            v === colorAlpha
+                              ? "bg-sky-50 border-sky-200 text-sky-700"
+                              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                          )}
+                          title={`Mettre ${v}%`}
+                        >
+                          {v}%
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-2 text-[10px] text-slate-500">
+                      100% = opaque • 0% = transparent (rgba)
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-6 gap-2 mt-3">
+                    {COLOR_PALETTE.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => applyColorToSelected(paletteMode, c, colorAlpha)}
+                        className="w-7 h-7 rounded-lg border border-slate-200 shadow-sm"
+                        style={{ background: c }}
+                        title={`${c} • alpha ${colorAlpha}%`}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="mt-3">
+                    <div className="text-[11px] font-bold text-slate-700 mb-1">
+                      Largeur ({sizeWidthPct}%)
+                    </div>
+                    <input
+                      type="range"
+                      min="10"
+                      max="100"
+                      value={sizeWidthPct}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        setSizeWidthPct(v);
+                        updateSize("width", `${v}%`);
+                      }}
+                      className="w-full"
+                    />
+
+                    <div className="text-[11px] font-bold text-slate-700 mt-2 mb-1">
+                      Hauteur ({sizeHeightPx}px)
+                    </div>
+                    <input
+                      type="range"
+                      min="50"
+                      max="900"
+                      value={sizeHeightPx}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        setSizeHeightPx(v);
+                        updateSize("height", `${v}px`);
+                      }}
+                      className="w-full"
+                    />
+
+                    <div className="mt-2 text-[10px] text-slate-500">
+                      ✅ Redimensionnement souris : sélectionne l’élément puis tire les poignées.
+                    </div>
+                  </div>
+                </div>
+
                 <div ref={stylesRef} className="mrd-gjs styles-mount" />
               </div>
             </div>
@@ -1023,7 +1582,6 @@ export default function GrapesEditorModal({
           font-size: 12px !important;
         }
 
-        /* Canvas edges: more "builder" */
         .gjs-cv-canvas{
           background: #f1f5f9 !important;
         }

@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FaSun, FaMoon } from 'react-icons/fa';
+import { useNavigate, useLocation } from 'react-router-dom';
 import LanguageSwitcher from '../langue/LanguageSwitcher';
 import miradiaLogo from '../../assets/Paysage.png';
 
@@ -17,7 +18,8 @@ const MiradiaLogo = () => (
 );
 
 /* ========================= Helpers ========================= */
-const SECTION_IDS = ['hero', 'features', 'workflow', 'pricing', 'contact'];
+// ✅ IDs HTML SANS accent/espaces (important)
+const SECTION_IDS = ['hero', 'beneficiaires', 'workflow', 'pricing', 'contact'];
 
 const scrollToSection = (id) => {
   if (typeof window === 'undefined') return;
@@ -30,7 +32,6 @@ const scrollToSection = (id) => {
 };
 
 /* ========================= Toggle Dark / Light (Version Épurée) ========================= */
-
 const ThemeToggle = ({ isDark, onToggle }) => {
   return (
     <button
@@ -84,6 +85,8 @@ const ThemeToggle = ({ isDark, onToggle }) => {
 /* ========================= NavBarMiradia ========================= */
 const NavBarMiradia = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   // 🌗 Thème
   const [isDark, setIsDark] = useState(false);
@@ -97,7 +100,10 @@ const NavBarMiradia = () => {
   const [isCompact, setIsCompact] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
+
+  // ✅ Active section (scroll) seulement pour la home "/"
   const [activeSection, setActiveSection] = useState('hero');
+
   const [mobileOpen, setMobileOpen] = useState(false);
   const lastScrollYRef = useRef(0);
 
@@ -148,6 +154,29 @@ const NavBarMiradia = () => {
     };
   }, []);
 
+  /* ✅ Navigation intelligente:
+     - "beneficiaires" => navigate("/beneficiaires")
+     - autres sections => scroll sur "/" (ou retour "/" + scroll)
+  */
+  const go = (id) => {
+    setMobileOpen(false);
+
+    // ✅ Page dédiée
+    if (id === 'beneficiaires') {
+      navigate('/beneficiaires');
+      return;
+    }
+
+    // ✅ Si on est déjà sur la home, scroll
+    if (location.pathname === '/') {
+      scrollToSection(id);
+      return;
+    }
+
+    // ✅ Sinon, on retourne sur la home puis on demandera un scroll (via state)
+    navigate('/', { state: { scrollTo: id } });
+  };
+
   /* Scroll effects: compact + hide on scroll down + progress + active section */
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -175,15 +204,17 @@ const NavBarMiradia = () => {
       const p = max > 0 ? (y / max) * 100 : 0;
       setScrollProgress(Math.max(0, Math.min(100, p)));
 
-      // Active section
+      // ✅ Active section uniquement sur la home "/"
+      if (location.pathname !== '/') return;
+
       let current = 'hero';
-      for (const id of SECTION_IDS) {
-        const el = document.getElementById(id);
+      for (const sid of SECTION_IDS) {
+        const el = document.getElementById(sid);
         if (!el) continue;
         const rect = el.getBoundingClientRect();
         const top = rect.top;
         if (top <= window.innerHeight * 0.35) {
-          current = id;
+          current = sid;
         } else {
           break;
         }
@@ -194,7 +225,7 @@ const NavBarMiradia = () => {
     window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
     return () => window.removeEventListener('scroll', onScroll);
-  }, [isCompact, isHidden]);
+  }, [isCompact, isHidden, location.pathname]);
 
   /* Lock scroll when mobile menu open */
   useEffect(() => {
@@ -212,26 +243,20 @@ const NavBarMiradia = () => {
   const heightClass = isCompact ? 'h-14' : 'h-20';
   const translateClass = isHidden ? '-translate-y-full' : 'translate-y-0';
 
-  const handleNavClick = (id) => {
-    setMobileOpen(false);
-    scrollToSection(id);
-  };
-
-
-// 🎨 Styles selon thème (style plus Office 2024 : propre, plat, sans grosse ombre)
-const navBaseClasses = isDark
-  ? `
-    bg-gradient-to-r from-slate-950/45 via-slate-900/75 to-slate-900/35
-    text-slate-50
-    border-slate-800/80
-    shadow-none
-  `
-  : `
-    bg-gradient-to-r from-slate-50/15 via-white/25 to-slate-50/45
-    text-slate-900
-    border-slate-200/90
-    shadow-none
-  `;
+  // 🎨 Styles selon thème (style plus Office 2024 : propre, plat, sans grosse ombre)
+  const navBaseClasses = isDark
+    ? `
+      bg-gradient-to-r from-slate-950/45 via-slate-900/75 to-slate-900/35
+      text-slate-50
+      border-slate-800/80
+      shadow-none
+    `
+    : `
+      bg-gradient-to-r from-slate-50/15 via-white/25 to-slate-50/45
+      text-slate-900
+      border-slate-200/90
+      shadow-none
+    `;
 
   const linkBaseClasses = isDark
     ? 'text-blue-50/90 hover:text-white'
@@ -242,6 +267,9 @@ const navBaseClasses = isDark
     : 'bg-sky-100 text-[#0b5a82]';
 
   const progressBarColor = isDark ? 'bg-[#22c55e]' : 'bg-[#0ea5e9]';
+
+  // ✅ "actif" page beneficiaires
+  const isBeneficiairesRoute = location.pathname === '/beneficiaires';
 
   return (
     <>
@@ -271,7 +299,7 @@ const navBaseClasses = isDark
           {/* Logo */}
           <button
             type="button"
-            onClick={() => handleNavClick('hero')}
+            onClick={() => go('hero')}
             className="flex items-center flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/80 rounded-lg transition-transform duration-200 hover:scale-105"
           >
             <MiradiaLogo />
@@ -287,26 +315,29 @@ const navBaseClasses = isDark
                 <NavItem
                   label={t('nav.home', 'Accueil')}
                   sectionId="hero"
-                  active={activeSection === 'hero'}
-                  onClick={handleNavClick}
+                  active={!isBeneficiairesRoute && activeSection === 'hero'}
+                  onClick={go}
                   compact={isCompact}
                   base={linkBaseClasses}
                   activeClass={activeLinkClasses}
                 />
+
+                {/* ✅ Lien vers /beneficiaires */}
                 <NavItem
-                  label={t('nav.features', 'Fonctionnalités')}
-                  sectionId="features"
-                  active={activeSection === 'features'}
-                  onClick={handleNavClick}
+                  label={t('nav.beneficiaires', 'Bénéficiaires')}
+                  sectionId="beneficiaires"
+                  active={isBeneficiairesRoute}
+                  onClick={go}
                   compact={isCompact}
                   base={linkBaseClasses}
                   activeClass={activeLinkClasses}
                 />
+
                 <NavItem
                   label={t('nav.workflow', 'Workflow')}
                   sectionId="workflow"
-                  active={activeSection === 'workflow'}
-                  onClick={handleNavClick}
+                  active={!isBeneficiairesRoute && activeSection === 'workflow'}
+                  onClick={go}
                   compact={isCompact}
                   base={linkBaseClasses}
                   activeClass={activeLinkClasses}
@@ -314,8 +345,8 @@ const navBaseClasses = isDark
                 <NavItem
                   label={t('nav.pricing', 'Tarifs')}
                   sectionId="pricing"
-                  active={activeSection === 'pricing'}
-                  onClick={handleNavClick}
+                  active={!isBeneficiairesRoute && activeSection === 'pricing'}
+                  onClick={go}
                   compact={isCompact}
                   base={linkBaseClasses}
                   activeClass={activeLinkClasses}
@@ -323,8 +354,8 @@ const navBaseClasses = isDark
                 <NavItem
                   label={t('nav.contact', 'Contact')}
                   sectionId="contact"
-                  active={activeSection === 'contact'}
-                  onClick={handleNavClick}
+                  active={!isBeneficiairesRoute && activeSection === 'contact'}
+                  onClick={go}
                   compact={isCompact}
                   base={linkBaseClasses}
                   activeClass={activeLinkClasses}
@@ -335,9 +366,7 @@ const navBaseClasses = isDark
 
           {/* Right side */}
           <div className="flex items-center gap-2 md:gap-3 ml-auto">
-            {/* 🔹 LanguageSwitcher stylé, avec bleu, et thème */}
             <LanguageSwitcher isDark={isDark} />
-
             <ThemeToggle isDark={isDark} onToggle={toggleTheme} />
 
             {/* Burger (mobile) */}
@@ -365,21 +394,9 @@ const navBaseClasses = isDark
                   stroke="currentColor"
                 >
                   {mobileOpen ? (
-                    // Icône X
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   ) : (
-                    // Icône burger
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 6h16M4 12h16M4 18h16"
-                    />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                   )}
                 </svg>
               </button>
@@ -455,36 +472,39 @@ const navBaseClasses = isDark
               <MobileNavItem
                 label={t('nav.home', 'Accueil')}
                 sectionId="hero"
-                active={activeSection === 'hero'}
-                onClick={handleNavClick}
+                active={!isBeneficiairesRoute && activeSection === 'hero'}
+                onClick={go}
                 isDark={isDark}
               />
+
+              {/* ✅ Lien vers /beneficiaires */}
               <MobileNavItem
-                label={t('nav.features', 'Fonctionnalités')}
-                sectionId="features"
-                active={activeSection === 'features'}
-                onClick={handleNavClick}
+                label={t('nav.beneficiaires', 'Bénéficiaires')}
+                sectionId="beneficiaires"
+                active={isBeneficiairesRoute}
+                onClick={go}
                 isDark={isDark}
               />
+
               <MobileNavItem
                 label={t('nav.workflow', 'Workflow')}
                 sectionId="workflow"
-                active={activeSection === 'workflow'}
-                onClick={handleNavClick}
+                active={!isBeneficiairesRoute && activeSection === 'workflow'}
+                onClick={go}
                 isDark={isDark}
               />
               <MobileNavItem
                 label={t('nav.pricing', 'Tarifs')}
                 sectionId="pricing"
-                active={activeSection === 'pricing'}
-                onClick={handleNavClick}
+                active={!isBeneficiairesRoute && activeSection === 'pricing'}
+                onClick={go}
                 isDark={isDark}
               />
               <MobileNavItem
                 label={t('nav.contact', 'Contact')}
                 sectionId="contact"
-                active={activeSection === 'contact'}
-                onClick={handleNavClick}
+                active={!isBeneficiairesRoute && activeSection === 'contact'}
+                onClick={go}
                 isDark={isDark}
               />
             </div>

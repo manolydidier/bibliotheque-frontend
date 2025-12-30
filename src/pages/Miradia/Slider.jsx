@@ -1,71 +1,58 @@
 // src/pages/UserManagementDashboard/Components/Accueil/Slider.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import axios from "axios";
 
-/* ===============================
-   CONFIG
-================================= */
-const STORAGE_BASE =
-  import.meta.env.VITE_API_BASE_STORAGE ||
-  import.meta.env.VITE_API_BASE_URL ||
-  window.location.origin;
+/* ========================================
+   CONFIGURATION
+======================================== */
+const CONFIG = {
+  STORAGE_BASE:
+    import.meta.env.VITE_API_BASE_STORAGE ||
+    import.meta.env.VITE_API_BASE_URL ||
+    window.location.origin,
 
-const SLIDE_DURATION = 9000;
-const FADE_MS = 850;
+  SLIDE_DURATION: 9000,
+  FADE_DURATION: 850,
+  REVEAL_DELAY: 420,
+  PAUSE_ON_SCROLL: 1400,
+  SWIPE_THRESHOLD: 50,
+};
 
-/* ✅ NEW: délai avant apparition du contenu quand un slide devient actif */
-const REVEAL_DELAY_MS = 380;
-
-/* ===============================
+/* ========================================
    HELPERS
-================================= */
+======================================== */
 const buildSlideImageUrl = (slide) => {
   if (slide?.image_url) return slide.image_url;
   if (!slide?.image_path) return null;
 
-  const base = String(STORAGE_BASE).replace(/\/$/, "");
+  const base = String(CONFIG.STORAGE_BASE).replace(/\/$/, "");
   const path = String(slide.image_path).replace(/^\/?storage\//, "");
   return `${base}/storage/${path}`;
 };
 
-/** Desktop only: widen active column */
-const getGridTemplate = (length, active) =>
+const getGridTemplate = (length, activeIndex) =>
   Array.from({ length })
-    .map((_, i) => (i === active ? "2.2fr" : "1fr"))
+    .map((_, i) => (i === activeIndex ? "2.2fr" : "1fr"))
     .join(" ");
 
-/* ===============================
-   COMPONENT
-================================= */
-export default function Slider() {
-  const [slides, setSlides] = useState([]);
-  const [current, setCurrent] = useState(0);
-  const [prevIndex, setPrevIndex] = useState(null);
+const getAlignmentClass = (index, isMobile) => {
+  if (isMobile) return "items-start text-left";
+  const position = index % 3;
+  if (position === 0) return "items-start text-left";
+  if (position === 1) return "items-center text-center";
+  return "items-end text-right";
+};
+
+/* ========================================
+   HOOKS PERSONNALISÉS
+======================================== */
+const useResponsive = () => {
   const [isMobile, setIsMobile] = useState(false);
-  const [isTablet, setIsTablet] = useState(false);
 
-  const [progress, setProgress] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
-
-  /* ✅ NEW: contrôle reveal du contenu (tag/titre/card/footer) */
-  const [revealContent, setRevealContent] = useState(false);
-  const revealTimerRef = useRef(null);
-
-  const fadeTimerRef = useRef(null);
-  const autoTimerRef = useRef(null);
-  const resumeTimerRef = useRef(null);
-  const isHoveringRef = useRef(false);
-  const touchStartX = useRef(0);
-  const touchEndX = useRef(0);
-
-  const total = slides.length;
-
-  // Détection responsive
   useEffect(() => {
     const checkResponsive = () => {
       const width = window.innerWidth;
       setIsMobile(width < 768);
-      setIsTablet(width >= 768 && width < 1024);
     };
 
     checkResponsive();
@@ -73,16 +60,13 @@ export default function Slider() {
     return () => window.removeEventListener("resize", checkResponsive);
   }, []);
 
-  const safeCurrent = useMemo(() => {
-    if (!total) return 0;
-    return Math.max(0, Math.min(current, total - 1));
-  }, [current, total]);
+  return { isMobile };
+};
 
-  const activeSlide = slides[safeCurrent];
+const useSlideData = () => {
+  const [slides, setSlides] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  /* ===============================
-     FETCH
-  =============================== */
   useEffect(() => {
     let mounted = true;
 
@@ -105,14 +89,15 @@ export default function Slider() {
             image: buildSlideImageUrl(s),
           }));
 
-        if (!mounted) return;
-
-        setSlides(normalized);
-        setCurrent(0);
-        setPrevIndex(null);
+        if (mounted) {
+          setSlides(normalized);
+          setIsLoading(false);
+        }
       })
       .catch((e) => {
+        // eslint-disable-next-line no-console
         console.error("Erreur fetch slides:", e?.message || e);
+        if (mounted) setIsLoading(false);
       });
 
     return () => {
@@ -120,59 +105,148 @@ export default function Slider() {
     };
   }, []);
 
-  /* ===============================
+  return { slides, isLoading };
+};
+
+/** ✅ Lit le thème depuis <html class="dark"> (piloté par ta NavBarMiradia) */
+const useHtmlDarkMode = () => {
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof document === "undefined") return false;
+    return document.documentElement.classList.contains("dark");
+  });
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+
+    const sync = () => setIsDark(root.classList.contains("dark"));
+    sync();
+
+    const obs = new MutationObserver(sync);
+    obs.observe(root, { attributes: true, attributeFilter: ["class"] });
+
+    return () => obs.disconnect();
+  }, []);
+
+  return isDark;
+};
+
+/* ========================================
+   COMPOSANT PRINCIPAL
+======================================== */
+export default function Slider() {
+  const [current, setCurrent] = useState(0);
+  const [prevIndex, setPrevIndex] = useState(null);
+  const [progress, setProgress] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [revealContent, setRevealContent] = useState(false);
+  const [bgFadeIn, setBgFadeIn] = useState(false);
+
+  const { slides, isLoading } = useSlideData();
+  const { isMobile } = useResponsive();
+
+  const isDark = useHtmlDarkMode(); // ✅
+
+  const isHoveringRef = useRef(false);
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
+  const fadeTimerRef = useRef(null);
+  const autoTimerRef = useRef(null);
+  const resumeTimerRef = useRef(null);
+  const revealTimerRef = useRef(null);
+  const bgRafRef = useRef(null);
+
+  const total = slides.length;
+
+  const safeCurrent = useMemo(() => {
+    if (!total) return 0;
+    return Math.max(0, Math.min(current, total - 1));
+  }, [current, total]);
+
+  const activeSlide = slides[safeCurrent];
+  const alignClass = getAlignmentClass(safeCurrent, isMobile);
+
+  /* ========================================
      CLEANUP TIMERS
-  =============================== */
+  ======================================== */
   useEffect(() => {
     return () => {
-      if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
-      if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
-      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
-      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+      [fadeTimerRef, autoTimerRef, resumeTimerRef, revealTimerRef].forEach((ref) => {
+        if (ref.current) clearTimeout(ref.current);
+      });
+      if (bgRafRef.current) cancelAnimationFrame(bgRafRef.current);
     };
   }, []);
 
-  /* ===============================
-     ✅ REVEAL CONTENT (doucement après activation)
-  =============================== */
+  /* ========================================
+     REVEAL CONTENT
+  ======================================== */
   useEffect(() => {
-    // à chaque changement de slide actif, on cache puis on révèle doucement
     setRevealContent(false);
     if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
 
     revealTimerRef.current = setTimeout(() => {
       setRevealContent(true);
-    }, REVEAL_DELAY_MS);
+    }, CONFIG.REVEAL_DELAY);
 
     return () => {
       if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
     };
   }, [safeCurrent]);
 
-  /* ===============================
-     TRANSITION GO TO
-  =============================== */
-  const goTo = (nextIndex) => {
-    if (!total) return;
-    const next = ((nextIndex % total) + total) % total;
-    if (next === safeCurrent) return;
+  /* ========================================
+     CROSSFADE BG
+  ======================================== */
+  useEffect(() => {
+    setBgFadeIn(false);
+    if (bgRafRef.current) cancelAnimationFrame(bgRafRef.current);
+    bgRafRef.current = requestAnimationFrame(() => setBgFadeIn(true));
+    return () => {
+      if (bgRafRef.current) cancelAnimationFrame(bgRafRef.current);
+    };
+  }, [activeSlide?.image]);
 
-    if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
+  /* ========================================
+     NAVIGATION
+  ======================================== */
+  const goTo = useCallback(
+    (nextIndex) => {
+      if (!total) return;
+      const next = ((nextIndex % total) + total) % total;
+      if (next === safeCurrent) return;
 
-    setPrevIndex(safeCurrent);
-    setCurrent(next);
+      if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
 
-    fadeTimerRef.current = setTimeout(() => {
-      setPrevIndex(null);
-    }, FADE_MS);
-  };
+      setPrevIndex(safeCurrent);
+      setCurrent(next);
 
-  const goNext = () => goTo(safeCurrent + 1);
-  const goPrev = () => goTo(safeCurrent - 1);
+      fadeTimerRef.current = setTimeout(() => {
+        setPrevIndex(null);
+      }, CONFIG.FADE_DURATION);
+    },
+    [safeCurrent, total]
+  );
 
-  /* ===============================
-     TOUCH HANDLING (mobile)
-  =============================== */
+  const goNext = useCallback(() => goTo(safeCurrent + 1), [goTo, safeCurrent]);
+  const goPrev = useCallback(() => goTo(safeCurrent - 1), [goTo, safeCurrent]);
+
+  /* ========================================
+     EVENTS
+  ======================================== */
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        goNext();
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        goPrev();
+      }
+    },
+    [goNext, goPrev]
+  );
+
   const handleTouchStart = (e) => {
     if (isMobile) {
       touchStartX.current = e.touches[0].clientX;
@@ -189,72 +263,13 @@ export default function Slider() {
   const handleTouchEnd = () => {
     if (!isMobile) return;
 
-    const threshold = 50;
     const diff = touchStartX.current - touchEndX.current;
-
-    if (Math.abs(diff) > threshold) {
-      if (diff > 0) goNext();
-      else goPrev();
+    if (Math.abs(diff) > CONFIG.SWIPE_THRESHOLD) {
+      diff > 0 ? goNext() : goPrev();
     }
   };
 
-  /* ===============================
-     AUTO SLIDE
-  =============================== */
-  useEffect(() => {
-    if (!total) return;
-    if (isPaused) return;
-
-    if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
-
-    autoTimerRef.current = setTimeout(() => {
-      goNext();
-    }, SLIDE_DURATION);
-
-    return () => {
-      if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [safeCurrent, total, isPaused]);
-
-  /* ===============================
-     PROGRESS
-  =============================== */
-  useEffect(() => {
-    if (!total) return;
-    if (isPaused) return;
-
-    setProgress(0);
-
-    let raf;
-    const start = performance.now();
-
-    const tick = (now) => {
-      const r = Math.min((now - start) / SLIDE_DURATION, 1);
-      setProgress(r * 100);
-      if (r < 1 && !isPaused) raf = requestAnimationFrame(tick);
-    };
-
-    raf = requestAnimationFrame(tick);
-    return () => raf && cancelAnimationFrame(raf);
-  }, [safeCurrent, total, isPaused]);
-
-  /* ===============================
-     PRELOAD NEXT IMAGE
-  =============================== */
-  useEffect(() => {
-    if (!total) return;
-    const next = (safeCurrent + 1) % total;
-    const url = slides[next]?.image;
-    if (!url) return;
-    const img = new Image();
-    img.src = url;
-  }, [safeCurrent, slides, total]);
-
-  /* ===============================
-     PAUSE ON SCROLL (content)
-  =============================== */
-  const pauseBriefly = (ms = 1200) => {
+  const pauseBriefly = (ms = CONFIG.PAUSE_ON_SCROLL) => {
     setIsPaused(true);
     if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
     resumeTimerRef.current = setTimeout(() => {
@@ -262,26 +277,63 @@ export default function Slider() {
     }, ms);
   };
 
-  /* ===============================
-     ALIGN ACTIVE CONTENT (desktop only)
-  =============================== */
-  const alignClass = useMemo(() => {
-    if (isMobile) return "items-start text-left";
+  /* ========================================
+     AUTO-PLAY & PROGRESS
+  ======================================== */
+  useEffect(() => {
+    if (!total || isPaused) return;
 
-    const pos = safeCurrent % 3;
-    if (pos === 0) return "items-start text-left";
-    if (pos === 1) return "items-center text-center";
-    return "items-end text-right";
-  }, [safeCurrent, isMobile]);
+    if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
 
-  if (!total) return null;
+    autoTimerRef.current = setTimeout(() => {
+      goNext();
+    }, CONFIG.SLIDE_DURATION);
+
+    return () => {
+      if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+    };
+  }, [safeCurrent, total, isPaused, goNext]);
+
+  useEffect(() => {
+    if (!total || isPaused) return;
+
+    setProgress(0);
+
+    let raf;
+    const start = performance.now();
+
+    const tick = (now) => {
+      const ratio = Math.min((now - start) / CONFIG.SLIDE_DURATION, 1);
+      setProgress(ratio * 100);
+      if (ratio < 1 && !isPaused) raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => raf && cancelAnimationFrame(raf);
+  }, [safeCurrent, total, isPaused]);
+
+  /* ========================================
+     PRELOAD NEXT
+  ======================================== */
+  useEffect(() => {
+    if (!total) return;
+    const nextIndex = (safeCurrent + 1) % total;
+    const url = slides[nextIndex]?.image;
+    if (!url) return;
+    const img = new Image();
+    img.src = url;
+  }, [safeCurrent, slides, total]);
+
+  if (isLoading || !total) return null;
 
   const prevBg = prevIndex !== null ? slides[prevIndex]?.image : null;
   const curBg = activeSlide?.image;
 
   return (
     <section
-      className="relative h-[calc(100vh-100px)] min-h-[520px] sm:min-h-[600px] overflow-hidden group select-none"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      className="slider-scope relative h-[calc(100vh-100px)] min-h-[520px] sm:min-h-[600px] overflow-hidden group select-none outline-none focus-visible:ring-2 focus-visible:ring-[rgba(64,168,220,0.55)]"
       onMouseEnter={() => {
         isHoveringRef.current = true;
         setIsPaused(true);
@@ -296,510 +348,624 @@ export default function Slider() {
       role="region"
       aria-roledescription="carousel"
       aria-label="MIRADIA Slider"
+      data-theme={isDark ? "dark" : "light"}
     >
-      {/* ===============================
-          MIRADIA THEME + RICHTEXT CSS RESPONSIVE
-      =============================== */}
-      <style>{`
-        :root{
-          --m-blue: #124B7D;
-          --m-blue-2:#005D86;
-          --m-sky:  #40A8DC;
-          --m-sky-2:#058FE4;
-          --m-green:#4CC04F;
-          --m-sun:  #FDCB00;
-        }
+      <SliderStyles />
 
-        @keyframes miradiaBgZoom {
-          0%   { transform: scale(1.04); }
-          50%  { transform: scale(1.09); }
-          100% { transform: scale(1.04); }
-        }
+      <BackgroundLayers
+        prevBg={prevBg}
+        curBg={curBg}
+        bgFadeIn={bgFadeIn}
+        fadeMs={CONFIG.FADE_DURATION}
+        isDark={isDark}
+      />
 
-        @keyframes fadeInUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
+      {isMobile && <MobileNavButtons onPrev={goPrev} onNext={goNext} />}
 
-        /* ===========================
-           ✅ NEW: apparition plus douce depuis le bas
-           - durée plus longue
-           - easing plus smooth
-           - +stagger via classes
-        =========================== */
-        @keyframes miradiaRiseInSoft {
-          0%   { opacity: 0; transform: translate3d(0, 26px, 0); }
-          70%  { opacity: 1; transform: translate3d(0, 2px, 0); }
-          100% { opacity: 1; transform: translate3d(0, 0, 0); }
-        }
+      <SlidesContainer
+        slides={slides}
+        safeCurrent={safeCurrent}
+        total={total}
+        isMobile={isMobile}
+        goTo={goTo}
+        revealContent={revealContent}
+        isPaused={isPaused}
+        alignClass={alignClass}
+        pauseBriefly={pauseBriefly}
+      />
 
-        .rise-hold{
-          opacity: 0;
-          transform: translate3d(0, 22px, 0);
-        }
+      <ProgressBar progress={progress} isMobile={isMobile} />
+      <DotsIndicator slides={slides} safeCurrent={safeCurrent} goTo={goTo} />
+      {isMobile && <SwipeIndicator />}
+    </section>
+  );
+}
 
-        .rise-show{
-          animation: miradiaRiseInSoft 1100ms cubic-bezier(.18,.90,.18,1) both;
-          will-change: transform, opacity;
-        }
+/* ========================================
+   STYLES
+   ✅ Light = dark-lite
+   ✅ Dark  = beaucoup plus noir (ta demande)
+======================================== */
+const SliderStyles = () => (
+  <style>{`
+    .slider-scope{
+      --m-sky:  #40A8DC;
+      --m-green:#4CC04F;
+      --m-sun:  #FDCB00;
 
-        .rise-d1{ animation-delay: 140ms; }
-        .rise-d2{ animation-delay: 360ms; }
-        .rise-d3{ animation-delay: 600ms; }
+      /* LIGHT (dark-lite) */
+      --m-card-bg: rgba(255,255,255,.18);
+      --m-card-bd: rgba(255,255,255,.45);
+      --m-card-shadow: 0 16px 45px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.25);
 
-        @media (prefers-reduced-motion: reduce){
-          .rise-hold{ opacity: 1 !important; transform: none !important; }
-          .rise-show, .rise-d1, .rise-d2, .rise-d3{ animation: none !important; }
-        }
+      --m-title-bg: linear-gradient(180deg, rgba(0,0,0,.22), rgba(0,0,0,.14));
+      --m-title-bd: rgba(255,255,255,.10);
+      --m-title-shadow: 0 18px 55px rgba(0,0,0,.26);
 
-        /* ✅ CARD CONTENU (BLANC + BLUR) */
-        .miradia-content-card{
-          position: relative;
-          border-radius: 16px;
-          border: 1px solid rgba(255,255,255,.55);
-          background: rgba(255,255,255,.22); /* blanc glass */
-          box-shadow:
-            0 16px 45px rgba(0,0,0,.30),
-            inset 0 1px 0 rgba(255,255,255,.35);
-          padding: 18px;
-          backdrop-filter: blur(10px);        /* ✅ blur modéré */
-          -webkit-backdrop-filter: blur(10px);
-          overflow: hidden;
-        }
+      --m-code-bg: rgba(0,0,0,.24);
+      --m-glow: rgba(64,168,220,.55);
 
-        @media (min-width: 640px) {
-          .miradia-content-card{
-            border-radius: 18px;
-            padding: 20px;
-          }
-        }
+      --m-dots-bg: rgba(0,0,0,.28);
+      --m-dots-bd: rgba(255,255,255,.12);
+      --m-progress-track: rgba(255,255,255,.18);
+    }
 
-        @media (min-width: 768px) {
-          .miradia-content-card{
-            border-radius: 20px;
-            padding: 22px;
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-          }
-        }
+    /* ✅ DARK: beaucoup plus noir */
+    html.dark .slider-scope{
+      --m-card-bg: rgba(0,0,0,.42);
+      --m-card-bd: rgba(255,255,255,.16);
+      --m-card-shadow: 0 20px 70px rgba(0,0,0,.60), inset 0 1px 0 rgba(255,255,255,.08);
 
-        @media (min-width: 1024px) {
-          .miradia-content-card{
-            padding: 24px;
-          }
-        }
+      --m-title-bg: linear-gradient(180deg, rgba(0,0,0,.62), rgba(0,0,0,.38));
+      --m-title-bd: rgba(255,255,255,.12);
+      --m-title-shadow: 0 26px 90px rgba(0,0,0,.72);
 
-        .miradia-content-card::before{
-          content:"";
-          position:absolute;
-          inset:0;
-          border-radius: inherit;
-          background:
-            radial-gradient(ellipse at 30% 15%, rgba(64,168,220,.18), transparent 60%),
-            radial-gradient(ellipse at 80% 80%, rgba(76,192,79,.12), transparent 60%);
-          pointer-events:none;
-          z-index: 0;
-        }
+      --m-code-bg: rgba(0,0,0,.40);
+      --m-glow: rgba(64,168,220,.62);
 
-        /* ✅ RICHTEXT (CONTENU INCHANGÉ) */
-        .miradia-richtext{
-          line-height: 1.7;
-          color: rgba(255,255,255,.95);
-          position: relative;
-          z-index: 1;
-          font-size: 0.95rem;
-        }
+      --m-dots-bg: rgba(0,0,0,.52);
+      --m-dots-bd: rgba(255,255,255,.10);
+      --m-progress-track: rgba(255,255,255,.14);
+    }
 
-        @media (min-width: 640px) {
-          .miradia-richtext{ font-size: 1rem; line-height: 1.75; }
-        }
+    @keyframes miradiaBgZoom {
+      0%   { transform: scale(1.04) translate3d(0,0,0); }
+      50%  { transform: scale(1.09) translate3d(0,-1.5%,0); }
+      100% { transform: scale(1.04) translate3d(0,0,0); }
+    }
 
-        @media (min-width: 768px) {
-          .miradia-richtext{ font-size: 1.05rem; line-height: 1.8; }
-        }
+    @keyframes miradiaRiseInSoft {
+      0%   { opacity: 0; transform: translate3d(0, 30px, 0) scale(.992); filter: blur(1px); }
+      60%  { opacity: 1; transform: translate3d(0, 4px, 0) scale(1); filter: blur(.2px); }
+      100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); filter: blur(0); }
+    }
 
-        @media (min-width: 1024px) {
-          .miradia-richtext{ font-size: 1.1rem; }
-        }
+    .rise-hold{ opacity: 0; transform: translate3d(0, 26px, 0) scale(.992); filter: blur(1px); }
+    .rise-show{ animation: miradiaRiseInSoft 1150ms cubic-bezier(.16,.92,.16,1) both; will-change: transform, opacity, filter; }
+    .rise-d1{ animation-delay: 120ms; }
+    .rise-d2{ animation-delay: 380ms; }
+    .rise-d3{ animation-delay: 640ms; }
 
-        .miradia-richtext h1,
-        .miradia-richtext h2,
-        .miradia-richtext h3,
-        .miradia-richtext h4 {
-          margin: 1.2rem 0 0.8rem 0;
-          line-height: 1.3;
-          font-weight: 600;
-          color: white;
-          position: relative;
-          padding-left: 10px;
-        }
+    @media (prefers-reduced-motion: reduce){
+      .rise-hold{ opacity: 1 !important; transform: none !important; filter:none !important; }
+      .rise-show, .rise-d1, .rise-d2, .rise-d3{ animation: none !important; }
+    }
 
-        @media (min-width: 768px) {
-          .miradia-richtext h1,
-          .miradia-richtext h2,
-          .miradia-richtext h3,
-          .miradia-richtext h4 {
-            padding-left: 12px;
-            margin: 1.5rem 0 1rem 0;
-          }
-        }
+    .miradia-content-card{
+      position: relative;
+      border-radius: 18px;
+      border: 1px solid var(--m-card-bd);
+      background: var(--m-card-bg);
+      box-shadow: var(--m-card-shadow);
+      padding: 18px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      overflow: hidden;
+      scrollbar-gutter: stable;
+      transform: translateZ(0);
+    }
+    @media (min-width: 768px) {
+      .miradia-content-card{ border-radius: 22px; padding: 22px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+    }
+    @media (min-width: 1024px) {
+      .miradia-content-card{ padding: 24px; }
+    }
 
-        .miradia-richtext h1::before,
-        .miradia-richtext h2::before,
-        .miradia-richtext h3::before,
-        .miradia-richtext h4::before {
-          content: "";
-          position: absolute;
-          left: 0;
-          top: 0;
-          bottom: 0;
-          width: 3px;
-          background: linear-gradient(to bottom, var(--m-sky), var(--m-green));
-          border-radius: 2px;
-        }
+    .miradia-content-card::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      border-radius: inherit;
+      background:
+        radial-gradient(ellipse at 30% 15%, rgba(64,168,220,.14), transparent 60%),
+        radial-gradient(ellipse at 80% 80%, rgba(76,192,79,.09), transparent 60%);
+      pointer-events:none;
+      z-index: 0;
+    }
 
-        @media (min-width: 768px) {
-          .miradia-richtext h1::before,
-          .miradia-richtext h2::before,
-          .miradia-richtext h3::before,
-          .miradia-richtext h4::before { width: 4px; }
-        }
+    @keyframes sheen {
+      0% { transform: translateX(-130%) rotate(12deg); opacity: 0; }
+      25% { opacity: .26; }
+      60% { opacity: .12; }
+      100% { transform: translateX(150%) rotate(12deg); opacity: 0; }
+    }
+    .miradia-content-card::after{
+      content:"";
+      position:absolute;
+      top:-30%;
+      left:-20%;
+      width:42%;
+      height:170%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.14), transparent);
+      filter: blur(2px);
+      transform: translateX(-130%) rotate(12deg);
+      opacity: 0;
+      pointer-events:none;
+      z-index: 0;
+    }
+    .is-active .miradia-content-card::after{
+      animation: sheen 2200ms ease-in-out 1;
+    }
 
-        .miradia-richtext h1 { font-size: 1.5rem; }
-        .miradia-richtext h2 { font-size: 1.3rem; }
-        .miradia-richtext h3 { font-size: 1.2rem; }
-        .miradia-richtext h4 { font-size: 1.1rem; }
+    .miradia-title-plate{
+      position: relative;
+      border-radius: 18px;
+      padding: 14px 14px 12px 14px;
+      background: var(--m-title-bg);
+      border: 1px solid var(--m-title-bd);
+      box-shadow: var(--m-title-shadow);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+    @media (min-width: 768px){
+      .miradia-title-plate{ border-radius: 20px; padding: 16px 16px 14px 16px; backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px); }
+    }
 
-        @media (min-width: 768px) {
-          .miradia-richtext h1 { font-size: 1.8rem; }
-          .miradia-richtext h2 { font-size: 1.5rem; }
-          .miradia-richtext h3 { font-size: 1.3rem; }
-          .miradia-richtext h4 { font-size: 1.15rem; }
-        }
+    .miradia-richtext{
+      line-height: 1.75;
+      color: rgba(255,255,255,.95);
+      position: relative;
+      z-index: 1;
+      font-size: 0.98rem;
+    }
+    @media (min-width: 768px){
+      .miradia-richtext{ font-size: 1.05rem; line-height: 1.85; }
+    }
 
-        .miradia-richtext p { margin: 0.8rem 0; padding: 0.4rem 0; }
-        @media (min-width: 768px) {
-          .miradia-richtext p { margin: 1rem 0; padding: 0.5rem 0; }
-        }
+    .miradia-richtext h1,
+    .miradia-richtext h2,
+    .miradia-richtext h3,
+    .miradia-richtext h4 {
+      margin: 1.2rem 0 0.85rem 0;
+      line-height: 1.25;
+      font-weight: 650;
+      color: white;
+      position: relative;
+      padding-left: 12px;
+    }
+    .miradia-richtext h1::before,
+    .miradia-richtext h2::before,
+    .miradia-richtext h3::before,
+    .miradia-richtext h4::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: linear-gradient(to bottom, var(--m-sky), var(--m-green));
+      border-radius: 999px;
+    }
 
-        .miradia-richtext ul,
-        .miradia-richtext ol { margin: 0.8rem 0; padding-left: 1.2rem; }
-        @media (min-width: 768px) {
-          .miradia-richtext ul,
-          .miradia-richtext ol { margin: 1rem 0; padding-left: 1.5rem; }
-        }
-        .miradia-richtext li { margin: 0.4rem 0; padding-left: 0.5rem; }
+    .miradia-richtext p { margin: 0.9rem 0; }
+    .miradia-richtext ul, .miradia-richtext ol { margin: 0.9rem 0; padding-left: 1.35rem; }
+    .miradia-richtext li { margin: 0.45rem 0; }
 
-        .miradia-richtext pre,
-        .miradia-richtext code {
-          font-family: 'Courier New', Courier, monospace;
-          background: rgba(0,0,0,.25) !important;
-          border: 1px solid rgba(255,255,255,.18);
-          border-radius: 10px;
-          padding: 10px 12px;
-          white-space: pre-wrap;
-          overflow-wrap: anywhere;
-          color: rgba(255,255,255,.92);
-          margin: 0.8rem 0;
-          font-size: 0.85rem;
-          line-height: 1.45;
-        }
+    .miradia-richtext pre,
+    .miradia-richtext code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      background: var(--m-code-bg) !important;
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 12px;
+      padding: 10px 12px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: rgba(255,255,255,.92);
+      margin: 0.9rem 0;
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
 
-        @media (min-width: 768px) {
-          .miradia-richtext pre,
-          .miradia-richtext code { padding: 12px 14px; font-size: 0.9rem; }
-        }
+    .miradia-richtext a {
+      color: var(--m-sky);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(64,168,220,.35);
+      padding-bottom: 1px;
+      transition: all 0.25s ease;
+    }
+    .miradia-richtext a:hover {
+      color: var(--m-green);
+      border-bottom-color: rgba(76,192,79,.55);
+    }
 
-        .miradia-richtext a {
-          color: var(--m-sky);
-          text-decoration: none;
-          border-bottom: 1px solid rgba(64,168,220,.35);
-          padding-bottom: 1px;
-          transition: all 0.25s ease;
-        }
-        .miradia-richtext a:hover {
-          color: var(--m-green);
-          border-bottom-color: rgba(76,192,79,.55);
-        }
+    .miradia-scroll::-webkit-scrollbar{ width: 9px; }
+    .miradia-scroll::-webkit-scrollbar-thumb{
+      background: linear-gradient(to bottom, var(--m-sky), var(--m-green));
+      border-radius: 999px;
+    }
+    .miradia-scroll::-webkit-scrollbar-track{
+      background: rgba(255,255,255,.10);
+      border-radius: 999px;
+      margin: 3px 0;
+    }
 
-        /* Scrollbar */
-        .miradia-scroll::-webkit-scrollbar{ width: 7px; }
-        @media (min-width: 768px){ .miradia-scroll::-webkit-scrollbar{ width: 9px; } }
-        @media (min-width: 1024px){ .miradia-scroll::-webkit-scrollbar{ width: 10px; } }
+    .bg-layer{
+      position:absolute;
+      inset:0;
+      background-size:cover;
+      background-position:center;
+      will-change: opacity, transform;
+    }
+  `}</style>
+);
 
-        .miradia-scroll::-webkit-scrollbar-thumb{
-          background: linear-gradient(to bottom, var(--m-sky), var(--m-green));
-          border-radius: 999px;
-        }
-        .miradia-scroll::-webkit-scrollbar-track{
-          background: rgba(255,255,255,.10);
-          border-radius: 999px;
-          margin: 3px 0;
-        }
+/* ========================================
+   BACKGROUND (crossfade)
+   ✅ Dark mode: plus noir (overlays + brightness)
+======================================== */
+const BackgroundLayers = ({ prevBg, curBg, bgFadeIn, fadeMs, isDark }) => {
+  const curFilter = isDark
+    ? "contrast(1.08) saturate(1.05) brightness(0.78)"
+    : "contrast(1.08) saturate(1.10) brightness(1.00)";
 
-        .animate-fadeInUp { animation: fadeInUp 0.6s ease-out both; }
-      `}</style>
+  const prevFilter = isDark
+    ? "contrast(1.06) saturate(1.03) brightness(0.76)"
+    : "contrast(1.06) saturate(1.08) brightness(0.98)";
 
-      {/* ===============================
-          BACKGROUND
-      =============================== */}
+  return (
+    <>
       {prevBg && (
         <div
-          className="absolute inset-0 bg-cover bg-center opacity-100"
+          className="bg-layer"
           style={{
             backgroundImage: `url(${prevBg})`,
-            filter: "contrast(1.06) saturate(1.08) brightness(0.98)",
+            filter: prevFilter,
+            opacity: 1,
           }}
         />
       )}
 
       <div
         key={curBg || "bg"}
-        className="absolute inset-0 bg-cover bg-center animate-[miradiaBgZoom_18s_ease-in-out_infinite]"
+        className="bg-layer animate-[miradiaBgZoom_18s_ease-in-out_infinite]"
         style={{
           backgroundImage: `url(${curBg})`,
-          filter: "contrast(1.08) saturate(1.10) brightness(1.00)",
+          filter: curFilter,
+          opacity: bgFadeIn ? 1 : 0,
+          transition: `opacity ${fadeMs}ms cubic-bezier(.2,.8,.2,1)`,
         }}
       />
 
-      {/* overlays (doux pour garder la photo claire) */}
-      <div className="absolute inset-0 bg-black/10" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-black/20 to-black/10" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(64,168,220,0.16),transparent_55%)]" />
+      {/* overlays: ✅ dark => beaucoup plus noir */}
+      <div
+        className="absolute inset-0"
+        style={{ backgroundColor: isDark ? "rgba(0,0,0,0.26)" : "rgba(0,0,0,0.10)" }}
+      />
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage: isDark
+            ? "linear-gradient(to top, rgba(0,0,0,0.62), rgba(0,0,0,0.30), rgba(0,0,0,0.18))"
+            : "linear-gradient(to top, rgba(0,0,0,0.30), rgba(0,0,0,0.18), rgba(0,0,0,0.10))",
+        }}
+      />
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage: isDark
+            ? "radial-gradient(ellipse at top, rgba(64,168,220,0.12), transparent 55%)"
+            : "radial-gradient(ellipse at top, rgba(64,168,220,0.15), transparent 55%)",
+        }}
+      />
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage: isDark
+            ? "radial-gradient(ellipse at center, transparent 28%, rgba(0,0,0,0.32) 100%)"
+            : "radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.12) 100%)",
+        }}
+      />
+    </>
+  );
+};
 
-      {/* ===============================
-          MOBILE NAVIGATION BUTTONS
-      =============================== */}
-      {isMobile && (
-        <>
-          <button
-            onClick={goPrev}
-            className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white hover:bg-black/70 transition-all active:scale-95 shadow-lg"
-            aria-label="Slide précédent"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <button
-            onClick={goNext}
-            className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white hover:bg-black/70 transition-all active:scale-95 shadow-lg"
-            aria-label="Slide suivant"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        </>
-      )}
+const MobileNavButtons = ({ onPrev, onNext }) => (
+  <>
+    <button
+      onClick={onPrev}
+      className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/55 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white hover:bg-black/75 transition-all active:scale-95 shadow-lg"
+      aria-label="Slide précédent"
+    >
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+      </svg>
+    </button>
+    <button
+      onClick={onNext}
+      className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/55 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white hover:bg-black/75 transition-all active:scale-95 shadow-lg"
+      aria-label="Slide suivant"
+    >
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+      </svg>
+    </button>
+  </>
+);
 
-      {/* ===============================
-          SLIDES CONTAINER - RESPONSIVE
-      =============================== */}
+const SlidesContainer = ({
+  slides,
+  safeCurrent,
+  total,
+  isMobile,
+  goTo,
+  revealContent,
+  isPaused,
+  alignClass,
+  pauseBriefly,
+}) => (
+  <div
+    className={[
+      "relative z-10 h-full",
+      isMobile ? "flex flex-col" : "grid transition-[grid-template-columns] duration-700 ease-in-out",
+    ].join(" ")}
+    style={{
+      gridTemplateColumns: !isMobile ? getGridTemplate(total, safeCurrent) : undefined,
+    }}
+  >
+    {slides.map((slide, idx) => {
+      const isActive = idx === safeCurrent;
+      const isVisibleMobile = isMobile ? isActive : true;
+
+      return (
+        <SlideItem
+          key={slide.id}
+          slide={slide}
+          idx={idx}
+          isActive={isActive}
+          isVisibleMobile={isVisibleMobile}
+          isMobile={isMobile}
+          total={total}
+          goTo={goTo}
+          revealContent={revealContent}
+          isPaused={isPaused}
+          alignClass={alignClass}
+          pauseBriefly={pauseBriefly}
+        />
+      );
+    })}
+  </div>
+);
+
+const SlideItem = ({
+  slide,
+  idx,
+  isActive,
+  isVisibleMobile,
+  isMobile,
+  total,
+  goTo,
+  revealContent,
+  isPaused,
+  alignClass,
+  pauseBriefly,
+}) => (
+  <div
+    onClick={() => goTo(idx)}
+    className={[
+      "relative cursor-pointer transition-all duration-700 ease-in-out backdrop-blur-sm",
+      isActive ? "is-active" : "",
+      ...(isMobile
+        ? [
+            "w-full px-4 sm:px-5 py-4 sm:py-5",
+            isActive ? "flex-1 min-h-[50vh] sm:min-h-[55vh]" : "h-14 sm:h-16 flex-shrink-0",
+            "border-t border-white/10 first:border-t-0",
+            !isActive && "opacity-70 hover:opacity-100 bg-black/24",
+            isActive && "bg-black/26",
+          ]
+        : [
+            "px-4 sm:px-5 md:px-6 py-6 sm:py-7 md:py-8 lg:py-10",
+            "border-l border-white/10 last:border-r",
+            isActive ? "bg-black/26 shadow-2xl" : "bg-black/14 hover:bg-black/18 hover:shadow-xl",
+          ]),
+    ].join(" ")}
+    style={{
+      display: isMobile && !isVisibleMobile ? "none" : "block",
+    }}
+    aria-current={isActive ? "true" : "false"}
+  >
+    {!isActive ? (
+      <InactiveSlideContent slide={slide} idx={idx} isMobile={isMobile} goTo={goTo} />
+    ) : (
+      <ActiveSlideContent
+        slide={slide}
+        idx={idx}
+        total={total}
+        revealContent={revealContent}
+        isPaused={isPaused}
+        alignClass={alignClass}
+        isMobile={isMobile}
+        pauseBriefly={pauseBriefly}
+      />
+    )}
+
+    {!isMobile && (
       <div
         className={[
-          "relative z-10 h-full",
-          isMobile ? "flex flex-col" : "",
-          !isMobile ? "grid transition-[grid-template-columns] duration-700 ease-in-out" : "",
+          "pointer-events-none absolute inset-x-0 top-0 h-[3px] transition-all duration-500",
+          isActive ? "opacity-100 scale-x-100" : "opacity-0 group-hover:opacity-100 scale-x-0 group-hover:scale-x-100",
         ].join(" ")}
         style={{
-          gridTemplateColumns: !isMobile ? getGridTemplate(total, safeCurrent) : undefined,
+          background: "linear-gradient(90deg, var(--m-sky), var(--m-green), var(--m-sun))",
+          boxShadow: "0 0 10px rgba(64,168,220,.5)",
+        }}
+      />
+    )}
+  </div>
+);
+
+const InactiveSlideContent = ({ slide, idx, isMobile, goTo }) => (
+  <div className="h-full flex flex-col justify-center items-center text-center px-2">
+    <div className="text-white/80 text-[11px] tracking-[0.25em] uppercase mb-2">
+      {String(idx + 1).padStart(2, "0")}
+    </div>
+
+    <div className="text-white font-semibold text-sm sm:text-base line-clamp-2 max-w-[18rem] drop-shadow-[0_10px_40px_rgba(0,0,0,.35)]">
+      {slide.title || "—"}
+    </div>
+
+    {slide.tag && (
+      <p className="mt-2 text-[10px] sm:text-xs uppercase tracking-[0.3em] text-[var(--m-green)] font-medium truncate max-w-full">
+        {slide.tag}
+      </p>
+    )}
+
+    {!isMobile && (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          goTo(idx);
+        }}
+        className="mt-4 px-5 py-2 rounded-xl border border-white/25 text-white text-xs font-semibold opacity-0 translate-y-2 transition-all duration-500 group-hover:opacity-100 group-hover:translate-y-0 hover:bg-white/10 hover:border-white/40 focus:outline-none focus:ring-2 focus:ring-[var(--m-sky)]"
+        aria-label={`Voir ${slide.title}`}
+      >
+        Voir
+      </button>
+    )}
+  </div>
+);
+
+const ActiveSlideContent = ({ slide, idx, total, revealContent, isPaused, alignClass, isMobile, pauseBriefly }) => (
+  <div className={`h-full flex flex-col justify-between ${alignClass}`}>
+    <div className={`${revealContent ? "rise-show rise-d1" : "rise-hold"}`}>
+      <div className="miradia-title-plate">
+        {slide.tag && (
+          <p className="uppercase tracking-[0.3em] text-white/90 mb-2 sm:mb-3 font-medium flex items-center gap-2 text-[10px] sm:text-xs">
+            <span className="inline-block w-5 sm:w-7 h-px bg-gradient-to-r from-[var(--m-green)] to-transparent"></span>
+            {slide.tag}
+            <span className="inline-block w-5 sm:w-7 h-px bg-gradient-to-l from-[var(--m-green)] to-transparent"></span>
+          </p>
+        )}
+
+        <h3 className="font-extrabold leading-tight text-[var(--m-sky)] drop-shadow-[0_10px_30px_rgba(0,0,0,.65)] text-2xl sm:text-3xl md:text-4xl lg:text-5xl">
+          {slide.title}
+        </h3>
+      </div>
+    </div>
+
+    <div className={`mt-4 sm:mt-6 md:mt-8 w-full ${revealContent ? "rise-show rise-d2" : "rise-hold"}`}>
+      <div
+        className={[
+          "miradia-content-card",
+          "miradia-scroll overscroll-contain overflow-y-auto pr-2 sm:pr-3",
+          isMobile ? "max-h-[40vh]" : "max-h-[45vh]",
+        ].join(" ")}
+        onClick={(e) => e.stopPropagation()}
+        onWheel={(e) => {
+          e.stopPropagation();
+          pauseBriefly(1400);
+        }}
+        onScroll={(e) => {
+          e.stopPropagation();
+          pauseBriefly(1400);
         }}
       >
-        {slides.map((slide, idx) => {
-          const isActive = idx === safeCurrent;
-          const isVisibleMobile = isMobile ? isActive : true;
-
-          return (
-            <div
-              key={slide.id}
-              onClick={() => goTo(idx)}
-              className={[
-                "relative cursor-pointer transition-all duration-700 ease-in-out",
-                "backdrop-blur-sm",
-                ...(isMobile
-                  ? [
-                      "w-full",
-                      "px-4 sm:px-5 py-4 sm:py-5",
-                      isActive ? "flex-1 min-h-[50vh] sm:min-h-[55vh]" : "h-14 sm:h-16 flex-shrink-0",
-                      "border-t border-white/10 first:border-t-0",
-                      !isActive && "opacity-70 hover:opacity-100 bg-black/20",
-                      isActive && "bg-black/20",
-                    ]
-                  : []),
-                ...(!isMobile
-                  ? [
-                      "px-4 sm:px-5 md:px-6 py-6 sm:py-7 md:py-8 lg:py-10",
-                      "border-l border-white/10 last:border-r",
-                      isActive ? "bg-black/20 shadow-2xl" : "bg-black/10 hover:bg-black/15 hover:shadow-xl",
-                    ]
-                  : []),
-              ].join(" ")}
-              style={{
-                display: isMobile && !isVisibleMobile ? "none" : "block",
-              }}
-              aria-current={isActive ? "true" : "false"}
-            >
-              {/* ===== SLIDE INACTIF ===== */}
-              {!isActive && (
-                <div className="h-full flex flex-col justify-center items-center text-center">
-                  {slide.tag && (
-                    <p className="text-[10px] sm:text-xs uppercase tracking-[0.3em] text-[var(--m-green)] mb-2 sm:mb-3 font-medium truncate max-w-full px-2">
-                      {slide.tag}
-                    </p>
-                  )}
-
-                  {!isMobile && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        goTo(idx);
-                      }}
-                      className="
-                        mt-3 sm:mt-4 px-4 sm:px-5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl
-                        border border-white/25
-                        text-white text-xs sm:text-sm font-medium
-                        opacity-0 translate-y-2
-                        transition-all duration-500
-                        group-hover:opacity-100 group-hover:translate-y-0
-                        hover:bg-white/10 hover:border-white/40
-                        focus:outline-none focus:ring-2 focus:ring-[var(--m-sky)]
-                      "
-                      aria-label={`Voir ${slide.title}`}
-                    >
-                      Voir
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* ===== SLIDE ACTIF (contenu dans la card blur) ===== */}
-              {isActive && (
-                <div className={`h-full flex flex-col justify-between ${alignClass}`}>
-                  {/* TAG + TITRE (apparition douce) */}
-                  <div className={`w-full ${revealContent ? "rise-show rise-d1" : "rise-hold"}`}>
-                    {slide.tag && (
-                      <p
-                        className={[
-                          "uppercase tracking-[0.3em] text-white/90 mb-2 sm:mb-3 md:mb-4 font-medium flex items-center gap-2",
-                          "text-[10px] sm:text-xs",
-                          "drop-shadow-[0_2px_10px_rgba(0,0,0,.45)]",
-                        ].join(" ")}
-                      >
-                        <span className="inline-block w-4 sm:w-6 h-px bg-gradient-to-r from-[var(--m-green)] to-transparent"></span>
-                        {slide.tag}
-                        <span className="inline-block w-4 sm:w-6 h-px bg-gradient-to-l from-[var(--m-green)] to-transparent"></span>
-                      </p>
-                    )}
-
-                    <h3
-                      className={[
-                        "font-bold leading-tight text-[var(--m-sky)] drop-shadow-lg mb-3 sm:mb-4",
-                        "text-2xl sm:text-3xl md:text-4xl lg:text-5xl",
-                      ].join(" ")}
-                    >
-                      {slide.title}
-                    </h3>
-                  </div>
-
-                  {/* ✅ SECTION CONTENU DANS LA CARD BLUR (apparition douce) */}
-                  <div className={`mt-4 sm:mt-6 md:mt-8 w-full ${revealContent ? "rise-show rise-d2" : "rise-hold"}`}>
-                    <div
-                      className={[
-                        "miradia-content-card",
-                        "miradia-scroll overscroll-contain",
-                        "overflow-y-auto",
-                        "pr-2 sm:pr-3",
-                        isMobile ? "max-h-[40vh]" : "max-h-[45vh]",
-                      ].join(" ")}
-                      onWheel={() => pauseBriefly(1400)}
-                      onScroll={() => pauseBriefly(1400)}
-                    >
-                      <div
-                        className="miradia-richtext"
-                        dangerouslySetInnerHTML={{
-                          __html: slide.description || "<p></p>",
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* FOOTER (apparition douce) */}
-                  <div
-                    className={[
-                      "mt-4 sm:mt-6 md:mt-8 w-full flex items-center justify-between text-white/80",
-                      revealContent ? "rise-show rise-d3" : "rise-hold",
-                    ].join(" ")}
-                  >
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <span className="text-[10px] sm:text-xs uppercase tracking-[0.2em] sm:tracking-[0.3em]">
-                        Slide {idx + 1} / {total}
-                      </span>
-                    </div>
-
-                    {isPaused && (
-                      <span className="text-[10px] sm:text-xs uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[var(--m-sun)] font-medium flex items-center gap-1 sm:gap-2">
-                        <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-[var(--m-sun)] animate-pulse"></span>
-                        {isMobile ? "Pause" : "En pause"}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Hover accent line - Desktop seulement */}
-              {!isMobile && (
-                <div
-                  className={[
-                    "pointer-events-none absolute inset-x-0 top-0 h-[3px]",
-                    "transition-all duration-500",
-                    isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-hover:scale-x-100",
-                    isActive ? "scale-x-100" : "scale-x-0",
-                  ].join(" ")}
-                  style={{
-                    background: "linear-gradient(90deg, var(--m-sky), var(--m-green), var(--m-sun))",
-                    boxShadow: "0 0 10px rgba(64,168,220,.5)",
-                  }}
-                />
-              )}
-            </div>
-          );
-        })}
+        <div
+          className="miradia-richtext"
+          dangerouslySetInnerHTML={{
+            __html: slide.description || "<p></p>",
+          }}
+        />
       </div>
+    </div>
 
-      {/* PROGRESS BAR */}
-      <div className="absolute bottom-0 left-0 w-full z-30 bg-white/20 h-[2px] sm:h-[3px]">
-        <div className="h-full transition-[width] duration-150 ease-linear relative" style={{ width: `${progress}%` }}>
-          <div
-            className="absolute inset-0 rounded-r-full"
-            style={{
-              background: "linear-gradient(90deg, var(--m-sky), var(--m-green), var(--m-sun))",
-            }}
-          />
-          {!isMobile && (
-            <div
-              className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-white shadow-lg"
-              style={{ boxShadow: "0 0 10px rgba(64,168,220,.8)" }}
-            />
-          )}
-        </div>
-      </div>
+    <div
+      className={[
+        "mt-4 sm:mt-6 md:mt-8 w-full flex items-center justify-between text-white/85",
+        revealContent ? "rise-show rise-d3" : "rise-hold",
+      ].join(" ")}
+    >
+      <span className="text-[10px] sm:text-xs uppercase tracking-[0.25em]">
+        Slide {idx + 1} / {total}
+      </span>
 
-      {/* SWIPE INDICATOR - Mobile seulement */}
-      {isMobile && (
-        <div className="absolute bottom-8 sm:bottom-12 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-          <div className="flex items-center gap-1 sm:gap-2 text-white/70">
-            <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19l-7-7 7-7" />
-            </svg>
-            <span className="text-[10px] sm:text-xs font-medium">Glisser</span>
-            <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" />
-            </svg>
-          </div>
-        </div>
+      {isPaused && (
+        <span className="text-[10px] sm:text-xs uppercase tracking-[0.25em] text-[var(--m-sun)] font-semibold flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-[var(--m-sun)] animate-pulse"></span>
+          {isMobile ? "Pause" : "En pause"}
+        </span>
       )}
-    </section>
-  );
-}
+    </div>
+  </div>
+);
+
+const ProgressBar = ({ progress, isMobile }) => (
+  <div className="absolute bottom-0 left-0 w-full z-30" style={{ background: "var(--m-progress-track)", height: isMobile ? 2 : 3 }}>
+    <div className="h-full transition-[width] duration-150 ease-linear relative" style={{ width: `${progress}%` }}>
+      <div
+        className="absolute inset-0 rounded-r-full"
+        style={{ background: "linear-gradient(90deg, var(--m-sky), var(--m-green), var(--m-sun))" }}
+      />
+      {!isMobile && (
+        <div
+          className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-white shadow-lg"
+          style={{ boxShadow: "0 0 10px rgba(64,168,220,.85)" }}
+        />
+      )}
+    </div>
+  </div>
+);
+
+const DotsIndicator = ({ slides, safeCurrent, goTo }) => (
+  <div className="absolute bottom-5 sm:bottom-7 left-1/2 -translate-x-1/2 z-30">
+    <div
+      className="flex items-center gap-2 rounded-full px-3 py-2 backdrop-blur-md"
+      style={{ background: "var(--m-dots-bg)", border: "1px solid var(--m-dots-bd)" }}
+    >
+      {slides.map((s, i) => {
+        const active = i === safeCurrent;
+        return (
+          <button
+            key={s.id}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              goTo(i);
+            }}
+            className={["h-2.5 w-2.5 rounded-full transition-all duration-300", active ? "scale-110" : "opacity-70 hover:opacity-100"].join(" ")}
+            style={{
+              background: active ? "linear-gradient(90deg, var(--m-sky), var(--m-green))" : "rgba(255,255,255,.55)",
+              boxShadow: active ? "0 0 16px var(--m-glow)" : "none",
+            }}
+            aria-label={`Aller au slide ${i + 1}`}
+            aria-current={active ? "true" : "false"}
+          />
+        );
+      })}
+    </div>
+  </div>
+);
+
+const SwipeIndicator = () => (
+  <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+    <div className="flex items-center gap-2 text-white/70">
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19l-7-7 7-7" />
+      </svg>
+      <span className="text-xs font-medium">Glisser</span>
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" />
+      </svg>
+    </div>
+  </div>
+);

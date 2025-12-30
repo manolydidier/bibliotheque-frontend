@@ -279,7 +279,12 @@ export default function ContactForm() {
       // On ne transmet pas humanAnswer ni les honeypots au backend
       const { humanAnswer, company, website, ...payload } = form;
 
-      await api.post("/public/contact", payload);
+      // await api.post("/public/contact", payload);
+        const start = Date.now();
+        // ... au submit
+        await api.post("/public/contact", payload, {
+          headers: { "X-Form-Start": String(start) }
+        });
 
       setStatus("success");
       setStatusMessage(

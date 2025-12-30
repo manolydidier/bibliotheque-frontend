@@ -57,6 +57,7 @@ import OrgNodesIndex from './pages/UserManagementDashboard/Components/Backoffice
 import OrgNodeForm from './pages/UserManagementDashboard/Components/Backoffice/Miradia/orgchart/OrgNodeForm';
 import CmsSectionForm from './pages/UserManagementDashboard/Components/Backoffice/Miradia/cms/CmsSectionForm';
 import CmsSectionsIndex from './pages/UserManagementDashboard/Components/Backoffice/Miradia/cms/CmsSectionsIndex';
+import Beneficiaires from './pages/Miradia/beneficiaires/Beneficiaires';
 
 function BootScreen() {
   return (
@@ -348,6 +349,7 @@ export default function App() {
                 <Route path="/guide" element={<UserGuidePage />} />
                 <Route path="/faq" element={<FAQPage />} />
                 <Route path="/miradia" element={<HomeMiradia />} />
+                <Route path="/beneficiaires" element={<Beneficiaires/>} />
 
               </Routes>
             </Router>

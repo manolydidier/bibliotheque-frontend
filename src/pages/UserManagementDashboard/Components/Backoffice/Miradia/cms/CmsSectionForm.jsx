@@ -499,6 +499,7 @@ const isDark = document.documentElement.classList.contains("dark");
 
 
   const previewSrcDoc = useMemo(() => {
+    
   return `<!doctype html>
 <html class="${isDark ? "dark" : ""}">
 <head>
