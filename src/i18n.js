@@ -854,7 +854,7 @@ layout: {
 
   sections: {
     media: "Contents & Media",
-    settings: "System & Settings",
+    settings: "System & Settings Miradia",
     users: "Users & Access"
   },
 
@@ -2473,7 +2473,7 @@ notfound: {
 
   sections: {
     media: "Contenus & Médias",
-    settings: "Système & Paramètres",
+    settings: "Système & Paramètres Miradia",
     users: "Utilisateurs & Accès"
   },
 

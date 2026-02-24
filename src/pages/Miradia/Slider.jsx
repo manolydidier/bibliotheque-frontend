@@ -108,7 +108,7 @@ const useSlideData = () => {
   return { slides, isLoading };
 };
 
-/** ✅ Lit le thème depuis <html class="dark"> (piloté par ta NavBarMiradia) */
+/** ✅ Lit le thème depuis <html class="dark"> */
 const useHtmlDarkMode = () => {
   const [isDark, setIsDark] = useState(() => {
     if (typeof document === "undefined") return false;
@@ -145,7 +145,7 @@ export default function Slider() {
   const { slides, isLoading } = useSlideData();
   const { isMobile } = useResponsive();
 
-  const isDark = useHtmlDarkMode(); // ✅
+  const isDark = useHtmlDarkMode();
 
   const isHoveringRef = useRef(false);
   const touchStartX = useRef(0);
@@ -179,7 +179,7 @@ export default function Slider() {
   }, []);
 
   /* ========================================
-     REVEAL CONTENT
+     REVEAL CONTENT (animation plus douce)
   ======================================== */
   useEffect(() => {
     setRevealContent(false);
@@ -383,8 +383,8 @@ export default function Slider() {
 
 /* ========================================
    STYLES
-   ✅ Light = dark-lite
-   ✅ Dark  = beaucoup plus noir (ta demande)
+   ✅ On ne change pas le style global des slides,
+      seulement l’affichage du contenu (flat + lisible)
 ======================================== */
 const SliderStyles = () => (
   <style>{`
@@ -410,7 +410,7 @@ const SliderStyles = () => (
       --m-progress-track: rgba(255,255,255,.18);
     }
 
-    /* ✅ DARK: beaucoup plus noir */
+    /* DARK: plus noir (comme ton fichier original) */
     html.dark .slider-scope{
       --m-card-bg: rgba(0,0,0,.42);
       --m-card-bd: rgba(255,255,255,.16);
@@ -434,114 +434,112 @@ const SliderStyles = () => (
       100% { transform: scale(1.04) translate3d(0,0,0); }
     }
 
-    @keyframes miradiaRiseInSoft {
-      0%   { opacity: 0; transform: translate3d(0, 30px, 0) scale(.992); filter: blur(1px); }
-      60%  { opacity: 1; transform: translate3d(0, 4px, 0) scale(1); filter: blur(.2px); }
-      100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); filter: blur(0); }
+    /* ✅ ANIMATIONS CONTENU: plus douces + ultra fluides (flat) */
+    .rise-hold{
+      opacity: 0;
+      transform: translate3d(0, 14px, 0) scale(.998);
+      filter: blur(.35px);
+      will-change: transform, opacity, filter;
     }
-
-    .rise-hold{ opacity: 0; transform: translate3d(0, 26px, 0) scale(.992); filter: blur(1px); }
-    .rise-show{ animation: miradiaRiseInSoft 1150ms cubic-bezier(.16,.92,.16,1) both; will-change: transform, opacity, filter; }
-    .rise-d1{ animation-delay: 120ms; }
-    .rise-d2{ animation-delay: 380ms; }
-    .rise-d3{ animation-delay: 640ms; }
-
-    @media (prefers-reduced-motion: reduce){
-      .rise-hold{ opacity: 1 !important; transform: none !important; filter:none !important; }
-      .rise-show, .rise-d1, .rise-d2, .rise-d3{ animation: none !important; }
+    .rise-show{
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+      filter: blur(0);
+      transition:
+        opacity 520ms cubic-bezier(.22, 1, .36, 1),
+        transform 520ms cubic-bezier(.22, 1, .36, 1),
+        filter 520ms cubic-bezier(.22, 1, .36, 1);
     }
+    .rise-d1{ transition-delay: 70ms; }
+    .rise-d2{ transition-delay: 180ms; }
+    .rise-d3{ transition-delay: 290ms; }
 
+    /* ✅ CARD CONTENU: plus lisible + flat (moins “glass”, moins chargé) */
     .miradia-content-card{
       position: relative;
-      border-radius: 18px;
-      border: 1px solid var(--m-card-bd);
-      background: var(--m-card-bg);
-      box-shadow: var(--m-card-shadow);
-      padding: 18px;
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.16);
+      background: rgba(0,0,0,.22);
+      box-shadow: 0 10px 26px rgba(0,0,0,.32);
+      padding: 16px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
       overflow: hidden;
       scrollbar-gutter: stable;
       transform: translateZ(0);
     }
     @media (min-width: 768px) {
-      .miradia-content-card{ border-radius: 22px; padding: 22px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+      .miradia-content-card{
+        border-radius: 18px;
+        padding: 18px;
+        backdrop-filter: blur(9px);
+        -webkit-backdrop-filter: blur(9px);
+      }
     }
     @media (min-width: 1024px) {
-      .miradia-content-card{ padding: 24px; }
+      .miradia-content-card{ padding: 20px; }
     }
 
+    /* décor très discret */
     .miradia-content-card::before{
       content:"";
       position:absolute;
       inset:0;
       border-radius: inherit;
       background:
-        radial-gradient(ellipse at 30% 15%, rgba(64,168,220,.14), transparent 60%),
-        radial-gradient(ellipse at 80% 80%, rgba(76,192,79,.09), transparent 60%);
+        radial-gradient(ellipse at 22% 18%, rgba(64,168,220,.10), transparent 58%),
+        radial-gradient(ellipse at 85% 86%, rgba(76,192,79,.06), transparent 60%);
       pointer-events:none;
       z-index: 0;
     }
+    /* sheen OFF -> plus épuré */
+    .miradia-content-card::after{ content:none; }
 
-    @keyframes sheen {
-      0% { transform: translateX(-130%) rotate(12deg); opacity: 0; }
-      25% { opacity: .26; }
-      60% { opacity: .12; }
-      100% { transform: translateX(150%) rotate(12deg); opacity: 0; }
-    }
-    .miradia-content-card::after{
-      content:"";
-      position:absolute;
-      top:-30%;
-      left:-20%;
-      width:42%;
-      height:170%;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,.14), transparent);
-      filter: blur(2px);
-      transform: translateX(-130%) rotate(12deg);
-      opacity: 0;
-      pointer-events:none;
-      z-index: 0;
-    }
-    .is-active .miradia-content-card::after{
-      animation: sheen 2200ms ease-in-out 1;
-    }
-
+    /* ✅ TITLE PLATE: flat & clean */
     .miradia-title-plate{
       position: relative;
-      border-radius: 18px;
-      padding: 14px 14px 12px 14px;
-      background: var(--m-title-bg);
-      border: 1px solid var(--m-title-bd);
-      box-shadow: var(--m-title-shadow);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
+      border-radius: 14px;
+      padding: 12px 14px;
+      background: rgba(0,0,0,.26);
+      border: 1px solid rgba(255,255,255,.14);
+      box-shadow: 0 8px 20px rgba(0,0,0,.28);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
     }
     @media (min-width: 768px){
-      .miradia-title-plate{ border-radius: 20px; padding: 16px 16px 14px 16px; backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px); }
+      .miradia-title-plate{
+        border-radius: 16px;
+        padding: 14px 16px;
+        backdrop-filter: blur(7px);
+        -webkit-backdrop-filter: blur(7px);
+      }
     }
 
+    /* ✅ RICHTEXT: plus propre & lisible */
     .miradia-richtext{
-      line-height: 1.75;
-      color: rgba(255,255,255,.95);
+      line-height: 1.78;
+      color: rgba(255,255,255,.94);
       position: relative;
       z-index: 1;
       font-size: 0.98rem;
     }
     @media (min-width: 768px){
-      .miradia-richtext{ font-size: 1.05rem; line-height: 1.85; }
+      .miradia-richtext{
+        font-size: 1.04rem;
+        line-height: 1.86;
+      }
     }
 
     .miradia-richtext h1,
     .miradia-richtext h2,
     .miradia-richtext h3,
     .miradia-richtext h4 {
-      margin: 1.2rem 0 0.85rem 0;
+      margin: 1.0rem 0 .75rem 0;
       line-height: 1.25;
-      font-weight: 650;
-      color: white;
+      font-weight: 700;
+      color: rgba(255,255,255,.98);
       position: relative;
-      padding-left: 12px;
+      padding-left: 10px;
     }
     .miradia-richtext h1::before,
     .miradia-richtext h2::before,
@@ -550,44 +548,46 @@ const SliderStyles = () => (
       content: "";
       position: absolute;
       left: 0;
-      top: 0;
-      bottom: 0;
-      width: 4px;
+      top: .15em;
+      bottom: .15em;
+      width: 3px;
       background: linear-gradient(to bottom, var(--m-sky), var(--m-green));
       border-radius: 999px;
+      opacity: .95;
     }
 
-    .miradia-richtext p { margin: 0.9rem 0; }
-    .miradia-richtext ul, .miradia-richtext ol { margin: 0.9rem 0; padding-left: 1.35rem; }
-    .miradia-richtext li { margin: 0.45rem 0; }
+    .miradia-richtext p { margin: .75rem 0; }
+    .miradia-richtext ul, .miradia-richtext ol { margin: .75rem 0; padding-left: 1.2rem; }
+    .miradia-richtext li { margin: .35rem 0; }
 
     .miradia-richtext pre,
     .miradia-richtext code {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      background: var(--m-code-bg) !important;
-      border: 1px solid rgba(255,255,255,.16);
+      background: rgba(0,0,0,.28) !important;
+      border: 1px solid rgba(255,255,255,.14);
       border-radius: 12px;
       padding: 10px 12px;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       color: rgba(255,255,255,.92);
-      margin: 0.9rem 0;
+      margin: .8rem 0;
       font-size: 0.9rem;
-      line-height: 1.45;
+      line-height: 1.5;
     }
 
     .miradia-richtext a {
       color: var(--m-sky);
       text-decoration: none;
-      border-bottom: 1px solid rgba(64,168,220,.35);
+      border-bottom: 1px solid rgba(64,168,220,.32);
       padding-bottom: 1px;
-      transition: all 0.25s ease;
+      transition: color .18s ease, border-color .18s ease;
     }
     .miradia-richtext a:hover {
       color: var(--m-green);
-      border-bottom-color: rgba(76,192,79,.55);
+      border-bottom-color: rgba(76,192,79,.48);
     }
 
+    /* scrollbar (inchangé, marque Miradia) */
     .miradia-scroll::-webkit-scrollbar{ width: 9px; }
     .miradia-scroll::-webkit-scrollbar-thumb{
       background: linear-gradient(to bottom, var(--m-sky), var(--m-green));
@@ -605,6 +605,16 @@ const SliderStyles = () => (
       background-size:cover;
       background-position:center;
       will-change: opacity, transform;
+    }
+
+    @media (prefers-reduced-motion: reduce){
+      .rise-hold, .rise-show{
+        opacity: 1 !important;
+        transform: none !important;
+        filter: none !important;
+        transition: none !important;
+      }
+      .bg-layer{ animation: none !important; }
     }
   `}</style>
 );
@@ -646,7 +656,7 @@ const BackgroundLayers = ({ prevBg, curBg, bgFadeIn, fadeMs, isDark }) => {
         }}
       />
 
-      {/* overlays: ✅ dark => beaucoup plus noir */}
+      {/* overlays: dark => beaucoup plus noir */}
       <div
         className="absolute inset-0"
         style={{ backgroundColor: isDark ? "rgba(0,0,0,0.26)" : "rgba(0,0,0,0.10)" }}
@@ -813,20 +823,21 @@ const SlideItem = ({
   </div>
 );
 
+/* ✅ Inactive: plus flat & lisible */
 const InactiveSlideContent = ({ slide, idx, isMobile, goTo }) => (
-  <div className="h-full flex flex-col justify-center items-center text-center px-2">
-    <div className="text-white/80 text-[11px] tracking-[0.25em] uppercase mb-2">
+  <div className="h-full flex flex-col justify-center items-center text-center px-2 gap-3">
+    <div className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-white/10 border border-white/15 text-white/80 text-[11px] tracking-[0.22em]">
       {String(idx + 1).padStart(2, "0")}
     </div>
 
-    <div className="text-white font-semibold text-sm sm:text-base line-clamp-2 max-w-[18rem] drop-shadow-[0_10px_40px_rgba(0,0,0,.35)]">
+    <div className="text-white/95 font-semibold text-sm sm:text-base line-clamp-2 max-w-[18rem]">
       {slide.title || "—"}
     </div>
 
     {slide.tag && (
-      <p className="mt-2 text-[10px] sm:text-xs uppercase tracking-[0.3em] text-[var(--m-green)] font-medium truncate max-w-full">
+      <span className="inline-flex items-center px-3 py-1 rounded-full bg-black/25 border border-white/10 text-[10px] sm:text-xs uppercase tracking-[0.28em] text-[var(--m-green)] font-semibold max-w-full truncate">
         {slide.tag}
-      </p>
+      </span>
     )}
 
     {!isMobile && (
@@ -836,7 +847,7 @@ const InactiveSlideContent = ({ slide, idx, isMobile, goTo }) => (
           e.stopPropagation();
           goTo(idx);
         }}
-        className="mt-4 px-5 py-2 rounded-xl border border-white/25 text-white text-xs font-semibold opacity-0 translate-y-2 transition-all duration-500 group-hover:opacity-100 group-hover:translate-y-0 hover:bg-white/10 hover:border-white/40 focus:outline-none focus:ring-2 focus:ring-[var(--m-sky)]"
+        className="mt-1 px-5 py-2 rounded-lg bg-white/10 hover:bg-white/15 border border-white/20 hover:border-white/30 text-white text-xs font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-[var(--m-sky)]"
         aria-label={`Voir ${slide.title}`}
       >
         Voir
@@ -849,15 +860,14 @@ const ActiveSlideContent = ({ slide, idx, total, revealContent, isPaused, alignC
   <div className={`h-full flex flex-col justify-between ${alignClass}`}>
     <div className={`${revealContent ? "rise-show rise-d1" : "rise-hold"}`}>
       <div className="miradia-title-plate">
+        {/* ✅ Tag en pill (flat) */}
         {slide.tag && (
-          <p className="uppercase tracking-[0.3em] text-white/90 mb-2 sm:mb-3 font-medium flex items-center gap-2 text-[10px] sm:text-xs">
-            <span className="inline-block w-5 sm:w-7 h-px bg-gradient-to-r from-[var(--m-green)] to-transparent"></span>
+          <span className="inline-flex items-center px-3 py-1 rounded-full bg-black/25 border border-white/12 text-[10px] sm:text-xs uppercase tracking-[0.28em] text-white/90 font-semibold">
             {slide.tag}
-            <span className="inline-block w-5 sm:w-7 h-px bg-gradient-to-l from-[var(--m-green)] to-transparent"></span>
-          </p>
+          </span>
         )}
 
-        <h3 className="font-extrabold leading-tight text-[var(--m-sky)] drop-shadow-[0_10px_30px_rgba(0,0,0,.65)] text-2xl sm:text-3xl md:text-4xl lg:text-5xl">
+        <h3 className="mt-3 font-extrabold leading-tight text-[var(--m-sky)] drop-shadow-[0_10px_30px_rgba(0,0,0,.65)] text-2xl sm:text-3xl md:text-4xl lg:text-5xl">
           {slide.title}
         </h3>
       </div>

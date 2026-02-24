@@ -3,29 +3,81 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import CmsSectionRenderer from "../../UserManagementDashboard/Components/Backoffice/Miradia/cms/CmsSectionRenderer";
 
+// ✅ Navbar + Footer (si c’est une page dédiée)
+import NavBarMiradia from "../../../component/navbar/NavbarMiradia"; // adapte si besoin
+import Footer from "../Footer"; // adapte si besoin
+
 // ✅ Vite donne l'URL réelle du CSS (dev/prod)
 import tailwindCssPath from "/src/index.css?url";
 
+// 🔁 Mets ici l'ID CMS de ta section "Domaines d’intervention"
 const CMS_DOMAINES_ID = 2;
 
+/**
+ * ✅ Même stratégie que Bénéficiaires:
+ * - scroll DANS l’iframe
+ * - autoHeight=false + iframe hauteur écran
+ * - sticky OK si besoin
+ */
+
+// ✅ Reset iframe (scroll interne + pas de marges + fond dark bleu)
 const CMS_RESET = `
-  html, body { margin: 0 !important; padding: 0 !important; }
-  body { min-height: auto !important; height: auto !important; display: flow-root !important; }
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    height: 100% !important;
+  }
+
+  body {
+    height: 100% !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important; /* ✅ scroll DANS l’iframe */
+    display: block !important;
+    background: transparent !important;
+  }
+
+  /* ✅ Fond BLEU en mode dark (dans l’iframe) */
+  html.dark body{
+    background:
+      radial-gradient(1200px circle at 20% 0%, rgba(14,165,233,0.18), transparent 55%),
+      radial-gradient(900px circle at 80% 20%, rgba(2,132,199,0.14), transparent 55%),
+      linear-gradient(180deg, #020a1a 0%, #041a33 45%, #020a1a 100%) !important;
+  }
+
   body > *:first-child { margin-top: 0 !important; }
-  body > *:last-child { margin-bottom: 0 !important; }
+  body > *:last-child  { margin-bottom: 0 !important; }
 `;
 
+// ✅ Patch CSS iframe (z-index safe + fond derrière + sticky safe si futur)
 const DOMAINES_PATCH_CSS = `
-  /* ✅ évite les soucis de superposition / z-index dans l'iframe */
-  #mrd-domains{ position:relative; z-index:0; isolation:isolate; }
-  #mrd-bg{ z-index:-10 !important; }
+  /* ✅ évite les soucis de stacking/overflow */
+  #mrd-domains, #mrd-domaines, #mrd-domains-root, #mrd-domains-intervention {
+    position: relative;
+    isolation: isolate;
+    min-height: 100% !important;
+    overflow: visible !important;
+  }
+
+  /* si ton template a un bg */
+  #mrd-bg { z-index: -10 !important; }
+
+  /* si ton template utilise des sections/cards */
+  html.dark .mrd-card,
+  html.dark .mrd-section,
+  html.dark .mrd-row-card{
+    background-color: rgba(2, 16, 34, 0.72) !important;
+    border-color: rgba(56, 189, 248, 0.14) !important;
+  }
 `;
 
 function normalizeCss(input) {
   let s = String(input ?? "");
   s = s.replace(/<style[^>]*>/gi, "").replace(/<\/style>/gi, "");
   const t = s.trim();
-  if ((t.startsWith("`") && t.endsWith("`")) || (t.startsWith("```") && t.endsWith("```"))) {
+  if (
+    (t.startsWith("`") && t.endsWith("`")) ||
+    (t.startsWith("```") && t.endsWith("```"))
+  ) {
     s = t.replace(/^`{1,3}/, "").replace(/`{1,3}$/, "");
   }
   return s;
@@ -46,14 +98,16 @@ export default function DomainesIntervention() {
   useEffect(() => {
     const controller = new AbortController();
 
-    // ✅ base backend propre + endpoint API (corrige les erreurs /api manquant)
     const apiBase = String(API_BASE).replace(/\/api\/?$/, "").replace(/\/$/, "");
     const url = `${apiBase}/api/cms-sectionspublic/${CMS_DOMAINES_ID}`;
 
     setState({ loading: true, error: "", section: null });
 
     axios
-      .get(url, { headers: { Accept: "application/json" }, signal: controller.signal })
+      .get(url, {
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      })
       .then((res) => {
         const json = res.data;
         const okStatus = String(json?.status || "").toLowerCase() === "published";
@@ -79,42 +133,63 @@ export default function DomainesIntervention() {
     return () => controller.abort();
   }, [API_BASE]);
 
-  if (state.loading) {
-    return <div className="text-sm text-slate-500 dark:text-slate-400">Chargement…</div>;
-  }
-
-  if (!state.section) {
-    return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700 dark:border-white/10 dark:bg-slate-950/30 dark:text-slate-200">
-        {state.error || "Aucune section CMS disponible."}
-      </div>
-    );
-  }
-
   const apiBase = String(API_BASE).replace(/\/api\/?$/, "").replace(/\/$/, "");
 
-  // ✅ IMPORTANT: URL ABSOLUE vers le FRONT (évite 8000/src/index.css)
+  // ✅ URL ABSOLUE vers le FRONT (évite 8000/src/index.css)
   const frontOrigin = typeof window !== "undefined" ? window.location.origin : "";
   const tailwindCssUrl = frontOrigin ? new URL(tailwindCssPath, frontOrigin).href : tailwindCssPath;
 
   return (
-    <div className="w-full lg:px-28 md:px-0 min-h-[1800px]  bg-white dark:bg-slate-950 p-0">
-      <CmsSectionRenderer
-        mode="iframe"
-        html={state.section.html || ""}
-        css={state.section.css || ""}
-        js={state.section.js || ""}
-        allowJs
-        autoHeight
-        minHeight={80}
-        extraBottom={0}
-        extraCss={`${CMS_RESET}\n${DOMAINES_PATCH_CSS}`}
-        syncParentTheme
-        className="w-full"
-        canvasCssUrls={[tailwindCssUrl]} // ✅ URL ABSOLUE FRONT
-        baseHref={apiBase + "/"}         // ✅ baseHref backend (images/ressources CMS)
-        previewBackground="transparent"
-      />
+    <div
+      className="
+        min-h-[100dvh] flex flex-col
+        bg-white
+        dark:bg-[#020a1a]
+        dark:bg-[radial-gradient(1200px_circle_at_20%_0%,rgba(14,165,233,0.18),transparent_55%),radial-gradient(900px_circle_at_80%_20%,rgba(2,132,199,0.14),transparent_55%),linear-gradient(180deg,#020a1a_0%,#041a33_45%,#020a1a_100%)]
+      "
+    >
+      {/* ✅ Navbar (fixe) */}
+      <NavBarMiradia />
+
+      {/* ✅ Main: padding-top pour compenser la navbar fixe */}
+      <main className="flex-1 pt-20">
+        <div className="w-full md:px-0 p-0">
+          {state.loading ? (
+            <div className="text-sm text-slate-500 dark:text-slate-200/80 px-4 py-6">
+              Chargement…
+            </div>
+          ) : !state.section ? (
+            <div className="px-4 py-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-blue-50/90">
+                {state.error || "Aucune section CMS disponible."}
+              </div>
+            </div>
+          ) : (
+            // ✅ Hauteur écran => scroll DANS l’iframe (même que Beneficiaires)
+            <div className="w-full h-[calc(100dvh-80px)]">
+              <CmsSectionRenderer
+                mode="iframe"
+                html={state.section.html || ""}
+                css={state.section.css || ""}
+                js={state.section.js || ""}
+                allowJs
+                autoHeight={false} // ✅ IMPORTANT (comme Beneficiaires)
+                minHeight={0}
+                extraBottom={0}
+                extraCss={`${CMS_RESET}\n${DOMAINES_PATCH_CSS}`}
+                syncParentTheme
+                className="w-full h-full"
+                canvasCssUrls={[tailwindCssUrl]}
+                baseHref={apiBase + "/"}
+                previewBackground="transparent"
+              />
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* ✅ Footer */}
+      <Footer />
     </div>
   );
 }

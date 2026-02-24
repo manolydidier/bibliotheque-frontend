@@ -23,14 +23,17 @@ const Footer = () => {
       { label: 'Accueil', href: '/' },
       { label: 'À propos de MIRADIA', href: '/about' },
       { label: 'Actualités', href: '/articles' },
-      { label: 'Ressources', href: '/ressources' },
+      { label: 'Plateform', href: '/librairie-home' },
     ],
+
+    // ✅ RECTIFIÉ : uniquement des routes existantes dans App.jsx
     actions: [
-      { label: 'Projets & initiatives', href: '/projets' },
-      { label: 'Partenaires', href: '/partenaires' },
-      { label: 'Communautés locales', href: '/communautes' },
-      { label: 'Contact', href: '/contact' },
+      { label: 'Bénéficiaires', href: '/beneficiaires' },
+      { label: "Domaines d’intervention", href: '/domaines' },
+      { label: 'Documentation', href: '/documentation' },
+      { label: 'FAQ', href: '/faq' },
     ],
+
     legal: [
       { label: 'Mentions légales', href: '/termsofuse', tab: 'terms' },
       { label: 'Politique de confidentialité', href: '/termsofuse', tab: 'privacy' },
@@ -47,9 +50,7 @@ const Footer = () => {
 
   // Helper pour construire le path + query des liens légaux
   const buildLegalTo = (link) => {
-    if (!link.tab) {
-      return link.href;
-    }
+    if (!link.tab) return link.href;
     const searchParams = new URLSearchParams(location.search);
     searchParams.set('tab', link.tab);
     return `${link.href}?${searchParams.toString()}`;
@@ -118,7 +119,7 @@ const Footer = () => {
             </ul>
           </div>
 
-          {/* Liens Actions */}
+          {/* ✅ Liens Actions & communautés (corrigés) */}
           <div className="footer-col footer-col-delay-2">
             <h4 className="text-lg font-semibold mb-4 text-slate-100">
               Actions &amp; communautés

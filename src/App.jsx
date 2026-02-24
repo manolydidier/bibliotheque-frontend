@@ -58,6 +58,7 @@ import OrgNodeForm from './pages/UserManagementDashboard/Components/Backoffice/M
 import CmsSectionForm from './pages/UserManagementDashboard/Components/Backoffice/Miradia/cms/CmsSectionForm';
 import CmsSectionsIndex from './pages/UserManagementDashboard/Components/Backoffice/Miradia/cms/CmsSectionsIndex';
 import Beneficiaires from './pages/Miradia/beneficiaires/Beneficiaires';
+import DomainesIntervention from './pages/Miradia/domaineIntevention/DomainesIntervention';
 
 function BootScreen() {
   return (
@@ -128,7 +129,7 @@ export default function App() {
               <Routes>
                 {/* Routes publiques */}
                 <Route element={<DefaultLayout />}>
-                  <Route index element={<Accueil />} />
+                  <Route path="/librairie-home" element={<Accueil />} />
 
                   {/* Pages invités uniquement */}
                   <Route element={<RequireGuest redirectTo="/" />}>
@@ -150,7 +151,6 @@ export default function App() {
                     <Route path="/settings" element={<UserManagementDashboard />} />
                     <Route path="/articles" element={<ArticlesPage />} />
                     <Route path="/articles/:show" element={<Visualiseur />} />
-                    <Route path="/bureaux-public/:id" element={<BureauPublicShow />} />
                   </Route>
                 </Route>
 
@@ -348,8 +348,12 @@ export default function App() {
                  <Route path="/documentation" element={<DocumentationPage />} />
                 <Route path="/guide" element={<UserGuidePage />} />
                 <Route path="/faq" element={<FAQPage />} />
-                <Route path="/miradia" element={<HomeMiradia />} />
+                <Route index element={<HomeMiradia />} />
                 <Route path="/beneficiaires" element={<Beneficiaires/>} />
+                <Route path="/domaines" element={<DomainesIntervention/>} />
+                    <Route path="/bureaux-public/:id" element={<BureauPublicShow />} />
+                 
+
 
               </Routes>
             </Router>

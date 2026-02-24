@@ -25,7 +25,7 @@ export default function PartnerStandardCard({
         "h-full rounded-2xl flex flex-col",
         "bg-white border border-gray-200 hover:border-gray-300",
         "dark:bg-white/5 dark:border-white/10 dark:hover:border-white/20",
-        "transition-colors",
+        "transition-colors mx", 
       ].join(" ")}
     >
       {/* Haut : logo + nom + rôle */}
@@ -91,4 +91,4 @@ export default function PartnerStandardCard({
       )}
     </article>
   );
-}
+} 

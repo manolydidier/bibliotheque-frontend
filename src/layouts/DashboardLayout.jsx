@@ -550,13 +550,7 @@ const DashboardLayout = () => {
             link: '/articlescontroler',
             accent: 'indigo',
           },
-          {
-          id: 'miradiaSlidesBo',            // 👈 NEW
-          tKey: 'layout.menu.miradiaSlidesBo',
-          icon: <FaImages />,
-          link: '/miradia-slidescontroler',
-          accent: 'sky',
-        },
+          
           {
             id: 'articleNew',
             tKey: 'layout.menu.articleNew',
@@ -571,12 +565,6 @@ const DashboardLayout = () => {
             link: '/articles/trashed',
             accent: 'rose',
           },
-        ],
-      },
-      {
-        id: 'system',
-        titleKey: 'layout.sections.settings',
-        items: [
           {
             id: 'categoriesTags',
             tKey: 'layout.menu.categoriesTags',
@@ -584,6 +572,20 @@ const DashboardLayout = () => {
             link: '/configuration',
             accent: 'amber',
           },
+        ],
+      },
+      {
+        id: 'system',
+        titleKey: 'layout.sections.settings',
+        items: [
+          
+           {
+          id: 'miradiaSlidesBo',            // 👈 NEW
+          tKey: 'layout.menu.miradiaSlidesBo',
+          icon: <FaImages />,
+          link: '/miradia-slidescontroler',
+          accent: 'sky',
+        },
           {
             id: 'societesBo',
             tKey: 'layout.menu.societesBo',

@@ -615,7 +615,7 @@ function TitleBlock() {
             background: `linear-gradient(135deg, ${MIRADIA.teal}, ${MIRADIA.navy} 55%, ${MIRADIA.sky})`,
           }}
         >
-          <h2 className="text-3xl md:text-4xl font-bold mb-3">Notre organisation</h2>
+          <h2 className="text-3xl md:text-5xl mb-3 font-black tracking-tight">Notre organisation</h2>
           <div
             className="w-32 h-1 mx-auto mb-5 rounded-full"
             style={{ background: `linear-gradient(90deg, ${MIRADIA.green}, ${MIRADIA.yellow})` }}

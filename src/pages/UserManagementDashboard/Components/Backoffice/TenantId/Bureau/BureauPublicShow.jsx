@@ -13,6 +13,8 @@ import {
   FiX,
 } from "react-icons/fi";
 import api from "../../../../../../services/api";
+import Footer from "../../../../../Miradia/Footer";
+import NavBarMiradia from "../../../../../../component/navbar/NavbarMiradia";
 
 /* ---------- CSS personnalisé pour scrollbar ---------- */
 const customScrollbarStyle = `
@@ -408,6 +410,8 @@ export default function BureauPublicShow() {
   const isActiveGlobal = isActiveFlag(bureau);
 
   return (
+    <>
+   <NavBarMiradia/>
     <div className="min-h-screen pt-24 bg-gradient-to-br from-slate-50 via-sky-50/40 to-slate-100 text-slate-900 px-4 py-10">
       <div className="w-full max-w-5xl mx-auto space-y-6">
         {/* En-tête : Retour + Info société */}
@@ -786,5 +790,8 @@ export default function BureauPublicShow() {
         </div>
       </div>
     </div>
+      <Footer/>
+
+     </>
   );
 }

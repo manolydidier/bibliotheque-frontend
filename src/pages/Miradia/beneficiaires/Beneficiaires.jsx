@@ -4,7 +4,7 @@ import axios from "axios";
 import CmsSectionRenderer from "../../UserManagementDashboard/Components/Backoffice/Miradia/cms/CmsSectionRenderer";
 
 // ✅ Navbar + Footer
-import NavBarMiradia from "../../../component/navbar/NavBarMiradia"; // ✅ adapte si besoin
+import NavBarMiradia from "../../../component/navbar/NavbarMiradia"; // ✅ adapte si besoin
 import Footer from "../Footer"; // ✅ adapte si besoin
 
 // ✅ Vite donne l'URL réelle du CSS (dev/prod)
