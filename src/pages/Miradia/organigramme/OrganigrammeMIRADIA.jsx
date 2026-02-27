@@ -288,7 +288,7 @@ function Avatar({ person, ringColor, reveal }) {
     >
       {broken || !person.photo ? (
         <div
-          className="h-14 w-14 rounded-2xl grid place-items-center font-extrabold text-sm bg-white text-slate-900 dark:bg-[#071223] dark:text-slate-50"
+          className="h-14 w-14 rounded-2xl grid place-items-center font-extrabold text-[20px] bg-white text-slate-900 dark:bg-[#071223] dark:text-slate-50"
           style={{ boxShadow: "0 10px 22px rgba(0,0,0,0.14)" }}
         >
           {initials(full)}
@@ -339,7 +339,7 @@ function PersonCard({ person, onOpen, reveal = false, onHover }) {
       onBlur={handleLeave}
       className={cx(
         "group relative",
-        "w-[260px]",
+        "w-[300px]",
         "rounded-3xl px-5 pt-9 pb-4 text-center",
         "cursor-pointer outline-none",
         "backdrop-blur-xl",
@@ -372,20 +372,20 @@ function PersonCard({ person, onOpen, reveal = false, onHover }) {
       <div className={cx("transition-opacity duration-300", reveal ? "opacity-100" : "opacity-0")}>
         <div
           className={cx(
-            "text-[13px] font-semibold leading-tight break-words",
+            "text-[20px] font-semibold leading-tight break-words", // Taille de texte changée
             isTop ? "text-white" : "text-slate-900 dark:text-slate-50"
           )}
         >
           {person.name} <span className="font-extrabold">{person.surname}</span>
         </div>
 
-        <div className={cx("mt-1 text-[11px] leading-snug break-words", isTop ? "text-white/80" : "text-slate-600 dark:text-slate-300")}>
+        <div className={cx("mt-1 text-[20px] leading-snug break-words", isTop ? "text-white/80" : "text-slate-600 dark:text-slate-300")}>
           {person.dept || "—"}
         </div>
 
         <div
           className={cx(
-            "mt-1 text-[13px] font-extrabold leading-snug break-words",
+            "mt-1 text-[20px] font-extrabold leading-snug break-words", // Taille de texte changée
             isTop ? "text-white" : "text-[#124B7C] dark:text-[#3AA6DC]"
           )}
         >
@@ -396,7 +396,7 @@ function PersonCard({ person, onOpen, reveal = false, onHover }) {
           <div className="mt-2 flex justify-center">
             <span
               className={cx(
-                "inline-flex items-center justify-center rounded-full px-3 py-1 text-[11px] font-semibold",
+                "inline-flex items-center justify-center rounded-full px-3 py-1 text-[20px] font-semibold", // Taille de texte changée
                 "transition-transform duration-300 group-hover:scale-[1.02]",
                 isTop
                   ? "bg-white/15 text-white ring-1 ring-white/25"
@@ -420,7 +420,7 @@ function Modal({ open, person, onClose }) {
   const [mounted, setMounted] = useState(false);
   const [enter, setEnter] = useState(false);
 
-  useEffect(() => {
+   useEffect(() => {
     if (!open) {
       setEnter(false);
       const t = setTimeout(() => setMounted(false), 180);
@@ -502,8 +502,8 @@ function Modal({ open, person, onClose }) {
               </div>
 
               <div className="min-w-0">
-                <div className="text-[18px] font-extrabold text-slate-900 dark:text-slate-50 truncate">{full}</div>
-                <div className="mt-0.5 text-sm text-slate-700/90 dark:text-slate-200/80 truncate">
+                <div className="text-[25px] font-extrabold text-slate-900 dark:text-slate-50 truncate">{full}</div>
+                <div className="mt-0.5 text-[20px] text-slate-700/90 dark:text-slate-200/80 truncate">
                   {role}
                   {dept ? ` • ${dept}` : ""}
                 </div>
@@ -537,9 +537,9 @@ function Modal({ open, person, onClose }) {
 
           <div className="px-6 pb-6 grid gap-4">
             <div className="rounded-2xl p-4 bg-black/3 dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10 hover:bg-black/5 dark:hover:bg-white/7 transition-colors">
-              <div className="text-[11px] font-black tracking-wide text-[#124B7C] dark:text-slate-200">📧 CONTACT</div>
+              <div className="text-[20px] font-black tracking-wide text-[#124B7C] dark:text-slate-200">📧 CONTACT</div>
 
-              <div className="mt-3 grid gap-2 text-sm">
+              <div className="mt-3 grid gap-2 text-[20px]">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-slate-600 dark:text-slate-300">Email</span>
                   {mail ? (
@@ -568,13 +568,13 @@ function Modal({ open, person, onClose }) {
             </div>
 
             <div className="rounded-2xl p-4 bg-black/3 dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10 hover:bg-black/5 dark:hover:bg-white/7 transition-colors">
-              <div className="text-[11px] font-black tracking-wide text-[#124B7C] dark:text-slate-200">📝 BIOGRAPHIE</div>
+              <div className="text-[20px] font-black tracking-wide text-[#124B7C] dark:text-slate-200">📝 BIOGRAPHIE</div>
 
               <div className="mt-3 max-h-[60vh] overflow-auto pr-2 modal-scroll">
                 {safeBio ? (
                   <div className="rich-bio text-slate-800 dark:text-slate-100" dangerouslySetInnerHTML={{ __html: safeBio }} />
                 ) : (
-                  <div className="text-sm text-slate-600 dark:text-slate-300">Aucune biographie disponible.</div>
+                  <div className="text-[20px] text-slate-600 dark:text-slate-300">Aucune biographie disponible.</div>
                 )}
               </div>
             </div>
@@ -607,7 +607,7 @@ function Modal({ open, person, onClose }) {
 ========================= */
 function TitleBlock() {
   return (
-    <div className="w-full">
+    <div className="w-full mb-12">
       <div className="rounded-3xl overflow-hidden ring-1 ring-black/5 dark:ring-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.14)]">
         <div
           className="px-6 py-10 text-center text-white"
@@ -620,7 +620,7 @@ function TitleBlock() {
             className="w-32 h-1 mx-auto mb-5 rounded-full"
             style={{ background: `linear-gradient(90deg, ${MIRADIA.green}, ${MIRADIA.yellow})` }}
           />
-          <p className="text-white/85 max-w-2xl mx-auto">
+          <p className="text-white/85 max-w-2xl mx-auto text-[20px]">
             Survolez une carte (parent) pour afficher ses liens • Cliquez pour voir les détails.
           </p>
 
@@ -688,8 +688,8 @@ export default function OrganigrammeMIRADIAPro() {
     const CARD_W = 260;
     const CARD_H = 180;
 
-    const CELL_X = 290;
-    const CELL_Y = 210;
+    const CELL_X = 320;
+    const CELL_Y = 290;
 
     // ✅ PAD = marge interne du "canvas"
     const PAD = 120;
@@ -770,7 +770,7 @@ export default function OrganigrammeMIRADIAPro() {
 
   const panelHeightPx = useMemo(() => {
     if (!layout) return Math.min(vh * 0.88, 720);
-    const h = Math.max(600, layout.height + 80);
+    const h = Math.max(1200, layout.height + 80);
     return Math.min(vh * 0.88, h);
   }, [layout, vh]);
 
@@ -801,12 +801,12 @@ export default function OrganigrammeMIRADIAPro() {
           )}
 
           {!loading && !error && layout && (
-            <div className="mt-10 flex-col items-center justify-center rounded-3xl bg-white/60 dark:bg-[#0B1626]/55 backdrop-blur-xl ring-1 ring-black/5 dark:ring-white/10 p-3 sm:p-4">
+            <div className=" w-full  flex-col items-center justify-center rounded-3xl bg-white/50 dark:bg-[#0B1626]/55 backdrop-blur-xl ring-1 ring-black/5 dark:ring-white/10 p-3 sm:p-4">
               {/* ✅ CONTENEUR SCROLL */}
               <div
                 ref={scrollRef}
-                className="org-scroll pt-24 pl-24 overflow-auto rounded-2xl flex items-center justify-center"
-                style={{ height: panelHeightPx }}
+                className="org-scroll pt-12 mt-12 pl-8 overflow-auto rounded-2xl flex items-center justify-center"
+                // style={{ height: panelHeightPx }}
                 onMouseLeave={() => setHoveredParentId(null)} // ✅ si tu sors du canvas, on cache les liens
               >
                 <div className="relative flex items-center justify-center" style={{ width: layout.width, height: layout.height }}>
@@ -925,7 +925,7 @@ export default function OrganigrammeMIRADIAPro() {
                 </div>
               </div>
 
-              <div className="mt-3 flex flex-wrap hidden items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-300">
+              <div className="mt-3 flex flex-wrap hidden items-center justify-between gap-2 text-[20px] text-slate-600 dark:text-slate-300">
                 <div>
                   Astuce : ajuste <span className="font-semibold">pos_x / pos_y</span> dans la DB pour déplacer les cartes.
                 </div>

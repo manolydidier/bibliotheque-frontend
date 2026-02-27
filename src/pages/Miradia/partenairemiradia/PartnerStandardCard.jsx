@@ -41,7 +41,7 @@ export default function PartnerStandardCard({
               decoding="async"
             />
           ) : (
-            <span className="text-2xl md:text-3xl font-semibold text-gray-800 dark:text-slate-100 tracking-wide">
+            <span className="text-[20px] md:text-[22px] font-semibold text-gray-800 dark:text-slate-100 tracking-wide">
               {logoText}
             </span>
           )}
@@ -51,13 +51,13 @@ export default function PartnerStandardCard({
         <div className="w-full">
           <div className="flex items-center justify-center gap-2">
             {countryFlag ? <span className="text-sm">{countryFlag}</span> : null}
-            <h3 className="text-sm md:text-base font-medium text-gray-900 dark:text-slate-50 truncate">
+            <h3 className="text-[20px] md:text-[22px] font-medium text-gray-900 dark:text-slate-50 truncate">
               {name}
             </h3>
           </div>
 
           {role ? (
-            <p className="text-xs md:text-[13px] text-gray-500 dark:text-slate-300 font-light line-clamp-2 mt-1">
+            <p className="text-[16px] md:text-[18px] text-gray-500 dark:text-slate-300 font-light line-clamp-2 mt-1">
               {role}
             </p>
           ) : null}
@@ -68,7 +68,7 @@ export default function PartnerStandardCard({
       {(location || hasLink) && (
         <div className="mt-auto px-5 pb-4 pt-3 border-t border-gray-100 dark:border-white/10 flex items-center gap-2">
           {location ? (
-            <p className="flex-1 text-xs text-gray-500 dark:text-slate-300 font-light truncate">
+            <p className="flex-1 text-[16px] text-gray-500 dark:text-slate-300 font-light truncate">
               {location}
             </p>
           ) : (
@@ -91,4 +91,4 @@ export default function PartnerStandardCard({
       )}
     </article>
   );
-} 
+}

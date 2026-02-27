@@ -59,6 +59,7 @@ import CmsSectionForm from './pages/UserManagementDashboard/Components/Backoffic
 import CmsSectionsIndex from './pages/UserManagementDashboard/Components/Backoffice/Miradia/cms/CmsSectionsIndex';
 import Beneficiaires from './pages/Miradia/beneficiaires/Beneficiaires';
 import DomainesIntervention from './pages/Miradia/domaineIntevention/DomainesIntervention';
+import Autres from './pages/Miradia/Autres/Autres';
 
 function BootScreen() {
   return (
@@ -351,7 +352,8 @@ export default function App() {
                 <Route index element={<HomeMiradia />} />
                 <Route path="/beneficiaires" element={<Beneficiaires/>} />
                 <Route path="/domaines" element={<DomainesIntervention/>} />
-                    <Route path="/bureaux-public/:id" element={<BureauPublicShow />} />
+                <Route path="/bureaux-public/:id" element={<BureauPublicShow />} />
+                <Route path="/autres/:id" element={<Autres/>} />
                  
 
 

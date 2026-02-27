@@ -384,7 +384,7 @@ export default function CmsSectionRenderer({
         title="cms-section"
         sandbox={iframeSandbox}
         srcDoc={srcDoc}
-        className="w-full rounded-2xl border border-slate-200 bg-white dark:bg-slate-950"
+        className="w-full bg-red-800  border border-slate-200 bg-white dark:bg-slate-950"
         style={{
           width: "100%",
           height: autoHeight ? `${iframeHeight}px` : "100%",
@@ -395,3 +395,5 @@ export default function CmsSectionRenderer({
     </div>
   );
 }
+
+

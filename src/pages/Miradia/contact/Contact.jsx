@@ -1,6 +1,7 @@
 // src/pages/UserManagementDashboard/Components/Accueil/Contact.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
+
 import {
   FiMail,
   FiPhone,
@@ -573,7 +574,7 @@ export default function ContactPage() {
                   style={{ background: "linear-gradient(90deg, #4CC051, #FCCA00)" }}
                 />
 
-                <p className="mt-6 max-w-3xl mx-auto text-white/90 text-base md:text-lg leading-relaxed">
+                <p className="mt-6 max-w-3xl text-[20px] mx-auto text-white/90 text-base md:text-lg leading-relaxed">
                   Une question, une collaboration, une demande de partenariat ? Écrivez-nous,
                   ou trouvez le bureau le plus proche sur la carte.
                 </p>
@@ -844,11 +845,15 @@ export default function ContactPage() {
   );
 }
 
-function MiniStat({ label, value }) {
+// Statistiques avec icônes
+function MiniStat({ label, value, Icon }) {
   return (
     <div className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/15 hover:bg-white/15 transition-all duration-300">
       <div className="text-xl font-extrabold">{value}</div>
       <div className="text-xs font-semibold text-white/90">{label}</div>
+      <div className="mt-2">
+        {Icon && <Icon className="text-2xl text-sky-400" />}
+      </div>
     </div>
   );
 }

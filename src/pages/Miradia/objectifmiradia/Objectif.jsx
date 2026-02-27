@@ -156,7 +156,7 @@ export default function Objectif() {
         allowJs
         autoHeight
         heightStrategy="lastElement"
-        minHeight={910}
+        minHeight={1010}
         extraBottom={0}
         extraCss={`${CMS_RESET}\n${OBJECTIF_PATCH_CSS}`}
         syncParentTheme

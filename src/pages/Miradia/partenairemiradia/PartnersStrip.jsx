@@ -224,12 +224,12 @@ function PartnersTitleBlock() {
             style={{ background: `linear-gradient(90deg, ${MIRADIA.green}, ${MIRADIA.yellow}, ${MIRADIA.sky})` }}
           />
 
-          <p className="mt-4 max-w-3xl mx-auto text-sm md:text-base text-slate-600 dark:text-slate-300 leading-relaxed">
+          <p className="mt-4 max-w-3xl mx-auto text-[20px] md:text-[22px] text-slate-600 dark:text-slate-300 leading-relaxed">
             MIRADIA connecte ses partenaires (sociétés, ONG, institutions) dans un espace commun pour partager et consulter
             des documents, rapports, albums photos et supports de formation.
           </p>
 
-          <p className="mt-3 text-xs md:text-sm text-slate-500 dark:text-slate-400">
+          <p className="mt-3 text-[16px] md:text-[18px] text-slate-500 dark:text-slate-400">
             Survolez pour mettre en pause • Cliquez pour ouvrir le site (si disponible).
           </p>
         </div>

@@ -634,7 +634,8 @@ export default function GrapesEditorModal({
   assetUploadHandler,
 }) {
   const editorRef = useRef(null);
-
+const [isLinkDialogOpen, setLinkDialogOpen] = useState(false);
+const [linkUrl, setLinkUrl] = useState('');
   const importInputRef = useRef(null);
   const assetInputRef = useRef(null);
 
@@ -696,6 +697,21 @@ export default function GrapesEditorModal({
     }
     return parseThemeFromCss(STARTER_CSS) || { light: {}, dark: {} };
   });
+const openLinkDialog = () => setLinkDialogOpen(true);
+const closeLinkDialog = () => setLinkDialogOpen(false);
+
+const handleLinkInputChange = (e) => setLinkUrl(e.target.value);
+
+const applyLinkToSelected = () => {
+  const selected = editorRef.current?.getSelected();
+  if (!selected || !linkUrl) return;
+
+  // Appliquer le lien à l'élément sélectionné
+  selected.addAttributes({ href: linkUrl, target: '_blank' });
+
+  // Fermer la boîte de dialogue après application
+  closeLinkDialog();
+};
 
   // NEW: AutoTheme coherent based on CSS palette
   const [autoThemeCoherent, setAutoThemeCoherent] = useState(true);
@@ -1867,8 +1883,45 @@ ${body}
           <button type="button" onClick={doRedo} className={cx(BTN, BTN_IDLE)} title="Redo">
             <FiRepeat /> Redo
           </button>
+{/* // Button that opens the link dialog */}
+<button
+  type="button"
+  onClick={openLinkDialog}
+  className={cx(BTN, BTN_IDLE)}
+  title="Ajouter un lien"
+>
+  <FiLink /> Lien
+</button>
 
-          <div className="hidden sm:flex items-center gap-1 ml-1">
+{/* // Modal for adding the link */}
+{isLinkDialogOpen && (
+  <div className="fixed inset-0 bg-gray-500 bg-opacity-50 flex items-center justify-center z-50">
+    <div className="bg-white p-6 rounded-xl max-w-md w-full shadow-lg">
+      <h3 className="text-xl font-bold mb-4">Ajouter un lien</h3>
+      <input
+        type="text"
+        value={linkUrl}
+        onChange={handleLinkInputChange}
+        className="w-full px-4 py-2 border border-slate-300 rounded-xl mb-4"
+        placeholder="Entrez l'URL"
+      />
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={closeLinkDialog}
+          className="bg-gray-300 px-4 py-2 rounded-xl"
+        >
+          Annuler
+        </button>
+        <button
+          onClick={applyLinkToSelected}
+          className="bg-blue-500 text-white px-4 py-2 rounded-xl"
+        >
+          Ajouter
+        </button>
+      </div>
+    </div>
+  </div>
+)}          <div className="hidden sm:flex items-center gap-1 ml-1">
             <button
               type="button"
               onClick={() => setGjsDevice("Desktop")}
