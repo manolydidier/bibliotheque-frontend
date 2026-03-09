@@ -18,7 +18,7 @@ export default function VideoPreview({
   poster,
   sources = [],            // [{src, type}]
   subtitles = [],         // [{src, label, srcLang}] facultatif
-  autoSubtitles = true,   // deviner .vtt à partir de la source
+  autoSubtitles = false,   // deviner .vtt à partir de la source
   height = "70vh",
   allowDownload = true,
 }) {

@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>PDF Light Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --bg:#f8fafc;
+      --panel:#ffffff;
+      --ink:#1f2937;     /* texte principal */
+      --muted:#6b7280;   /* texte secondaire */
+      --border:#e5e7eb;  /* bordures */
+      --ring: rgba(59,130,246,.20); /* focus bleu doux */
+      --accent:#475569;  /* pour spinner */
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    body{background:var(--bg);color:var(--ink);font-size:14px;line-height:1.5}
+
+    .toolbar{
+      position:sticky;top:0;z-index:10;
+      display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;
+      padding:.75rem 1rem;background:var(--panel);
+      border-bottom:1px solid var(--border);
+    }
+    .title{
+      font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-right:auto;color:var(--ink);
+    }
+
+    .btn{
+      appearance:none;border:1px solid var(--border);background:#fff;color:var(--ink);
+      border-radius:.375rem;padding:.45rem .7rem;cursor:pointer;
+      font-weight:500;display:inline-flex;align-items:center;gap:.375rem;
+      transition:background-color .15s ease,border-color .15s ease,transform .06s ease,box-shadow .15s ease;
+      text-decoration:none;
+    }
+    .btn:hover:not(:disabled){background:#f3f4f6;border-color:#d1d5db}
+    .btn:active{transform:translateY(1px)}
+    .btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--ring)}
+    .btn:disabled{opacity:.55;cursor:not-allowed}
+
+    .sep{width:1px;height:24px;background:var(--border)}
+
+    #viewerContainer{
+      position:relative;height:calc(100vh - 68px);overflow:auto;
+      display:flex;align-items:flex-start;justify-content:center;padding:1.25rem;
+    }
+    canvas{
+      background:#fff;border-radius:.375rem;box-shadow:0 2px 8px rgba(0,0,0,.06);
+    }
+
+    .meta{color:var(--muted);display:flex;align-items:center;gap:.5rem}
+    .input{
+      width:64px;border-radius:.375rem;border:1px solid var(--border);background:#fff;color:var(--ink);
+      padding:.35rem .5rem;font-weight:500;text-align:center;
+      transition:border-color .15s ease, box-shadow .15s ease;
+    }
+    .input:focus{outline:none;border-color:#d1d5db;box-shadow:0 0 0 2px var(--ring)}
+
+    .hint{color:var(--muted);padding:1.25rem;text-align:center}
+    .hint code{background:#eef2f7;padding:.125rem .375rem;border-radius:.25rem;font-family:monospace;color:var(--ink)}
+
+    .loader{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+    .spinner{
+      width:28px;height:28px;border-radius:9999px;border:3px solid rgba(0,0,0,.08);
+      border-top-color:var(--accent);animation:spin 1s linear infinite;
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <div class="title" id="doc-title">PDF</div>
+
+    <button class="btn" id="prev">⟨ Préc.</button>
+    <div class="meta">
+      <input class="input" id="page_input" type="number" min="1" value="1" title="Aller à la page" />
+      <span>/ <span id="page_count">?</span></span>
+    </div>
+    <button class="btn" id="next">Suiv. ⟩</button>
+
+    <div class="sep"></div>
+
+    <button class="btn" id="zoom_out">−</button>
+    <button class="btn" id="rotate">↻</button>
+
+    <button class="btn" id="zoom_in">＋</button>
+    <button class="btn" id="fit">Ajuster</button>
+
+    <div class="sep"></div>
+
+    <a class="btn " id="open_raw" target="_blank" rel="noreferrer" style="display:none" ></a>
+    <a class="btn" id="download" download style="display:none" ></a>
+  </div>
+
+  <div id="viewerContainer">
+    <div class="hint" id="hint">Aucun fichier. Utilise <code>?file=</code> dans l'URL.</div>
+    <div class="loader" id="loader" style="display:none"><div class="spinner"></div></div>
+    <canvas id="pdf-canvas" style="display:none;"></canvas>
+  </div>
+
+  <!-- pdf.js servi depuis /public (copie de pdfjs-dist/build) -->
+  <script src="/pdfjs/build/pdf.js"></script>
+  <script>
+    // ---- Params & filename ----
+    const sp = new URLSearchParams(location.search);
+    let fileUrl = sp.get("file") || "";
+    try{ fileUrl = decodeURIComponent(fileUrl); }catch{}
+    function filenameFrom(u){
+      try { return decodeURIComponent(new URL(u, location.href).pathname.split("/").pop() || "document.pdf"); }
+      catch { return "document.pdf"; }
+    }
+
+    // ---- Worker ----
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdfjs/build/pdf.worker.js";
+
+    // ---- Elements ----
+    const titleEl = document.getElementById("doc-title");
+    const hint = document.getElementById("hint");
+    const loader = document.getElementById("loader");
+    const canvas = document.getElementById("pdf-canvas");
+    const ctx = canvas.getContext("2d");
+    const container = document.getElementById("viewerContainer");
+    const pageInput = document.getElementById("page_input");
+    const pageCountEl = document.getElementById("page_count");
+    const btnPrev = document.getElementById("prev");
+    const btnNext = document.getElementById("next");
+    const btnZoomIn = document.getElementById("zoom_in");
+    const btnZoomOut = document.getElementById("zoom_out");
+    const btnFit = document.getElementById("fit");
+    const btnRotate = document.getElementById("rotate");
+    const linkOpen = document.getElementById("open_raw");
+    const linkDownload = document.getElementById("download");
+
+    // ---- State ----
+    let pdfDoc=null, pageNum=1, scale=1.1, fitToWidth=true, rotation=0, rendering=false, pending=null;
+
+    function updateButtons(){
+      btnPrev.disabled = !pdfDoc || pageNum<=1;
+      btnNext.disabled = !pdfDoc || pageNum>=pdfDoc.numPages;
+      pageInput.disabled = !pdfDoc;
+      pageInput.value = pageNum;
+    }
+
+    function renderPage(num){
+      rendering = true;
+      loader.style.display = "flex";
+      pdfDoc.getPage(num).then(page=>{
+        const base = page.getViewport({ scale:1, rotation });
+        let useScale = scale;
+        if (fitToWidth){
+          const maxW = Math.min(container.clientWidth - 24, 1600);
+          useScale = Math.max(0.2, maxW / base.width);
+        }
+        const viewport = page.getViewport({ scale: useScale, rotation });
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        const task = page.render({ canvasContext: ctx, viewport });
+        return task.promise;
+      }).then(()=>{
+        rendering = false;
+        loader.style.display = "none";
+        canvas.style.display = "block";
+        if (pending !== null){ const n=pending; pending=null; renderPage(n); }
+      }).catch(err=>{
+        hint.style.display="block"; canvas.style.display="none"; loader.style.display="none";
+        hint.innerHTML = 'Erreur: <small style="color:#ef4444">'+String(err)+'</small>';
+      });
+    }
+    function queueRender(n){ if(rendering){ pending=n; } else { renderPage(n); } }
+
+    // ---- Events ----
+    btnPrev.addEventListener("click", ()=>{ if (pageNum>1){ pageNum--; updateButtons(); queueRender(pageNum);} });
+    btnNext.addEventListener("click", ()=>{ if (pdfDoc && pageNum<pdfDoc.numPages){ pageNum++; updateButtons(); queueRender(pageNum);} });
+
+    btnZoomIn.addEventListener("click", ()=>{ fitToWidth=false; scale=Math.min(scale+0.15,4); queueRender(pageNum); });
+    btnZoomOut.addEventListener("click", ()=>{ fitToWidth=false; scale=Math.max(scale-0.15,0.25); queueRender(pageNum); });
+    btnFit.addEventListener("click", ()=>{ fitToWidth=true; queueRender(pageNum); });
+    btnRotate.addEventListener("click", ()=>{ rotation=(rotation+90)%360; queueRender(pageNum); });
+
+    pageInput.addEventListener("change", ()=>{
+      if(!pdfDoc) return;
+      const n = Math.min(Math.max(1, +pageInput.value||1), pdfDoc.numPages);
+      pageNum = n; updateButtons(); queueRender(pageNum);
+    });
+
+    window.addEventListener("resize", ()=>{ if (fitToWidth && pdfDoc) queueRender(pageNum); });
+
+    // Raccourcis : ← → + - 0 r
+    window.addEventListener("keydown",(e)=>{
+      const k=(e.key||"").toLowerCase();
+      if(k==="arrowleft") btnPrev.click();
+      else if(k==="arrowright") btnNext.click();
+      else if(k==="+" || k==="=") btnZoomIn.click();
+      else if(k==="-" ) btnZoomOut.click();
+      else if(k==="0") btnFit.click();
+      else if(k==="r") btnRotate.click();
+    });
+
+    // ---- Boot ----
+    (function init(){
+      if(!fileUrl){
+        hint.innerHTML='Aucun PDF fourni. Ajoute <code>?file=/chemin/vers.pdf</code> à l\'URL.';
+        return;
+      }
+      titleEl.textContent = filenameFrom(fileUrl);
+      linkOpen.href = fileUrl;
+      linkDownload.href = fileUrl;
+      linkDownload.download = filenameFrom(fileUrl);
+
+      hint.style.display = "none";
+      loader.style.display = "flex";
+
+      const task = pdfjsLib.getDocument(fileUrl);
+      task.promise.then(pdf=>{
+        pdfDoc = pdf;
+        pageCountEl.textContent = pdf.numPages;
+        updateButtons();
+        renderPage(pageNum);
+      }).catch(err=>{
+        loader.style.display="none";
+        hint.style.display="block";
+        hint.innerHTML = 'Erreur de chargement.<br/><small style="color:#ef4444">'+String(err)+'</small>';
+      });
+    })();
+  </script>
+</body>
+</html>
