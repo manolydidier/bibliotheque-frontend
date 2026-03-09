@@ -40,7 +40,7 @@ function ArticlesPage() {
         Accept: "application/json",
         "Content-Type": "application/json",
       },
-      timeout: 20000,
+      timeout: 200000,
     });
 
     instance.interceptors.request.use((config) => {

@@ -22,6 +22,7 @@ i18n
           // Genre submenu
           "playdoier": "Playdoier",
           "fundraising": "Fundraising",
+          "Thematics": "Thematics",
           "technical": "Technical",
 
           // About submenu
@@ -1225,7 +1226,19 @@ legal: {
   }
 }
 ,
-
+  "nav": {
+    "home": "Home",
+    "contact": "Contact",
+    "beneficiaires": "Targets",
+    "domaines": "Domains",
+    "plateform": "Platform",
+    "open_menu": "Open menu",
+    "close_menu": "Close menu",
+    "mobile_menu": "Mobile menu",
+    "mobile_menu_nav": "Mobile navigation",
+    "navbar_label": "Main navigation Miradia",
+    "return_home": "Return to home"
+  },
   "config": {
     "platformName": "Bibliothèque Numérique Mada",
     "lastUpdate": "Last updated: November 25, 2025",
@@ -1508,6 +1521,7 @@ legal: {
           "playdoier": "Playdoier",
           "fundraising": "Fundraising",
           "technical": "Technique",
+          "Thematics": "Thématiques",
 
           // Sous-menu À propos
           "structure": "Structure",
@@ -2835,6 +2849,20 @@ legal: {
 "sumary": "Résumé",          // alias si le code appelle 'sumary'
 "playdoier": "Plaidoyer"     // meilleure étiquette FR
 ,
+
+  "nav": {
+    "home": "Accueil",
+    "contact": "Contact",
+    "beneficiaires": "Cibles",
+    "domaines": "Domaines",
+    "plateform": "Plateforme",
+    "open_menu": "Ouvrir le menu",
+    "close_menu": "Fermer le menu",
+    "mobile_menu": "Menu mobile",
+    "mobile_menu_nav": "Navigation mobile",
+    "navbar_label": "Navigation principale Miradia",
+    "return_home": "Retour à l'accueil"
+  },
         "role_permissions_management": "Gestion des Permissions de Rôles",
         "manage_role_permissions_description": "Gérer les associations entre rôles et permissions",
         "search_roles_permissions": "Rechercher rôles et permissions...",

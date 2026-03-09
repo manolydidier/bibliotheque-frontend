@@ -23,13 +23,13 @@ optimizeDeps: {
 
      proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://84.247.182.163:8000',
         changeOrigin: true,
         secure: false,
       },
-       '/storage': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+       '/storage': { target: 'http://84.247.182.163:8000', changeOrigin: true },
        "/file-proxy": {
-        target: "http://127.0.0.1:8000",
+        target: "http://84.247.182.163:8000",
         changeOrigin: true,
       },
     },

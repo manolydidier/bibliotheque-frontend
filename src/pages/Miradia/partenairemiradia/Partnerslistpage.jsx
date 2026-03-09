@@ -305,7 +305,7 @@ export default function PartnersListPage() {
     let mounted = true;
     (async () => {
       try {
-        const res = await api.get("/societes", { params: { per_page: 200 } });
+        const res = await api.get("/societesPublique", { params: { per_page: 200 } });
         const raw = res?.data?.data || res?.data || [];
         if (mounted) setSocietes(Array.isArray(raw) ? raw : []);
       } catch (e) {

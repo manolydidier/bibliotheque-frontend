@@ -216,14 +216,17 @@ function ExcelLocalViewer({ src, title }) {
    Export principal
    ========================= */
 export default function ExcelPreviewPro({ src, title = "Classeur Excel" }) {
-  // 1) Si l'URL est publique HTTPS → Office Online
-  if (isLikelyPublicHttp(src)) {
+  // ✅ IP nues ne sont pas accessibles par Office Online
+  const isIp = /^https?:\/\/\d+\.\d+\.\d+\.\d+/i.test(src || '');
+
+  // 1) URL publique HTTPS avec vrai domaine → Office Online
+  if (isLikelyPublicHttp(src) && !isIp) {
     return <OfficeOnlineExcel src={src} title={title} />;
   }
-  // 2) Sinon, si OnlyOffice est configuré → OnlyOffice
+  // 2) OnlyOffice configuré
   if (DS_URL) {
     return <OnlyOfficeExcel src={src} title={title} />;
   }
-  // 3) Sinon, fallback local SheetJS (léger & correct)
+  // 3) Fallback local SheetJS
   return <ExcelLocalViewer src={src} title={title} />;
 }

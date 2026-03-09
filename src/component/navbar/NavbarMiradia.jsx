@@ -283,7 +283,7 @@ const NavBarMiradia = () => {
   const navItems = useMemo(() => [
     { key: "home",         label: t("nav.home",          "Accueil"),       id: "hero",          active: routeFlags.isHome && activeSection === "hero" },
     { key: "contact",      label: t("nav.contact",       "Contact"),       id: "contact",       active: routeFlags.isHome && activeSection === "contact" },
-    { key: "beneficiaires",label: t("nav.beneficiaires", "Bénéficiaires"), id: "beneficiaires", active: routeFlags.isBeneficiaires },
+    { key: "beneficiaires",label: t("nav.beneficiaires", "Cibles"), id: "beneficiaires", active: routeFlags.isBeneficiaires },
     { key: "domaines",     label: t("nav.domaines",      "Domaines"),      id: "domaines",      active: routeFlags.isDomaines },
     { key: "plateform",    label: t("nav.plateform",     "Plateforme"),    id: "plateform",     active: routeFlags.isPlateform },
   ], [t, routeFlags, activeSection]);

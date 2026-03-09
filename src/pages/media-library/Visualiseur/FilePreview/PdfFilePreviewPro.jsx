@@ -4,22 +4,18 @@ import { FaFilePdf, FaDownload, FaExternalLinkAlt } from "react-icons/fa";
 import { proxify } from "@/utils/fileFetch";
 import { toAbsolute } from "./helpers";
 
-// .env (exemples) :
-// VITE_PDFJS_VIEWER="/viewer-light.html?file="        <-- ton viewer léger dans /public
-// (ou) VITE_PDFJS_VIEWER="/pdfjs/web/viewer.html?file="  si tu utilises le viewer de pdfjs-dist copié en /public
-// (ou) VITE_PDFJS_VIEWER="https://cdn.jsdelivr.net/npm/pdfjs-dist@4/web/viewer.html?file="
 const PDFJS_VIEWER = import.meta.env.VITE_PDFJS_VIEWER || "";
 const DEBUG_DEFAULT = String(import.meta.env.VITE_DEBUG_VIEWERS || "").toLowerCase() === "true";
 
-// 👉 PDF.js par défaut si configuré ; sinon natif
 function decideInitialMode(forcedMode) {
   if (forcedMode === "pdfjs" || forcedMode === "native") return forcedMode;
-  return PDFJS_VIEWER ? "pdfjs" : "native";
+  return "pdfjs";
 }
 
 function isExternalViewer(u) {
   return /^https?:\/\//i.test(u || "");
 }
+
 function absOnThisOrigin(pathOrUrl) {
   try { return new URL(pathOrUrl, window.location.origin).href; }
   catch { return pathOrUrl; }
@@ -43,23 +39,30 @@ export default function PdfFilePreviewPro({
   // 1) URL absolue (fichier original)
   const absSrc = useMemo(() => toAbsolute(src), [src]);
 
-  // 2) Proxy (même origine) pour éviter CORS/headers
-  const proxySrc = useMemo(() => proxify(absSrc), [absSrc]);
+  // 2) URL "safe" pour le mode natif :
+  //    - si c'est une URL storage connue → accès direct (l'iframe native n'a pas de contrainte CORS)
+  //    - sinon → proxifié
+  const proxySrc = useMemo(() => {
+    const storageBase = import.meta.env.VITE_API_BASE_STORAGE || '';
+    if (storageBase && absSrc.startsWith(storageBase)) return absSrc; // direct
+    return proxify(absSrc);
+  }, [absSrc]);
 
-  // 2b) Si viewer externe (CDN), ?file= doit être ABSOLU sur ton origine
-  const proxySrcForViewer = useMemo(
-    () => (isExternalViewer(PDFJS_VIEWER) ? absOnThisOrigin(proxySrc) : proxySrc),
-    [proxySrc]
-  );
+  // 3) URL pour le viewer PDF.js :
+  //    PDF.js fait un fetch() interne → soumis au CORS → doit toujours passer par le proxy
+  const proxySrcForViewer = useMemo(() => {
+    const proxied = proxify(absSrc); // toujours proxifié pour pdfjs
+    return isExternalViewer(PDFJS_VIEWER) ? absOnThisOrigin(proxied) : proxied;
+  }, [absSrc]);
 
-  // 3) URL iframe finale
+  // 4) URL iframe finale
   const iframeSrc = useMemo(() => {
     if (viewerMode === "pdfjs") {
-      if (!PDFJS_VIEWER) return ""; // sécurité
+      if (!PDFJS_VIEWER) return "";
       const fileParam = encodeURIComponent(proxySrcForViewer);
       return `${PDFJS_VIEWER}${fileParam}`;
     }
-    return proxySrc; // natif
+    return proxySrc; // natif → direct
   }, [viewerMode, proxySrcForViewer, proxySrc]);
 
   const pdfjsConfigured = Boolean(PDFJS_VIEWER);
@@ -77,7 +80,7 @@ export default function PdfFilePreviewPro({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Toggle PDF.js / Natif (sobre) */}
+          {/* Toggle PDF.js / Natif */}
           <div className="flex items-center gap-2 text-xs text-gray-600 select-none">
             <span className={viewerMode === "native" ? "font-medium text-gray-800" : ""}>Natif</span>
             <label
@@ -97,7 +100,7 @@ export default function PdfFilePreviewPro({
             <span className={viewerMode === "pdfjs" ? "font-medium text-gray-800" : ""}>PDF.js</span>
           </div>
 
-          {/* Ouvrir (neutre) */}
+          {/* Ouvrir dans un onglet */}
           <a
             href={viewerMode === "pdfjs" ? (iframeSrc || "#") : proxySrc}
             target="_blank"
@@ -109,7 +112,7 @@ export default function PdfFilePreviewPro({
             <span className="hidden sm:inline">Ouvrir</span>
           </a>
 
-          {/* Télécharger (neutre) */}
+          {/* Télécharger */}
           <a
             href={absSrc}
             download

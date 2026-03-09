@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import { Link } from 'react-router-dom';
 
 function buildApiBase() {
   const raw = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
@@ -194,8 +195,8 @@ const AccordionItem = ({ title = "Autres", apiUrl, isDark = false, compact = fal
             {/* Items */}
             {!loading && !error && subMenuItems.map((item, idx) => (
               <React.Fragment key={item.id}>
-                <a
-                  href={`/autres/${item.id}`}
+                <Link
+                  to={`/autres/${item.id}`}
                   role="option"
                   className={`
                     flex items-center gap-2.5 px-3 py-2.5 rounded-lg
@@ -211,7 +212,7 @@ const AccordionItem = ({ title = "Autres", apiUrl, isDark = false, compact = fal
                     ${dotColor}
                   `} />
                   {item.category}
-                </a>
+                </Link>
                 {idx < subMenuItems.length - 1 && (
                   <div className={`h-px mx-3 my-0.5 ${dividerColor}`} />
                 )}

@@ -20,6 +20,7 @@ import ArticleSearchBox from './ArticleSearchBox';
 /* 🔹 AJOUTS: même logique que Comments.jsx */
 import useMeFromLaravel from '../../hooks/useMeFromLaravel';
 import { computeRights } from '../../utils/access';
+import { FaBullseye } from 'react-icons/fa';
 
 /* ========================= Utils ========================= */
 const getTokenGuard = () => {
@@ -632,29 +633,34 @@ const Navbar = () => {
       ],
     },
 
-    // 🔹 Genre : Plaidoyer / Fundraising / Technique
+   // Changement du label en "Thématiques"
+{
+  label: t('Thematics'),  // Changer le label ici
+  path: withQuery(PLATFORM_BASE, { tab: 'genre' }),
+  kind: 'Thematic',        // <<<<<< idem
+  submenu: [
     {
-      label: t('genre'),
-      path: withQuery(PLATFORM_BASE, { tab: 'genre' }),
-      kind: 'genre',        // <<<<<< idem
-      submenu: [
-        {
-          icon: faFileAlt,
-          label: t('playdoier'),
-          path: buildGenreTagLink('plaidoyer'),
-        },
-        {
-          icon: faVideo,
-          label: t('fundraising'),
-          path: buildGenreTagLink('fundraising'),
-        },
-        {
-          icon: faPodcast,
-          label: t('technical'),
-          path: buildGenreTagLink('technique'),
-        },
-      ],
+      icon: faFileAlt,
+      label: t('playdoier'),
+      path: buildGenreTagLink('plaidoyer'),
     },
+    {
+      icon: faVideo,
+      label: t('fundraising'),
+      path: buildGenreTagLink('fundraising'),
+    },
+    {
+      icon: faPodcast,
+      label: t('technical'),
+      path: buildGenreTagLink('technique'),
+    },
+    {
+      icon: faBullseye,
+      label: t('genre'),
+      path: buildGenreTagLink('genre'),
+    },
+  ],
+},
 
     canModerate
       ? { label: t('moderation', 'Modération'), path: '/moderation', submenu: null }

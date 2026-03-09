@@ -13,11 +13,14 @@ export default function WordPreview({ src, title }) {
     let cancelled = false;
     setErr("");
 
-    // Si l’URL a l’air publique (https, pas localhost/127, pas réseau privé) => on préfère Office
-    if (isLikelyPublicHttp(src)) {
-      setMode("office");
-      return;
-    }
+   // ✅ IP nues (ex: 84.247.182.163) ne sont pas accessibles par Office Online
+  // On utilise Office uniquement si c'est un vrai domaine public (pas une IP)
+  const isIp = /^https?:\/\/\d+\.\d+\.\d+\.\d+/i.test(src || '');
+  
+  if (isLikelyPublicHttp(src) && !isIp) {
+    setMode("office");
+    return;
+  }
 
     // Sinon rendu local via docx-preview
     setMode("local");

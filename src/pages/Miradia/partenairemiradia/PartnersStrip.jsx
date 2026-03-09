@@ -384,7 +384,7 @@ export default function PartnersStrip({ highlightTenantId = null }) {
     let mounted = true;
     (async () => {
       try {
-        const res = await api.get("/societes", { params: { per_page: 100 } });
+        const res = await api.get("/societesPublique", { params: { per_page: 100 } });
         const raw = res?.data?.data || res?.data || [];
         if (!mounted) return;
         setSocietes(Array.isArray(raw) ? raw : []);

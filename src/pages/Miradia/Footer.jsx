@@ -118,7 +118,7 @@ export default function FooterCMS() {
         js={state.section.js || ""}
         allowJs
         autoHeight={true} /* Permet à l'iframe de s'ajuster automatiquement */
-        minHeight={620}
+        minHeight={600}
         extraBottom={0}
         extraCss={`${CMS_RESET}`}
         syncParentTheme

@@ -47,13 +47,18 @@ export function isLikelyPublicHttp(u) {
 /** Doit-on proxifier ? */
 export function shouldProxy(u) {
   if (!u || isBlobLike(u) || isAlreadyProxied(u)) return false;
+
+  // ✅ URLs storage public → accessibles directement, pas besoin de proxy
+  const storageBase = import.meta.env.VITE_API_BASE_STORAGE || '';
+  if (storageBase && String(u).startsWith(storageBase)) return false;
+
   if (isCrossOrigin(u)) return true;
-  // même origin mais certaines extensions ont souvent de mauvais headers en dev
   const m = String(u).toLowerCase().match(/\.([a-z0-9]+)(?:\?|#|$)/i);
   const ext = m?.[1] || "";
   return PROXY_EXT.includes(ext);
 }
-
+// Colle ceci dans la console Firefox
+console.log(import.meta.env?.VITE_API_BASE_STORAGE)
 /** Ajoute /file-proxy?url=… (évite les doublons) */
 export function proxify(u) {
   if (!u || isBlobLike(u) || isAlreadyProxied(u)) return u;
