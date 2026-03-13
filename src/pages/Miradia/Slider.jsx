@@ -92,7 +92,7 @@ const useSlideData = () => {
               raw:         s,
             };
 
-            console.log("Slide mapped:", mapped);
+            // console.log("Slide mapped:", mapped);
             return mapped;
           });
 

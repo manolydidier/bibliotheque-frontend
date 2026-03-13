@@ -47,18 +47,22 @@ export default function VideoPreview({
 
   // ---------- helpers ----------
   const guessVttFromUrl = (u) => {
-    if (!u) return null;
-    try {
-      // garde la query si présente
-      const [base, q] = String(u).split("?");
-      const lastDot = base.lastIndexOf(".");
-      const vtt =
-        lastDot > -1 ? `${base.slice(0, lastDot)}.vtt` : `${base}.vtt`;
-      return q ? `${vtt}?${q}` : vtt;
-    } catch {
-      return null;
+  if (!u) return null;
+  try {
+    const storageBase = import.meta.env.VITE_API_BASE_STORAGE || '';
+    const [base, q] = String(u).split("?");
+    const lastDot = base.lastIndexOf(".");
+    const vtt = lastDot > -1 ? `${base.slice(0, lastDot)}.vtt` : `${base}.vtt`;
+    const result = q ? `${vtt}?${q}` : vtt;
+    // ✅ remplace 127.0.0.1:8000 par l'URL storage correcte
+    if (storageBase) {
+      return result.replace(/https?:\/\/127\.0\.0\.1:\d+/g, storageBase.replace(/\/$/, ''));
     }
-  };
+    return result;
+  } catch {
+    return null;
+  }
+};
 
   const finalSources = useMemo(() => {
     const list = [...(sources || [])];

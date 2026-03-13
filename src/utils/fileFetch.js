@@ -58,7 +58,7 @@ export function shouldProxy(u) {
   return PROXY_EXT.includes(ext);
 }
 // Colle ceci dans la console Firefox
-console.log(import.meta.env?.VITE_API_BASE_STORAGE)
+// console.log(import.meta.env?.VITE_API_BASE_STORAGE)
 /** Ajoute /file-proxy?url=… (évite les doublons) */
 export function proxify(u) {
   if (!u || isBlobLike(u) || isAlreadyProxied(u)) return u;
