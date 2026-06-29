@@ -12,7 +12,7 @@ import {
 import { useSearchParams, useLocation } from "react-router-dom";
 
 /* =========================================================
-   Portal util (placé en haut pour éviter toute surprise)
+   Portal util
    ========================================================= */
 const ModalPortal = ({ children }) => {
   const target =
@@ -141,13 +141,10 @@ const isPdfMime   = (mt = "") => /^application\/pdf$/i.test(mt);
 const looksLikeImagePath = (u = "") => /\.(png|jpe?g|webp|gif|avif|bmp|svg)$/i.test(u || "");
 
 /* =========================================================
-   ❗️Thumb logic révisé : JAMAIS de thumb pour non-images
+   Thumb logic : JAMAIS de thumb pour non-images
    ========================================================= */
 const mediaHref = (m) => toAbsoluteMedia(m?.path ?? m?.url ?? "");
 
-/**
- * Retourne une miniature uniquement si c'est une image.
- */
 const mediaThumb = (m) => {
   const mt = (m?.mime_type || m?.mime || "").toLowerCase();
   if (!isImageMime(mt)) return null;
@@ -224,65 +221,101 @@ const TypeChip = ({ kind, className = "" }) => {
 };
 
 /* =========================================================
-   Fallback covers (extension/kind) + onError helper
+   ✅ COVERS — SVG data-URI inline, ZERO fichier externe,
+      ZERO boucle infinie possible.
    ========================================================= */
-const COVERS_BASE =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_MEDIA_COVERS_BASE) ||
-  '/covers';
 
-const COVER_BY_EXT = {
-  png: 'image.png', jpg: 'image.png', jpeg: 'image.png', webp: 'image.png', gif: 'image.png', svg: 'image.png', bmp: 'image.png', avif: 'image.png',
-  mp4: 'video.png', webm: 'video.png', ogg: 'video.png', mov: 'video.png', m4v: 'video.png', avi: 'video.png', mkv: 'video.png',
-  mp3: 'audio.png', wav: 'audio.png', m4a: 'audio.png', aac: 'audio.png', flac: 'audio.png',
-  pdf: 'pdf.png',
-  doc: 'office-word.png', docx: 'office-word.png', rtf: 'office-word.png',
-  xls: 'office-excel.png', xlsx: 'office-excel.png',
-  ppt: 'office-powerpoint.png', pptx: 'office-powerpoint.png',
-  csv: 'csv.png',
-  txt: 'text.png', md: 'text.png',
-  zip: 'zip.png', rar: 'zip.png', '7z': 'zip.png'
+/**
+ * Encode un SVG en data-URI sûre (pas besoin de btoa, pas de problème UTF-8).
+ * On remplace uniquement les caractères qui cassent l'URL.
+ */
+const svgDataUri = (svg) =>
+  `data:image/svg+xml,${svg
+    .replace(/"/g, "'")
+    .replace(/#/g, "%23")
+    .replace(/\n/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim()}`;
+
+/**
+ * Génère un cover SVG coloré avec icône pour chaque kind.
+ * Retourne directement un data-URI — aucun réseau impliqué.
+ */
+const makeCover = (bgColor, iconPath) =>
+  svgDataUri(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+      <rect width="64" height="64" rx="10" fill="${bgColor}"/>
+      <path d="${iconPath}" fill="white" opacity="0.9"/>
+    </svg>`
+  );
+
+const COVER_DATA_URIS = {
+  // Image — bleu, icône paysage + soleil
+  image: makeCover("#3b82f6",
+    "M8 44 L20 30 L28 39 L38 27 L56 44 Z M40 18 a5 5 0 1 0 0.001 0 Z"),
+
+  // Vidéo — violet, icône play dans rectangle
+  video: makeCover("#7c3aed",
+    "M10 18 a4 4 0 0 1 4-4 h36 a4 4 0 0 1 4 4 v28 a4 4 0 0 1-4 4 H14 a4 4 0 0 1-4-4 Z M26 22 v20 l18-10 Z"),
+
+  // Audio — ambre, icône barres d'égaliseur
+  audio: makeCover("#d97706",
+    "M12 28 h8 v16 h-8 Z M26 20 h8 v24 h-8 Z M40 24 h8 v20 h-8 Z"),
+
+  // PDF — rouge, icône document + lignes
+  pdf: makeCover("#dc2626",
+    "M14 8 h28 l10 10 v38 H14 Z M38 8 v10 h10 M22 30 h20 M22 36 h20 M22 42 h12"),
+
+  // Word — bleu foncé, icône doc avec W
+  word: makeCover("#1d4ed8",
+    "M14 8 h36 v48 H14 Z M22 24 l4 16 4-10 4 10 4-16"),
+
+  // Excel — vert, icône tableur
+  excel: makeCover("#15803d",
+    "M14 8 h36 v48 H14 Z M14 24 h36 M14 36 h36 M32 8 v48"),
+
+  // PPT — orange, icône diapo avec graphe
+  ppt: makeCover("#c2410c",
+    "M12 10 h40 v44 H12 Z M20 20 h24 v16 H20 Z M28 42 h8 M32 38 v8"),
+
+  // CSV — teal, icône grille
+  csv: makeCover("#0f766e",
+    "M14 8 h36 v48 H14 Z M14 20 h36 M14 32 h36 M14 44 h36 M26 8 v48 M38 8 v48"),
+
+  // ZIP — slate, icône fermeture éclair
+  zip: makeCover("#475569",
+    "M24 8 h16 v6 h-16 Z M24 14 h16 v6 h-16 Z M24 20 h16 v6 h-16 Z M20 26 h24 v22 a4 4 0 0 1-4 4 H24 a4 4 0 0 1-4-4 Z M28 30 h8 v8 h-8 Z"),
+
+  // Text — gris bleu, icône lignes de texte
+  text: makeCover("#64748b",
+    "M14 8 h36 v48 H14 Z M20 20 h24 M20 28 h24 M20 36 h24 M20 44 h16"),
+
+  // File générique — gris, coin replié
+  file: makeCover("#94a3b8",
+    "M14 8 h28 l12 12 v36 H14 Z M42 8 v12 h12"),
 };
 
-const COVER_BY_KIND = {
-  image: 'image.png',
-  video: 'video.png',
-  audio: 'audio.png',
-  pdf: 'pdf.png',
-  word: 'office-word.png',
-  excel: 'office-excel.png',
-  ppt: 'office-powerpoint.png',
-  csv: 'csv.png',
-  zip: 'zip.png',
-  text: 'text.png',
-  file: 'file.png',
-};
+/**
+ * Retourne le data-URI SVG de cover pour un objet média.
+ * JAMAIS de requête réseau → JAMAIS de boucle onerror.
+ */
+const getCoverDataUri = (m) => COVER_DATA_URIS[mediaKind(m)] ?? COVER_DATA_URIS.file;
 
-function coverSrc(file) {
-  const url = `${COVERS_BASE}/${file}`;
-  return url;
-}
-
-const coverForMedia = (m) => {
-  const ext = getExt(m);
-  if (ext && COVER_BY_EXT[ext]) return coverSrc(COVER_BY_EXT[ext]);
-  const kind = mediaKind(m);
-  if (COVER_BY_KIND[kind]) return coverSrc(COVER_BY_KIND[kind]);
-  return coverSrc('file.png');
-};
-
+/**
+ * Handler onError pour <img> : neutralise immédiatement onerror
+ * AVANT de changer src, pour couper toute boucle possible.
+ * Utilise le SVG inline — garanti de fonctionner sans réseau.
+ */
 const onImgErrorToCover = (m) => (e) => {
   const el = e?.currentTarget;
   if (!el) return;
+  // ⚠️ On coupe le handler EN PREMIER pour éviter toute récursion
   el.onerror = null;
-  const k = mediaKind(m);
-  const mapOfficeFallback = {
-    word: 'word.png',
-    excel: 'excel.png',
-    ppt: 'ppt.png',
-  };
-  const wanted = coverForMedia(m);
-  const final = wanted.includes('office-') ? `${COVERS_BASE}/${mapOfficeFallback[k] || 'file.png'}` : wanted;
-  el.src = final;
+  const cover = getCoverDataUri(m);
+  // Ne rien faire si on affiche déjà le cover (data-URI identique)
+  if (el.src !== cover) {
+    el.src = cover;
+  }
 };
 
 /* =========================================================
@@ -399,7 +432,7 @@ const ViewerModal = ({ open, media, onClose }) => {
 
   const body = (() => {
     if (isImageMime(mt)) {
-      const imgSrc = mediaThumb(media) || src || coverForMedia(media);
+      const imgSrc = mediaThumb(media) || src || getCoverDataUri(media);
       return (
         <img
           src={imgSrc}
@@ -421,12 +454,11 @@ const ViewerModal = ({ open, media, onClose }) => {
     return (
       <div className="w-full h-[50vh] rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 flex flex-col items-center justify-center text-slate-600">
         <img
-          src={coverForMedia(media)}
+          src={getCoverDataUri(media)}
           alt="icône fichier"
           className="w-24 h-24 mb-3"
-          onError={onImgErrorToCover(media)}
         />
-        <div className="text-sm font-semibold">Aucun aperçu disponible pour ce type. Utilisez “Ouvrir” ou “Télécharger”.</div>
+        <div className="text-sm font-semibold">Aucun aperçu disponible pour ce type. Utilisez "Ouvrir" ou "Télécharger".</div>
       </div>
     );
   })();
@@ -502,23 +534,22 @@ const ConfirmDialog = ({ open, title, message, onConfirm, onCancel, danger = fal
     </ModalPortal>
   );
 };
+
 /* =========================================================
-   Modal Upload — multi-fichiers + switch Parallèle/File d’attente
+   Modal Upload — multi-fichiers + switch Parallèle/File d'attente
    ========================================================= */
 const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
-  const [files, setFiles] = useState([]);              // <— plusieurs fichiers
-  const [previews, setPreviews] = useState([]);        // [{url, type, name, size}]
-  const [names, setNames] = useState([]);              // noms par fichier
-  const [alts, setAlts] = useState([]);                // alt fr par fichier
-  const [captions, setCaptions] = useState([]);        // légende fr par fichier
-  const [isFeatured, setIsFeatured] = useState(false); // option commune
+  const [files, setFiles] = useState([]);
+  const [previews, setPreviews] = useState([]);
+  const [names, setNames] = useState([]);
+  const [alts, setAlts] = useState([]);
+  const [captions, setCaptions] = useState([]);
+  const [isFeatured, setIsFeatured] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [overallProgress, setOverallProgress] = useState(0); // 0-100 global
-  const [perFileProgress, setPerFileProgress] = useState([]); // 0-100 par index
+  const [overallProgress, setOverallProgress] = useState(0);
+  const [perFileProgress, setPerFileProgress] = useState([]);
   const [err, setErr] = useState("");
-
-  // ⚡️ Nouveau : switch de stratégie d’envoi
-  const [uploadParallel, setUploadParallel] = useState(true); // true = Parallèle, false = File d'attente
+  const [uploadParallel, setUploadParallel] = useState(true);
 
   const dropRef = useRef(null);
 
@@ -526,7 +557,6 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
     try { if (url && typeof url === "string" && url.startsWith("blob:")) URL.revokeObjectURL(url); } catch {}
   };
 
-  // Gestion scroll body
   useEffect(() => {
     if (!open) return;
     const html = document.documentElement;
@@ -535,7 +565,6 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
     return () => { html.style.overflowY = prev; };
   }, [open]);
 
-  // DnD
   useEffect(() => {
     const el = dropRef.current;
     if (!el) return;
@@ -553,7 +582,6 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
     };
   }, []);
 
-  // Reset à la fermeture
   useEffect(() => {
     if (!open) {
       previews.forEach(p => revokeIfBlob(p?.url));
@@ -567,7 +595,7 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
   useEffect(() => () => previews.forEach(p => revokeIfBlob(p?.url)), [previews]);
 
   const onPickMany = (list) => {
-    const maxSize = 100 * 1024 * 1024; // 100 MB/file
+    const maxSize = 100 * 1024 * 1024;
     const rejected = list.filter(f => f.size > maxSize);
     if (rejected.length) {
       setErr(`Fichier trop volumineux (>${fmtBytes(maxSize)}): ${rejected.map(f=>f.name).join(", ")}`);
@@ -575,7 +603,6 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
     }
     const nextFiles = [...files, ...list];
     setFiles(nextFiles);
-    // Préviews
     const addPreviews = list.map((f) => ({
       url: URL.createObjectURL(f),
       type: f.type || "",
@@ -583,11 +610,9 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
       size: f.size
     }));
     setPreviews((prev) => [...prev, ...addPreviews]);
-    // Champs texte initiaux
     setNames((prev) => [...prev, ...list.map(f => f.name.replace(/\.[^.]+$/, ""))]);
     setAlts((prev) => [...prev, ...list.map(() => "")]);
     setCaptions((prev) => [...prev, ...list.map(() => "")]);
-    // Progress par fichier
     setPerFileProgress((prev) => [...prev, ...list.map(() => 0)]);
     setErr("");
   };
@@ -616,37 +641,20 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
     const cap = captions[idx]; if (cap) fd.append("caption[fr]", cap);
     fd.append("is_featured", isFeatured ? "1" : "0");
 
-    let lastLoaded = 0, lastTotal = file.size || 1;
     const onProg = (pe) => {
-      const loaded = pe.loaded ?? lastLoaded;
-      const total = pe.total ?? lastTotal;
+      const loaded = pe.loaded ?? 0;
+      const total = pe.total ?? file.size ?? 1;
       setPerFileProgress((prev) => {
         const copy = [...prev];
         copy[idx] = Math.min(100, Math.round((loaded * 100) / total));
+        const avg = copy.length ? Math.round(copy.reduce((a, b) => a + b, 0) / copy.length) : 0;
+        setOverallProgress(avg);
         return copy;
       });
-      // progress global = moyenne pondérée (simple moyenne ici)
-      setOverallProgress((_) => {
-        const arr = (prev => prev)([]); // dummy pour lisibilité
-        const local = (perFileProgress => perFileProgress)([]); // no-op
-        // on recalcule depuis state le plus frais via callback:
-        return setPerFileProgress((current) => {
-          const avg = current.length
-            ? Math.round(current.reduce((a,b)=>a+b,0) / current.length)
-            : 0;
-          // retourner la même valeur, mais on est dans un setState imbriqué,
-          // on ne veut pas changer perFileProgress ici; du coup on “triche” :
-          // on met à jour overall en dehors :
-          setOverallProgress(avg);
-          return current;
-        }), 0;
-      });
-      lastLoaded = loaded; lastTotal = total;
     };
 
     const res = await http.upload(fd, onProg);
     const payload = res?.data?.data || res?.data;
-    // notifier le parent pour rafraîchir
     onUploaded?.(payload);
   };
 
@@ -659,10 +667,8 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
       setPerFileProgress((arr) => arr.map(() => 0));
 
       if (uploadParallel) {
-        // Envois simultanés
         await Promise.all(files.map((f, i) => uploadOne(f, i)));
       } else {
-        // Envois séquentiels (file d'attente)
         for (let i = 0; i < files.length; i++) {
           await uploadOne(files[i], i);
         }
@@ -699,10 +705,10 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
           {/* Switch stratégie */}
           <div className="flex items-center justify-between rounded-2xl border-2 border-slate-200 p-3">
             <div className="text-sm font-semibold text-slate-700">
-              Mode d’envoi : <span className="text-slate-900">{uploadParallel ? "Parallèle (plus rapide)" : "File d’attente (plus fiable)"}</span>
+              Mode d'envoi : <span className="text-slate-900">{uploadParallel ? "Parallèle (plus rapide)" : "File d'attente (plus fiable)"}</span>
             </div>
             <label className="flex items-center gap-2 cursor-pointer select-none">
-              <span className="text-xs text-slate-600">File d’attente</span>
+              <span className="text-xs text-slate-600">File d'attente</span>
               <input
                 type="checkbox"
                 className="sr-only"
@@ -734,9 +740,10 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
                   {files.map((f, idx) => {
                     const prev = previews[idx];
                     const mt = prev?.type || "";
-                    const ext = (f.name.split('.').pop() || "").toLowerCase();
-                    const cover = COVER_BY_EXT[ext] ? coverSrc(COVER_BY_EXT[ext]) : `${COVERS_BASE}/file.png`;
                     const imgLike = isImageMime(mt);
+                    // Cover SVG inline pour les non-images dans l'upload modal
+                    const fakeMeta = { name: f.name, mime_type: f.type || "" };
+                    const fallbackCover = getCoverDataUri(fakeMeta);
                     return (
                       <div key={idx} className="rounded-xl border border-slate-200 bg-white p-3 flex gap-3">
                         <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-100 flex items-center justify-center">
@@ -745,14 +752,17 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
                               src={prev?.url}
                               alt={f.name}
                               className="w-full h-full object-cover"
-                              onError={(e)=>{ e.currentTarget.onerror=null; e.currentTarget.src = `${COVERS_BASE}/image.png`; }}
+                              onError={(e) => {
+                                const el = e.currentTarget;
+                                el.onerror = null;
+                                el.src = fallbackCover;
+                              }}
                             />
                           ) : (
                             <img
-                              src={cover}
+                              src={fallbackCover}
                               alt="icône fichier"
                               className="w-12 h-12"
-                              onError={(e)=>{ e.currentTarget.onerror=null; e.currentTarget.src = `${COVERS_BASE}/file.png`; }}
                             />
                           )}
                         </div>
@@ -782,7 +792,6 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
                               disabled={submitting}
                             />
                           </div>
-                          {/* Progress individuel */}
                           {submitting && (
                             <div className="mt-2">
                               <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
@@ -825,7 +834,7 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2 text-sm text-slate-600">
               Astuce : utilisez le mode <span className="font-semibold">Parallèle</span> pour gagner du temps (connexion stable), et
-              la <span className="font-semibold">File d’attente</span> si votre connexion est fragile ou si le serveur impose un
+              la <span className="font-semibold">File d'attente</span> si votre connexion est fragile ou si le serveur impose un
               débit limité.
             </div>
             <div className="space-y-2">
@@ -849,7 +858,6 @@ const UploadModal = ({ open, onClose, onUploaded, articleId }) => {
             </div>
           </div>
 
-          {/* Progress global */}
           {submitting && (
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
@@ -950,7 +958,8 @@ const EditModal = ({ open, media, onClose, onSaved }) => {
 
   if (!open || !media) return null;
 
-  const imgThumb = mediaThumb(media) || coverForMedia(media);
+  // ✅ Pour l'aperçu dans EditModal : thumb réelle si image, sinon cover SVG inline
+  const imgThumb = mediaThumb(media) || getCoverDataUri(media);
 
   return (
     <ModalPortal>
@@ -1118,7 +1127,6 @@ const ArticleMediaManager = ({ articleId }) => {
   const [urlSearchParams, setUrlSearchParams] = useSearchParams();
   const location = useLocation();
 
-  // init depuis l'URL une seule fois
   useEffect(() => {
     const p = Object.fromEntries(urlSearchParams.entries());
     if (p.type) setType(p.type);
@@ -1129,7 +1137,7 @@ const ArticleMediaManager = ({ articleId }) => {
     if (p.sort_dir) setSortDir(p.sort_dir === "desc" ? "desc" : "asc");
     if (p.view === "list" || p.view === "grid") setViewMode(p.view);
     if (p.trash === "1") setTrashMode(true);
-  }, []); 
+  }, []);
 
   useEffect(() => {
     const p = new URLSearchParams();
@@ -1205,7 +1213,6 @@ const ArticleMediaManager = ({ articleId }) => {
     );
   }, [items, search]);
 
-  // 🔁 adapté pour recevoir un tableau lors d'upload multiple
   const onUploaded = (res) => {
     const count = Array.isArray(res) ? res.length : 1;
     showToast(`${count} média${count>1?'s':''} téléversé${count>1?'s':''} ✅`);
@@ -1462,7 +1469,7 @@ const ArticleMediaManager = ({ articleId }) => {
     }
     if (isActive !== "") pills.push({ id: "is_active", label: `Actif: ${isActive === "1" ? "Oui" : "Non"}`, clear: () => setIsActive("") });
     if (isFeatured !== "") pills.push({ id: "is_featured", label: `Vedette: ${isFeatured === "1" ? "Oui" : "Non"}`, clear: () => setIsFeatured("") });
-    if (search.trim()) pills.push({ id: "q", label: `Recherche: “${search.trim()}”`, clear: () => setSearch("") });
+    if (search.trim()) pills.push({ id: "q", label: `Recherche: "${search.trim()}"`, clear: () => setSearch("") });
     if (sortBy !== "sort_order" || sortDir !== "asc") {
       const map = { sort_order: "Ordre", name: "Nom", created_at: "Création", size: "Taille" };
       pills.push({
@@ -1587,7 +1594,8 @@ const ArticleMediaManager = ({ articleId }) => {
   );
 
   const renderCard = (m) => {
-    const thumb = mediaThumb(m) || coverForMedia(m);
+    // ✅ thumb réelle si image, sinon cover SVG inline garanti
+    const thumb = mediaThumb(m) || getCoverDataUri(m);
     const kind = mediaKind(m);
     return (
       <div key={m.id} className={`rounded-2xl border ${isSelected(m.id) ? "border-blue-400 ring-2 ring-blue-200" : "border-slate-200"} bg-white p-4 flex flex-col`}>
@@ -1673,7 +1681,7 @@ const ArticleMediaManager = ({ articleId }) => {
   };
 
   const renderRow = (m) => {
-    const thumb = mediaThumb(m) || coverForMedia(m);
+    const thumb = mediaThumb(m) || getCoverDataUri(m);
     const kind = mediaKind(m);
     return (
       <div key={m.id} className={`flex items-center gap-3 rounded-2xl border ${isSelected(m.id) ? "border-blue-400 ring-2 ring-blue-200" : "border-slate-200"} bg-white p-3`}>

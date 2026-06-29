@@ -48,9 +48,9 @@ api.interceptors.request.use((config) => {
         headers: config.headers && DEBUG_HTTP ? config.headers : undefined
       };
       // si on ne veut pas logger tout le header en prod, on supprime
-      if (!DEBUG_HTTP && logged.headers) delete logged.headers;
-      console.log("[API request]", logged);
-      if (isArticlesReq(config.url)) console.log("[API -> /articles] REQUEST:", logged);
+      // if (!DEBUG_HTTP && logged.headers) delete logged.headers;
+      // console.log("[API request]", logged);
+      // if (isArticlesReq(config.url)) console.log("[API -> /articles] REQUEST:", logged);
     }
   } catch (e) {
     if (DEBUG_HTTP) console.warn("[API request] logging failed", e);
@@ -76,8 +76,8 @@ api.interceptors.response.use((response) => {
         dataShape: Array.isArray(response.data) ? `Array(${response.data.length})` : (response.data && typeof response.data === "object" ? "Object" : typeof response.data),
         meta: response.data?.meta ? response.data.meta : undefined
       };
-      console.log("[API response]", small);
-      if (isArticlesReq(url)) console.log("[API -> /articles] RESPONSE:", small, "fullData:", DEBUG_HTTP ? response.data : undefined);
+      // console.log("[API response]", small);
+      // if (isArticlesReq(url)) console.log("[API -> /articles] RESPONSE:", small, "fullData:", DEBUG_HTTP ? response.data : undefined);
     }
   } catch (e) {
     if (DEBUG_HTTP) console.warn("[API response] logging failed", e);
@@ -110,7 +110,7 @@ export const initializeCSRF = async () => {
   try {
     // on forme l'URL absolue si base present
     const csrfUrl = `${API_BASE_URL || ""}/sanctum/csrf-cookie`.replace(/\/+$/, "");
-    if (DEBUG_HTTP) console.log("[API] initializeCSRF ->", csrfUrl);
+    // if (DEBUG_HTTP) console.log("[API] initializeCSRF ->", csrfUrl);
     // axios utilisera la baseURL si fournie; on peut appeler via api.get('/sanctum/csrf-cookie')
     await api.get('/sanctum/csrf-cookie');
   } catch (error) {

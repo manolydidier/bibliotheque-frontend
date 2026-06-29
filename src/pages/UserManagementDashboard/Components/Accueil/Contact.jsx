@@ -351,10 +351,10 @@ export default function ContactPage() {
       try {
         const parsed = JSON.parse(cachedData);
         setBureaux(parsed);
-        console.log("Bureaux chargés depuis le cache");
+        // console.log("Bureaux chargés depuis le cache");
         return;
       } catch (e) {
-        console.warn("Cache invalide, rechargement...");
+        // console.warn("Cache invalide, rechargement...");
       }
     }
 
