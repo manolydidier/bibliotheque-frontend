@@ -86,7 +86,7 @@ function normalizeCss(input) {
 
 export default function Objectif() {
   const API_BASE = useMemo(
-    () => import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000",
+    () => import.meta.env.VITE_API_BASE_URL || "/api",
     []
   );
 
@@ -101,7 +101,7 @@ export default function Objectif() {
     setState({ loading: true, error: "", section: null });
 
     axios
-      .get(url, { headers: { Accept: "application/json" }, signal: controller.signal })
+      .get(url, { headers: { Accept: "application/json" }, signal: controller.signal, baseURL: "" })
       .then((res) => {
         const json = res.data;
         const okStatus = String(json?.status || "").toLowerCase() === "published";
@@ -139,8 +139,6 @@ export default function Objectif() {
     );
   }
 
-  const apiBase = String(API_BASE).replace(/\/api\/?$/, "").replace(/\/$/, "");
-
   // ✅ URL ABSOLUE vers le FRONT (évite /src/index.css qui part vers le backend)
   const frontOrigin = typeof window !== "undefined" ? window.location.origin : "";
   const tailwindCssUrl = frontOrigin ? new URL(appCssPath, frontOrigin).href : appCssPath;
@@ -162,7 +160,7 @@ export default function Objectif() {
         syncParentTheme
         className="w-full "
         canvasCssUrls={[tailwindCssUrl]}
-        baseHref={apiBase + "/"} // ✅ backend pour assets CMS (/images/..)
+        baseHref="/backend-assets/" // ✅ backend pour assets CMS (org.css, /images/..), proxifié par Nginx
         previewBackground="transparent"
       />
     </div>

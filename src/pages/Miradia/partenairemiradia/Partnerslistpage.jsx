@@ -1,5 +1,6 @@
 // src/pages/UserManagementDashboard/Components/Accueil/PartnersListPage.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import useDynamicTranslate from "../../../hooks/useDynamicTranslate";
 import {
   FiSearch,
   FiGlobe,
@@ -371,11 +372,15 @@ export default function PartnersListPage() {
     setSearch(""); setFilterCountry("all");
   }, []);
 
+  const dynRef = useRef(null);
+  // ✅ Traduction du contenu dynamique (partenaires/BDD) via Google.
+  useDynamicTranslate(() => dynRef.current, [filtered]);
+
   return (
     <>
     <NavBarMiradia/>
- 
-    <div className="min-h-screen flex items-center w-full bg-[#eef5fb] dark:bg-gradient-to-b dark:from-[#0B1626] dark:via-[#070F1C] dark:to-[#050A12]">
+
+    <div ref={dynRef} className="min-h-screen flex items-center w-full bg-[#eef5fb] dark:bg-gradient-to-b dark:from-[#0B1626] dark:via-[#070F1C] dark:to-[#050A12]">
       <div className="relative w-full min-h-screen flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8">
 
         {/* ══════════════════════════════════════

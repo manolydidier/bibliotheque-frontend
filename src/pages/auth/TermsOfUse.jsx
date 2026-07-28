@@ -473,7 +473,8 @@ export default function LegalPolicies() {
               {/* Tabs – version glass + contrastée */}
               <div
                 className={classNames(
-                  "inline-flex items-center rounded-2xl border px-1.5 py-1 text-[11px] sm:text-xs backdrop-blur-md shadow-sm",
+                  "flex flex-wrap items-center gap-y-1 rounded-2xl border px-1.5 py-1 text-[11px] sm:text-xs backdrop-blur-md shadow-sm",
+                  "max-w-full",
                   darkMode
                     ? "bg-slate-900/70 border-slate-700/80 shadow-black/30"
                     : "bg-white/55 border-white/80 shadow-slate-900/10"
@@ -500,7 +501,7 @@ export default function LegalPolicies() {
                       type="button"
                       onClick={() => updateTab(tab)}
                       className={classNames(
-                        "relative inline-flex items-center rounded-2xl px-3 sm:px-3.5 py-1.5 font-medium transition-all",
+                        "relative inline-flex shrink-0 items-center rounded-2xl px-3 sm:px-3.5 py-1.5 font-medium transition-all",
                         "focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-0",
                         isActive
                           ? darkMode

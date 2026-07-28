@@ -1,6 +1,7 @@
 // src/pages/UserManagementDashboard/Components/Accueil/Contact.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
+import useDynamicTranslate from "../../../hooks/useDynamicTranslate";
 
 import {
   FiMail,
@@ -436,8 +437,12 @@ export default function ContactPage() {
     };
   }, [bureaux, filteredBureaux, countries]);
 
+  const dynRef = useRef(null);
+  // ✅ Traduction du contenu dynamique (bureaux/BDD) via Google.
+  useDynamicTranslate(() => dynRef.current, [bureaux]);
+
   return (
-    <div className="min-h-screen flex items-center w-full bg-[#eef5fb] dark:bg-gradient-to-b dark:from-[#0B1626] dark:via-[#070F1C] dark:to-[#050A12]">
+    <div ref={dynRef} className="min-h-screen flex items-center w-full bg-[#eef5fb] dark:bg-gradient-to-b dark:from-[#0B1626] dark:via-[#070F1C] dark:to-[#050A12]">
       <div className="relative w-full min-h-screen flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8">
         {/* =========================
             Background (même style)

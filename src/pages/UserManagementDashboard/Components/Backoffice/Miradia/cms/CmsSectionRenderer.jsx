@@ -1,5 +1,6 @@
 // ✅ src/components/cms/CmsSectionRenderer.jsx (INTÉGRAL) — garde cette version si tu veux heightStrategy="lastElement"
 import React, { useMemo, useRef, useEffect, useState } from "react";
+import useDynamicTranslate from "../../../../../../hooks/useDynamicTranslate";
 
 const DEFAULT_CANVAS_CSS =
   typeof process !== "undefined" && process.env?.NODE_ENV === "production"
@@ -94,6 +95,8 @@ export default function CmsSectionRenderer({
   bgFallbackCssTemplate = null,
 }) {
   const iframeRef = useRef(null);
+  const inlineRef = useRef(null);
+  const [iframeLoadTick, setIframeLoadTick] = useState(0);
 
   // ✅ stable unique id per instance
   const instanceIdRef = useRef(
@@ -362,6 +365,13 @@ export default function CmsSectionRenderer({
     return () => window.removeEventListener("message", handleMessage);
   }, [autoHeight, minHeight, extraBottom, instanceId]);
 
+  // ✅ Traduction du contenu CMS dynamique (BDD) via Google — le texte
+  // statique de l'UI environnante reste géré par i18next, indépendamment.
+  useDynamicTranslate(
+    () => (mode === "inline" ? inlineRef.current : iframeRef.current?.contentDocument?.body),
+    [mode, safeHtml, iframeLoadTick]
+  );
+
   if (mode === "inline") {
     return (
       <div className={className} style={style}>
@@ -372,7 +382,7 @@ export default function CmsSectionRenderer({
         {safeCss ? <style>{safeCss}</style> : null}
         {extraCss ? <style>{extraCss}</style> : null}
         {!allowJs && bgFallbackCss ? <style>{bgFallbackCss}</style> : null}
-        <div dangerouslySetInnerHTML={{ __html: safeHtml }} />
+        <div ref={inlineRef} dangerouslySetInnerHTML={{ __html: safeHtml }} />
       </div>
     );
   }
@@ -384,6 +394,7 @@ export default function CmsSectionRenderer({
         title="cms-section"
         sandbox={iframeSandbox}
         srcDoc={srcDoc}
+        onLoad={() => setIframeLoadTick((t) => t + 1)}
         className="w-full bg-red-800  border border-slate-200 bg-white dark:bg-slate-950"
         style={{
           width: "100%",

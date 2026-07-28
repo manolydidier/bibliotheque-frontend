@@ -37,6 +37,8 @@ import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
 import i18n from '../i18n';
 import { logoutUser } from '../features/auth/authActions';
+import { language } from '../store/slices/Slice';
+import { changeAppLanguage, getSavedLanguage } from '../component/langue/languageStorage';
 
 const STORAGE_KEY = 'dashboard:activeTabId';
 const ACCORDION_STORE_KEY = 'dashboard:openSections';
@@ -459,6 +461,14 @@ const DashboardLayout = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
+  // ✅ Reprend la langue choisie ailleurs dans l'app (site public ou
+  // backoffice) si ce layout se monte en premier.
+  useEffect(() => {
+    const saved = getSavedLanguage();
+    if (i18n.language !== saved) changeAppLanguage(i18n, saved, dispatch, language);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // env alignés avec Navbar
   const API_BASE_STORAGE = import.meta.env.VITE_API_BASE_STORAGE;
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -505,7 +515,7 @@ const DashboardLayout = () => {
       i18n.language === 'fr' ? 'Switch to English' : 'Passer en français';
     return (
       <button
-        onClick={() => i18n.changeLanguage(next)}
+        onClick={() => changeAppLanguage(i18n, next, dispatch, language)}
         className="px-3 py-1 rounded-lg text-sm bg-gray-200 text-gray-700 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
         aria-label={label}
         title={label}

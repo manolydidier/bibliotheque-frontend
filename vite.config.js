@@ -32,6 +32,13 @@ optimizeDeps: {
         target: "http://84.247.182.163:8000",
         changeOrigin: true,
       },
+      // Assets servis à la racine publique Laravel (org.css, /images/.. référencés
+      // en relatif par le contenu CMS). Miroir du "location /backend-assets/" Nginx.
+      "/backend-assets": {
+        target: "http://84.247.182.163:8000",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/backend-assets/, ""),
+      },
     },
     
   }

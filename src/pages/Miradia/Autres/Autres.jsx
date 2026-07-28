@@ -69,7 +69,7 @@ export default function Autres() {
   const { id } = useParams(); // Récupère l'ID à partir du paramètre de l'URL
 
   const API_BASE = useMemo(
-    () => import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000",
+    () => import.meta.env.VITE_API_BASE_URL || "/api",
     []
   );
 
@@ -96,6 +96,7 @@ export default function Autres() {
       .get(url, {
         headers: { Accept: "application/json" },
         signal: controller.signal,
+        baseURL: "", // ⚠️ ignore axios.defaults.baseURL (mis à "/api" ailleurs dans l'app) : url est déjà complet
       })
       .then((res) => {
         const json = res.data;
@@ -121,8 +122,6 @@ export default function Autres() {
 
     return () => controller.abort();
   }, [API_BASE, id]);
-
-  const apiBase = String(API_BASE).replace(/\/api\/?$/, "").replace(/\/$/, "");
 
   const frontOrigin = typeof window !== "undefined" ? window.location.origin : "";
   const tailwindCssUrl = frontOrigin ? new URL(tailwindCssPath, frontOrigin).href : tailwindCssPath;
@@ -165,7 +164,7 @@ export default function Autres() {
                 syncParentTheme
                 className="w-full h-full"
                 canvasCssUrls={[tailwindCssUrl]}
-                baseHref={apiBase + "/"}
+                baseHref="/backend-assets/" /* proxifié par Nginx vers le VPS (voir org.css) */
                 previewBackground="transparent"
               />
             </div>

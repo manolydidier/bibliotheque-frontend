@@ -5,6 +5,7 @@ import DOMPurify from "dompurify";
 import { FaSitemap } from "react-icons/fa";
 import { FiChevronDown, FiChevronUp, FiMail, FiPhone, FiBriefcase, FiMapPin, FiX } from "react-icons/fi";
 import Modal from "./Modal";
+import useDynamicTranslate from "../../../hooks/useDynamicTranslate";
 /* ========================= PALETTE ========================= */
 const MIRADIA = {
   navy:   "#124B7C",
@@ -425,7 +426,7 @@ export default function OrganigrammeMIRADIAPro() {
   useEffect(() => {
     let ok = true;
     setLoading(true); setError("");
-    axios.get("/orgnodes/slides", { params:{ active:1 } })
+    axios.get("/api/orgnodes/slides", { params:{ active:1 }, baseURL: "" })
       .then(res => {
         const raw = Array.isArray(res?.data?.data) ? res.data.data : Array.isArray(res?.data) ? res.data : [];
         if (ok) setNodes(raw);
@@ -469,8 +470,14 @@ export default function OrganigrammeMIRADIAPro() {
   const persons      = useMemo(()=>(Array.isArray(nodes)?nodes:[]).map(toPerson),[nodes]);
   const canvasLayout = useMemo(()=>layout?{...layout,items:layout.norm}:null,[layout]);
 
+  const rootRef = useRef(null);
+  // ✅ Traduction (titre statique + cartes DB) via Google : le texte de ce
+  // composant est en dur (pas d'i18n) et les cartes apparaissent en fondu
+  // via IntersectionObserver, donc traduites ici plutôt qu'au clic.
+  useDynamicTranslate(() => rootRef.current, [nodes, activeView]);
+
   return (
-    <div className="min-h-screen flex items-center w-full bg-[#eef5fb] dark:bg-gradient-to-b dark:from-[#0B1626] dark:via-[#070F1C] dark:to-[#050A12]">
+    <div ref={rootRef} className="min-h-screen flex items-center w-full bg-[#eef5fb] dark:bg-gradient-to-b dark:from-[#0B1626] dark:via-[#070F1C] dark:to-[#050A12]">
       <div className="relative w-full min-h-screen flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8">
         <AnimatedBackground />
         <div className="relative flex-col w-full max-w-[1700px] px-2 sm:px-4 lg:px-8 py-8">

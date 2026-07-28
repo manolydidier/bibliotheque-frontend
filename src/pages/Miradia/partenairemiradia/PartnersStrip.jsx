@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import PartnerStandardCard from "./PartnerStandardCard";
 import api from "../../../services/api";
 import { Link } from "react-router-dom";
+import useDynamicTranslate from "../../../hooks/useDynamicTranslate";
 
 /* =========================
    PALETTE MIRADIA
@@ -435,8 +436,12 @@ export default function PartnersStrip({ highlightTenantId = null }) {
 
   const { trackRef, panelHandlers, isDragging, isHovered, velMag } = useDragScroll();
 
+  const dynRef = useRef(null);
+  // ✅ Traduction du contenu dynamique (partenaires/BDD) via Google.
+  useDynamicTranslate(() => dynRef.current, [partners]);
+
   return (
-    <section className="relative w-full overflow-x-hidden" aria-label="Partenaires de la plateforme MIRADIA">
+    <section ref={dynRef} className="relative w-full overflow-x-hidden" aria-label="Partenaires de la plateforme MIRADIA">
       <div className="relative w-full bg-[#eef5fb] dark:bg-gradient-to-b dark:from-[#071324] dark:via-[#050D18] dark:to-[#040812]">
         <AnimatedBackground />
 

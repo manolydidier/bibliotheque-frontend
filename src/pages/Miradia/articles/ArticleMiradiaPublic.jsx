@@ -4,6 +4,7 @@ import React, {
 } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
+import useDynamicTranslate from "../../../hooks/useDynamicTranslate";
 
 /* ─────────────────────────────────────────
    PALETTE
@@ -238,7 +239,7 @@ const toAbsolute = (u) => {
   const fixed = fixPath(u);
   if (!fixed) return null;
   if (/^https?:\/\//i.test(fixed)) return fixed;
-  const base = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000")
+  const base = (import.meta.env.VITE_API_BASE_URL || "/api")
     .replace(/\/api\/?$/i, "").replace(/\/$/, "");
   return `${base}/${fixed.replace(/^\/+/, "")}`;
 };
@@ -250,7 +251,7 @@ const formatDate = (d) => {
 };
 
 const buildApiBase = () => {
-  const raw = String(import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+  const raw = String(import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
   return raw.endsWith("/api") ? raw : `${raw}/api`;
 };
 
@@ -554,8 +555,12 @@ function ArticleCard({ article }) {
   const slug   = article.slug || article.id;
   const reading= article.reading_time;
 
+  const dynRef = useRef(null);
+  // ✅ Traduction du contenu dynamique (BDD) de la carte via Google.
+  useDynamicTranslate(() => dynRef.current, [article?.id, title, excerpt]);
+
   return (
-    <article className="art-card group relative flex flex-col rounded-3xl overflow-hidden
+    <article ref={dynRef} className="art-card group relative flex flex-col rounded-3xl overflow-hidden
                         border border-slate-200/80 bg-white/82 backdrop-blur-sm
                         shadow-[0_2px_12px_rgba(0,0,0,.06)]
                         hover:shadow-[0_12px_40px_rgba(0,0,0,.12)]

@@ -48,7 +48,7 @@ function normalizeCss(input) {
 
 export default function FooterCMS() {
   const API_BASE = useMemo(
-    () => import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000",
+    () => import.meta.env.VITE_API_BASE_URL || "/api",
     []
   );
 
@@ -67,7 +67,7 @@ export default function FooterCMS() {
     setState({ loading: true, error: "", section: null });
 
     axios
-      .get(url, { headers: { Accept: "application/json" }, signal: controller.signal })
+      .get(url, { headers: { Accept: "application/json" }, signal: controller.signal, baseURL: "" })
       .then((res) => {
         const json = res.data;
         const okStatus = String(json?.status || "").toLowerCase() === "published";
@@ -93,7 +93,6 @@ export default function FooterCMS() {
     return () => controller.abort();
   }, [API_BASE]);
 
-  const apiBase = String(API_BASE).replace(/\/api\/?$/, "").replace(/\/$/, "");
   const frontOrigin = typeof window !== "undefined" ? window.location.origin : "";
   const tailwindCssUrl = frontOrigin ? new URL(tailwindCssPath, frontOrigin).href : tailwindCssPath;
 
@@ -124,7 +123,7 @@ export default function FooterCMS() {
         syncParentTheme
         className="w-full h-full"
         canvasCssUrls={[tailwindCssUrl]}
-        baseHref={apiBase + "/"}
+        baseHref="/backend-assets/" /* proxifié par Nginx vers le VPS (voir org.css) */
         previewBackground="transparent"
       />
     </div>

@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Link } from 'react-router-dom';
 
 function buildApiBase() {
-  const raw = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+  const raw = import.meta.env.VITE_API_BASE_URL || "/api";
   const base = String(raw).replace(/\/$/, "");
   return base.endsWith("/api") ? base : `${base}/api`;
 }

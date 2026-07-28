@@ -1,15 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import axios from "axios";
 import { extractSlideImage, getStorageBase } from "./imageUtils";
+import useDynamicTranslate from "../../hooks/useDynamicTranslate";
 
 /* ========================================
    CONFIGURATION
 ======================================== */
 const getApiRoot = () => {
-  const raw = String(
-    import.meta.env.VITE_API_BASE_URL || "http://84.247.182.163:8000/"
-  ).replace(/\/$/, "");
-
+  // ⚠️ Aucune URL HTTP codée en dur : fallback relatif /api (sûr en production HTTPS).
+  // En dev, VITE_API_BASE_URL (défini dans .env) est utilisé tel quel.
+  const raw = String(import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/+$/, "");
   return raw.endsWith("/api") ? raw : `${raw}/api`;
 };
 
@@ -663,8 +663,12 @@ const SlideItem = ({
 /* ========================================
    INACTIVE SLIDE CONTENT
 ======================================== */
-const InactiveSlideContent = ({ slide, idx, isMobile, goTo }) => (
-  <div className="h-full flex flex-col justify-center items-center text-center px-2 gap-3">
+const InactiveSlideContent = ({ slide, idx, isMobile, goTo }) => {
+  const dynRef = useRef(null);
+  useDynamicTranslate(() => dynRef.current, [slide?.id ?? idx, slide?.title]);
+
+  return (
+  <div ref={dynRef} className="h-full flex flex-col justify-center items-center text-center px-2 gap-3">
     {/* Miniature de l'image si disponible */}
     {slide.image && (
       <div className="w-14 h-14 rounded-2xl overflow-hidden border border-white/18 shadow-lg flex-shrink-0">
@@ -705,15 +709,21 @@ const InactiveSlideContent = ({ slide, idx, isMobile, goTo }) => (
       </button>
     )}
   </div>
-);
+  );
+};
 
 /* ========================================
    ACTIVE SLIDE CONTENT
 ======================================== */
 const ActiveSlideContent = ({
   slide, idx, total, revealContent, isPaused, alignClass, isMobile, pauseBriefly,
-}) => (
-  <div className={`h-full flex flex-col justify-between ${alignClass}`}>
+}) => {
+  const dynRef = useRef(null);
+  // ✅ Traduction du contenu dynamique (BDD) du slide actif via Google.
+  useDynamicTranslate(() => dynRef.current, [slide?.id ?? idx, slide?.title, slide?.description]);
+
+  return (
+  <div ref={dynRef} className={`h-full flex flex-col justify-between ${alignClass}`}>
 
     <div className={revealContent ? "slide-in-show" : "slide-in-hold"}>
       <div className="miradia-title-plate">
@@ -774,7 +784,8 @@ const ActiveSlideContent = ({
       )}
     </div>
   </div>
-);
+  );
+};
 
 /* ========================================
    PROGRESS BAR

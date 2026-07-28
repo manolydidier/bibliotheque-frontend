@@ -1,5 +1,6 @@
 // src/pages/bureaux/BureauPublicShow.jsx
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import useDynamicTranslate from "../../../../../../hooks/useDynamicTranslate";
 import { useParams, Link } from "react-router-dom";
 import {
   FiMapPin,
@@ -252,6 +253,12 @@ export default function BureauPublicShow() {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortKey, setSortKey] = useState("default");
 
+  const dynRef = useRef(null);
+  // ✅ Traduction du contenu dynamique (bureau/BDD) via Google. Appelé
+  // inconditionnellement (avant les "return" anticipés loading/erreur) —
+  // règle des Hooks React.
+  useDynamicTranslate(() => dynRef.current, [data]);
+
   // Chargement des données
   useEffect(() => {
     const load = async () => {
@@ -412,7 +419,7 @@ export default function BureauPublicShow() {
   return (
     <>
    <NavBarMiradia/>
-    <div className="min-h-screen pt-24 bg-gradient-to-br from-slate-50 via-sky-50/40 to-slate-100 text-slate-900 px-4 py-10">
+    <div ref={dynRef} className="min-h-screen pt-24 bg-gradient-to-br from-slate-50 via-sky-50/40 to-slate-100 text-slate-900 px-4 py-10">
       <div className="w-full max-w-5xl mx-auto space-y-6">
         {/* En-tête : Retour + Info société */}
         <div className="flex items-center justify-between gap-3">

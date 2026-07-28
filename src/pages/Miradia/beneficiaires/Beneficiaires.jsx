@@ -129,7 +129,7 @@ function normalizeCss(input) {
 
 export default function Beneficiaires() {
   const API_BASE = useMemo(
-    () => import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000",
+    () => import.meta.env.VITE_API_BASE_URL || "/api",
     []
   );
 
@@ -149,7 +149,7 @@ export default function Beneficiaires() {
     setState({ loading: true, error: "", section: null });
 
     axios
-      .get(url, { headers: { Accept: "application/json" }, signal: controller.signal })
+      .get(url, { headers: { Accept: "application/json" }, signal: controller.signal, baseURL: "" })
       .then((res) => {
         const json = res.data;
         const okStatus = String(json?.status || "").toLowerCase() === "published";
@@ -174,8 +174,6 @@ export default function Beneficiaires() {
 
     return () => controller.abort();
   }, [API_BASE]);
-
-  const apiBase = String(API_BASE).replace(/\/api\/?$/, "").replace(/\/$/, "");
 
   // ✅ URL ABSOLUE vers le FRONT (évite 8000/src/index.css)
   const frontOrigin = typeof window !== "undefined" ? window.location.origin : "";
@@ -222,7 +220,7 @@ export default function Beneficiaires() {
                 syncParentTheme
                 className="w-full h-full"
                 canvasCssUrls={[tailwindCssUrl]}
-                baseHref={apiBase + "/"}
+                baseHref="/backend-assets/" /* proxifié par Nginx vers le VPS (voir org.css) */
                 previewBackground="transparent"
               />
             </div>
