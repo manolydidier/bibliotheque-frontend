@@ -1051,7 +1051,7 @@ const isDark = document.documentElement.classList.contains("dark");
                     onChange("html", html);
                     onChange("css", css);
                     onChange("js", js);
-                    showToast("Contenu enregistré (local) ✅", "success");
+                    showToast("Contenu repris dans le formulaire — cliquez « Mettre à jour » pour l'enregistrer réellement.", "success");
                     setIsEditorOpen(false);
                   }}
                   onCancel={() => setIsEditorOpen(false)}

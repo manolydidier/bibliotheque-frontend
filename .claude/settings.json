@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Read(//c/Users/RAVELOJAONA MANOLY/AppData/Local/Temp/claude/c--Users-RAVELOJAONA-MANOLY-Desktop-fronttextlaravelapi-FrontReactLibrairie-library/06cdf48c-3ad2-4c57-bdd0-219f51758b8d/scratchpad/pw/shots/**)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Read(//c/Users/RAVELOJAONA MANOLY/AppData/Local/Temp/claude/c--Users-RAVELOJAONA-MANOLY-Desktop-fronttextlaravelapi-FrontReactLibrairie-library/06cdf48c-3ad2-4c57-bdd0-219f51758b8d/scratchpad/pw/**)"
     ]
   }
 }

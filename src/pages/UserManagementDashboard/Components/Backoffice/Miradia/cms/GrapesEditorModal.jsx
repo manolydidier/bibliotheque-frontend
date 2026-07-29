@@ -42,6 +42,7 @@ import {
   FiZap,
   FiLayout,
   FiLink,
+  FiAlertTriangle,
 } from "react-icons/fi";
 
 const TAILWIND_CANVAS_CSS =
@@ -650,6 +651,14 @@ const [linkUrl, setLinkUrl] = useState('');
 
   const [ready, setReady] = useState(false);
 
+  // ⚠️ Garde anti-perte de données : si le projet GrapesJS (gjs_project)
+  // rechargé produit un HTML/CSS nettement plus court que celui déjà
+  // enregistré (initialHtml/initialCss), c'est le signe que le projet et
+  // le rendu stocké ont divergé (ex: gros assets non repris) — enregistrer
+  // maintenant écraserait le contenu réel avec cette version tronquée.
+  const [dataLossWarning, setDataLossWarning] = useState(null);
+  const [dataLossAck, setDataLossAck] = useState(false);
+
   // LEFT tabs
   const [leftTab, setLeftTab] = useState("blocks");
   // RIGHT tabs
@@ -697,14 +706,27 @@ const [linkUrl, setLinkUrl] = useState('');
     }
     return parseThemeFromCss(STARTER_CSS) || { light: {}, dark: {} };
   });
-const openLinkDialog = () => setLinkDialogOpen(true);
+const openLinkDialog = () => {
+  if (!editorRef.current?.getSelected()) {
+    alert("Sélectionne d'abord un élément dans le canvas avant d'ajouter un lien.");
+    return;
+  }
+  setLinkDialogOpen(true);
+};
 const closeLinkDialog = () => setLinkDialogOpen(false);
 
 const handleLinkInputChange = (e) => setLinkUrl(e.target.value);
 
 const applyLinkToSelected = () => {
   const selected = editorRef.current?.getSelected();
-  if (!selected || !linkUrl) return;
+  if (!selected) {
+    alert("Aucun élément sélectionné : le lien n'a pas été appliqué.");
+    return;
+  }
+  if (!linkUrl.trim()) {
+    alert("Entre une URL avant de valider.");
+    return;
+  }
 
   // Appliquer le lien à l'élément sélectionné
   selected.addAttributes({ href: linkUrl, target: '_blank' });
@@ -1671,6 +1693,19 @@ ${body}
       setReady(true);
       syncFromEditor();
       updateSelectedInfo();
+
+      // ⚠️ Détection de divergence gjs_project vs html/css déjà stockés.
+      if (safeProject) {
+        const reloadedLen = (ed.getHtml() || "").length + (ed.getCss() || "").length;
+        const originalLen = String(initialHtml || "").length + String(initialCss || "").length;
+        if (originalLen > 500 && reloadedLen < originalLen * 0.5) {
+          setDataLossWarning({
+            originalLen,
+            reloadedLen,
+            pct: Math.round((reloadedLen / originalLen) * 100),
+          });
+        }
+      }
       setGjsDevice("Desktop");
       setCanvasZoom(100);
       applyThemePreviewToCanvas(themePreview);
@@ -1696,8 +1731,25 @@ ${body}
     ed.on("load", finalizeLoad);
     const t = setTimeout(finalizeLoad, 250);
 
+    // ⚠️ Re-vérifie la divergence après que les effets post-chargement
+    // (ex: reconstruction auto du thème) aient eu le temps de tourner —
+    // le contenu peut rétrécir juste après le chargement initial.
+    const recheckDataLoss = setTimeout(() => {
+      if (!safeProject) return;
+      const reloadedLen = (ed.getHtml() || "").length + (ed.getCss() || "").length;
+      const originalLen = String(initialHtml || "").length + String(initialCss || "").length;
+      if (originalLen > 500 && reloadedLen < originalLen * 0.5) {
+        setDataLossWarning({
+          originalLen,
+          reloadedLen,
+          pct: Math.round((reloadedLen / originalLen) * 100),
+        });
+      }
+    }, 2500);
+
     return () => {
       clearTimeout(t);
+      clearTimeout(recheckDataLoss);
       if (jsTimerRef.current) clearTimeout(jsTimerRef.current);
       if (cssTimerRef.current) clearTimeout(cssTimerRef.current);
       try {
@@ -1752,6 +1804,28 @@ ${body}
   const doSave = () => {
     const ed = editorRef.current;
     if (!ed) return;
+
+    // ⚠️ Recalculé À L'INSTANT du clic (pas seulement au chargement) : le
+    // contenu peut avoir rétréci en cours d'édition (ex: reconstruction
+    // automatique du thème qui réécrit le CSS). C'est CE moment qui compte,
+    // puisque c'est ce qui va effectivement partir en base.
+    const freshReloadedLen = (ed.getHtml() || "").length + (ed.getCss() || "").length;
+    const freshOriginalLen = String(initialHtml || "").length + String(initialCss || "").length;
+    const freshWarning =
+      freshOriginalLen > 500 && freshReloadedLen < freshOriginalLen * 0.5
+        ? { originalLen: freshOriginalLen, reloadedLen: freshReloadedLen, pct: Math.round((freshReloadedLen / freshOriginalLen) * 100) }
+        : null;
+    if (freshWarning && !dataLossAck) {
+      setDataLossWarning(freshWarning);
+      alert(
+        "⚠️ Contenu potentiellement incomplet.\n\n" +
+        "Le contenu actuel de l'éditeur est nettement plus court que celui actuellement en ligne " +
+        `(${freshWarning.pct}% de la taille d'origine : ${freshWarning.reloadedLen} caractères au lieu de ${freshWarning.originalLen}). ` +
+        "Enregistrer maintenant risque d'écraser des éléments (images, blocs...) déjà en ligne.\n\n" +
+        "Coche la case d'avertissement en haut de l'éditeur si tu es sûr(e) de vouloir continuer."
+      );
+      return;
+    }
 
     try {
       saveSeoToPage();
@@ -1829,6 +1903,22 @@ ${body}
   ===================== */
   return (
     <div className="w-full h-full flex flex-col bg-slate-50">
+      {/* ⚠️ BANNIÈRE ANTI-PERTE DE DONNÉES */}
+      {dataLossWarning && (
+        <div className="px-3 py-2 border-b bg-amber-50 border-amber-200 flex items-center gap-3 flex-wrap">
+          <FiAlertTriangle className="text-amber-600 flex-shrink-0" />
+          <span className="text-xs font-semibold text-amber-800 flex-1 min-w-[280px]">
+            Contenu rechargé plus court que l'original ({dataLossWarning.pct}% de la taille stockée) —
+            des éléments (images, blocs…) ne se sont peut-être pas chargés. Enregistrer maintenant
+            risque de les effacer définitivement.
+          </span>
+          <label className="flex items-center gap-2 text-xs font-bold text-amber-900 cursor-pointer whitespace-nowrap">
+            <input type="checkbox" checked={dataLossAck} onChange={(e) => setDataLossAck(e.target.checked)} />
+            Je comprends le risque, enregistrer quand même
+          </label>
+        </div>
+      )}
+
       {/* TOP TOOLBAR */}
       <div className="flex items-center justify-between px-3 py-2 border-b bg-white">
         <div className="flex items-center gap-2">
