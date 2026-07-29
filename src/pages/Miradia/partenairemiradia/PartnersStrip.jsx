@@ -3,6 +3,9 @@ import PartnerStandardCard from "./PartnerStandardCard";
 import api from "../../../services/api";
 import { Link } from "react-router-dom";
 import useDynamicTranslate from "../../../hooks/useDynamicTranslate";
+import { readApiCache, writeApiCache } from "../../../utils/apiCache";
+
+const SOCIETES_CACHE_KEY = "societes_publique";
 
 /* =========================
    PALETTE MIRADIA
@@ -378,8 +381,9 @@ function PartnersTitleBlock() {
    PartnersStrip
 ========================= */
 export default function PartnersStrip({ highlightTenantId = null }) {
-  const [societes, setSocietes] = useState([]);
-  const [loading,  setLoading]  = useState(true);
+  const cachedSocietes = useMemo(() => readApiCache(SOCIETES_CACHE_KEY), []);
+  const [societes, setSocietes] = useState(cachedSocietes || []);
+  const [loading,  setLoading]  = useState(!cachedSocietes);
 
   useEffect(() => {
     let mounted = true;
@@ -388,15 +392,19 @@ export default function PartnersStrip({ highlightTenantId = null }) {
         const res = await api.get("/societesPublique", { params: { per_page: 100 } });
         const raw = res?.data?.data || res?.data || [];
         if (!mounted) return;
-        setSocietes(Array.isArray(raw) ? raw : []);
+        const list = Array.isArray(raw) ? raw : [];
+        writeApiCache(SOCIETES_CACHE_KEY, list);
+        setSocietes(list);
       } catch (e) {
         console.error("Erreur chargement sociétés pour PartnersStrip", e);
-        if (mounted) setSocietes([]);
+        // Coûte que coûte : si on a déjà des partenaires (cache), on les garde.
+        if (mounted && !cachedSocietes) setSocietes([]);
       } finally {
         if (mounted) setLoading(false);
       }
     })();
     return () => { mounted = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const partners = useMemo(() => {

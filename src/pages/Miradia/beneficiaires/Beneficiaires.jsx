@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import CmsSectionRenderer from "../../UserManagementDashboard/Components/Backoffice/Miradia/cms/CmsSectionRenderer";
+import { readApiCache, writeApiCache } from "../../../utils/apiCache";
 
 // ✅ Navbar + Footer
 import NavBarMiradia from "../../../component/navbar/NavbarMiradia"; // ✅ adapte si besoin
@@ -19,24 +20,7 @@ const CMS_BENEFICIAIRES_ID = 3;
 // cache le dernier contenu chargé pour que la page s'affiche instantanément
 // (coûte que coûte) même si le réseau est lent ou temporairement en échec.
 const FETCH_TIMEOUT_MS = 60000;
-const CACHE_KEY = `mrd_cms_section_${CMS_BENEFICIAIRES_ID}`;
-
-function readCache() {
-  try {
-    const raw = sessionStorage.getItem(CACHE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeCache(section) {
-  try {
-    sessionStorage.setItem(CACHE_KEY, JSON.stringify(section));
-  } catch {
-    // quota dépassé ou storage indisponible : tant pis, pas bloquant
-  }
-}
+const CACHE_KEY = `cms_section_${CMS_BENEFICIAIRES_ID}`;
 
 /**
  * ✅ Sticky + Iframe:
@@ -158,7 +142,7 @@ export default function Beneficiaires() {
     []
   );
 
-  const cached = useMemo(readCache, []);
+  const cached = useMemo(() => readApiCache(CACHE_KEY), []);
   const [state, setState] = useState(() =>
     cached
       ? { loading: false, error: "", section: cached }
@@ -192,7 +176,7 @@ export default function Beneficiaires() {
         }
 
         const section = { ...json, css: normalizeCss(json?.css || "") };
-        writeCache(section);
+        writeApiCache(CACHE_KEY, section);
         setState({ loading: false, error: "", section });
       })
       .catch((e) => {

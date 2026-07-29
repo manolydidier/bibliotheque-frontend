@@ -2,11 +2,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import CmsSectionRenderer from "../../UserManagementDashboard/Components/Backoffice/Miradia/cms/CmsSectionRenderer";
+import { readApiCache, writeApiCache } from "../../../utils/apiCache";
 
 // ✅ Vite génère une URL valide (dev/prod)
 import appCssPath from "/src/index.css?url";
 
 const CMS_OBJECTIF_ID = 1;
+const CACHE_KEY = `cms_section_${CMS_OBJECTIF_ID}`;
 
 const CMS_RESET = `
   html, body { margin: 0 !important; padding: 0 !important; }
@@ -90,7 +92,12 @@ export default function Objectif() {
     []
   );
 
-  const [state, setState] = useState({ loading: true, error: "", section: null });
+  const cached = useMemo(() => readApiCache(CACHE_KEY), []);
+  const [state, setState] = useState(() =>
+    cached
+      ? { loading: false, error: "", section: cached }
+      : { loading: true, error: "", section: null }
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -98,30 +105,28 @@ export default function Objectif() {
     const apiBase = String(API_BASE).replace(/\/api\/?$/, "").replace(/\/$/, "");
     const url = `${apiBase}/api/cms-sectionspublic/${CMS_OBJECTIF_ID}`;
 
-    setState({ loading: true, error: "", section: null });
+    setState((prev) => (prev.section ? prev : { loading: true, error: "", section: null }));
 
     axios
-      .get(url, { headers: { Accept: "application/json" }, signal: controller.signal, baseURL: "" })
+      .get(url, { headers: { Accept: "application/json" }, signal: controller.signal, baseURL: "", timeout: 60000 })
       .then((res) => {
         const json = res.data;
         const okStatus = String(json?.status || "").toLowerCase() === "published";
         if (!okStatus) {
-          setState({ loading: false, error: "Section CMS non publiée.", section: null });
+          setState((prev) => (prev.section ? prev : { loading: false, error: "Section CMS non publiée.", section: null }));
           return;
         }
 
-        setState({
-          loading: false,
-          error: "",
-          section: { ...json, css: normalizeCss(json?.css || "") },
-        });
+        const section = { ...json, css: normalizeCss(json?.css || "") };
+        writeApiCache(CACHE_KEY, section);
+        setState({ loading: false, error: "", section });
       })
       .catch((e) => {
         if (e?.name === "CanceledError" || e?.code === "ERR_CANCELED") return;
         const msg = e?.response?.status
           ? `Erreur CMS: HTTP ${e.response.status}`
           : e?.message || "Erreur chargement CMS";
-        setState({ loading: false, error: msg, section: null });
+        setState((prev) => (prev.section ? prev : { loading: false, error: msg, section: null }));
       });
 
     return () => controller.abort();

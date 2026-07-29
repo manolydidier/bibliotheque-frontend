@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import axios from "axios";
 import { extractSlideImage, getStorageBase } from "./imageUtils";
 import useDynamicTranslate from "../../hooks/useDynamicTranslate";
+import { readApiCache, writeApiCache } from "../../utils/apiCache";
+
+const SLIDES_CACHE_KEY = "miradia_slides";
 
 /* ========================================
    CONFIGURATION
@@ -56,8 +59,9 @@ const useResponsive = () => {
 };
 
 const useSlideData = () => {
-  const [slides, setSlides] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const cached = useMemo(() => readApiCache(SLIDES_CACHE_KEY), []);
+  const [slides, setSlides] = useState(cached || []);
+  const [isLoading, setIsLoading] = useState(!cached);
 
   useEffect(() => {
     let mounted = true;
@@ -97,12 +101,14 @@ const useSlideData = () => {
           });
 
         if (mounted) {
+          writeApiCache(SLIDES_CACHE_KEY, normalized);
           setSlides(normalized);
           setIsLoading(false);
         }
       })
       .catch((e) => {
         console.error("Erreur fetch slides:", e?.response?.data || e?.message || e);
+        // Coûte que coûte : si on a déjà des slides (cache), on les garde.
         if (mounted) setIsLoading(false);
       });
 

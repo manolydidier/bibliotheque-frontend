@@ -5,6 +5,7 @@ import React, {
 import axios from "axios";
 import { Link } from "react-router-dom";
 import useDynamicTranslate from "../../../hooks/useDynamicTranslate";
+import { readApiCache, writeApiCache } from "../../../utils/apiCache";
 
 /* ─────────────────────────────────────────
    PALETTE
@@ -759,9 +760,17 @@ export default function ArticlesMiradiaPublic() {
   const [debounced, setDebounced] = useState("");
   const [page,      setPage]      = useState(1);
   const [perPage,   setPerPage]   = useState(12);
-  const [state,     setState]     = useState({
-    loading: true, error: "", rows: [], lastPage: 1, total: 0,
-  });
+
+  // ✅ Cache-first sur la 1ère page par défaut (sans recherche) : c'est ce
+  // qui s'affiche à l'arrivée sur la page/le widget d'accueil, donc c'est ce
+  // qui doit apparaître instantanément lors des visites suivantes.
+  const initialCacheKey = "articles_p1_pp12_s";
+  const initialCached = useMemo(() => readApiCache(initialCacheKey), []);
+  const [state, setState] = useState(() =>
+    initialCached
+      ? { loading: false, error: "", ...initialCached }
+      : { loading: true, error: "", rows: [], lastPage: 1, total: 0 }
+  );
 
   /* Debounce */
   useEffect(() => {
@@ -777,8 +786,17 @@ export default function ArticlesMiradiaPublic() {
     const ctrl = new AbortController();
     let cancelled = false;
 
-    (async () => {
+    const cacheKey = `articles_p${page}_pp${perPage}_s${debounced.trim()}`;
+    const cachedForThisQuery = readApiCache(cacheKey);
+    if (cachedForThisQuery) {
+      // Déjà en cache pour cette page/recherche exacte : affichage immédiat,
+      // rafraîchi en tâche de fond ci-dessous (pas de "Chargement…").
+      setState(s => ({ ...s, ...cachedForThisQuery, loading: false, error: "" }));
+    } else {
       setState(s => ({ ...s, loading: true, error: "" }));
+    }
+
+    (async () => {
       try {
         const params = new URLSearchParams({
           page: String(page), per_page: String(perPage), sort: "published_at,desc",
@@ -790,13 +808,17 @@ export default function ArticlesMiradiaPublic() {
         const lastPage = Number(data.meta?.last_page ?? 1) || 1;
         const total    = Number(data.meta?.total ?? data.total ?? 0) || 0;
 
-        if (!cancelled) setState({ loading: false, error: "", rows, lastPage, total });
+        if (!cancelled) {
+          writeApiCache(cacheKey, { rows, lastPage, total });
+          setState({ loading: false, error: "", rows, lastPage, total });
+        }
       } catch (e) {
         if (ctrl.signal.aborted || cancelled) return;
         const msg = e?.response?.status
           ? `Erreur HTTP ${e.response.status}`
           : e?.message || "Impossible de charger les articles.";
-        setState({ loading: false, error: msg, rows: [], lastPage: 1, total: 0 });
+        // Coûte que coûte : si on a déjà un résultat pour cette requête (cache), on le garde.
+        setState(s => (cachedForThisQuery ? { ...s, loading: false, error: "" } : { loading: false, error: msg, rows: [], lastPage: 1, total: 0 }));
       }
     })();
 

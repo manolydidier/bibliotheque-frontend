@@ -6,6 +6,9 @@ import { FaSitemap } from "react-icons/fa";
 import { FiChevronDown, FiChevronUp, FiMail, FiPhone, FiBriefcase, FiMapPin, FiX } from "react-icons/fi";
 import Modal from "./Modal";
 import useDynamicTranslate from "../../../hooks/useDynamicTranslate";
+import { readApiCache, writeApiCache } from "../../../utils/apiCache";
+
+const ORGNODES_CACHE_KEY = "orgnodes_slides";
 /* ========================= PALETTE ========================= */
 const MIRADIA = {
   navy:   "#124B7C",
@@ -411,8 +414,9 @@ function CanvasView({ layout, onOpen }) {
 
 /* ========================= PAGE PRINCIPALE ========================= */
 export default function OrganigrammeMIRADIAPro() {
-  const [nodes,    setNodes]    = useState([]);
-  const [loading,  setLoading]  = useState(true);
+  const cachedNodes = useMemo(() => readApiCache(ORGNODES_CACHE_KEY), []);
+  const [nodes,    setNodes]    = useState(cachedNodes || []);
+  const [loading,  setLoading]  = useState(!cachedNodes);
   const [selected, setSelected] = useState(null);
   const [error,    setError]    = useState("");
   const bp      = useBreakpoint();
@@ -425,15 +429,20 @@ export default function OrganigrammeMIRADIAPro() {
 
   useEffect(() => {
     let ok = true;
-    setLoading(true); setError("");
+    // Contenu déjà en cache → pas de "Chargement…", rafraîchi en tâche de fond.
+    setLoading((prev) => (nodes.length ? false : true)); setError("");
     axios.get("/api/orgnodes/slides", { params:{ active:1 }, baseURL: "" })
       .then(res => {
         const raw = Array.isArray(res?.data?.data) ? res.data.data : Array.isArray(res?.data) ? res.data : [];
-        if (ok) setNodes(raw);
+        if (ok) { writeApiCache(ORGNODES_CACHE_KEY, raw); setNodes(raw); }
       })
-      .catch(e => { if (ok) { setError(e?.response?.data?.message||e?.message||"Erreur"); setNodes([]); } })
+      .catch(e => {
+        // Coûte que coûte : si on a déjà des nœuds (cache), on les garde.
+        if (ok && !nodes.length) { setError(e?.response?.data?.message||e?.message||"Erreur"); setNodes([]); }
+      })
       .finally(() => { if (ok) setLoading(false); });
     return () => { ok=false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const layout = useMemo(() => {
