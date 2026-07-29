@@ -24,8 +24,16 @@ const defaultIconFor = (type) => {
 
 const fallbackToAbsolute = (u) => {
   if (!u) return u;
-  if (/^https?:\/\//i.test(String(u))) return u;
-  return `/${String(u).replace(/^\/+/, "")}`;
+  const s = String(u);
+  if (/^https?:\/\//i.test(s)) {
+    try {
+      const parsed = new URL(s);
+      return parsed.pathname + parsed.search;
+    } catch {
+      return s;
+    }
+  }
+  return `/${s.replace(/^\/+/, "")}`;
 };
 
 export default function EnhancedMedias({

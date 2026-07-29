@@ -1,8 +1,20 @@
 // src/media-library/parts/Visualiseur/FilePreview/helpers.js
 export function toAbsolute(u) {
   if (!u) return u;
-  const s = String(u).trim();
-  if (/^https?:\/\//i.test(s)) return s;
+  let s = String(u).trim();
+
+  // URL absolue : on ignore l'host renvoyé par l'API (peut être
+  // http://IP:8000, différent de l'origine du front) et on ne garde que le
+  // chemin, pour rester en relatif et passer par le proxy HTTPS du front.
+  if (/^https?:\/\//i.test(s)) {
+    try {
+      const parsed = new URL(s);
+      s = parsed.pathname + parsed.search;
+    } catch {
+      return s;
+    }
+  }
+
   const base = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/api\/?$/i, "");
   return base ? `${base}/${s.replace(/^\/+/, "")}` : `/${s.replace(/^\/+/, "")}`;
 }

@@ -127,14 +127,18 @@ const fixFeaturedPath = (u) => {
 const toAbsolute = (u) => {
   if (!u) return null;
   const fixed = fixFeaturedPath(u);
+  // ⚠️ Toujours (dev ET prod) : une URL absolue reçue de l'API peut pointer
+  // vers un host différent de l'origine du front (ex: http://IP:8000) —
+  // on ne garde que le chemin pour rester en relatif et passer par le proxy HTTPS.
   if (/^https?:\/\//i.test(fixed)) {
-    if (import.meta.env.DEV && fixed.includes('/storage/')) {
-      const path = fixed.split('/storage/')[1];
-      return `/storage/${path}`;
+    try {
+      const parsed = new URL(fixed);
+      return parsed.pathname + parsed.search;
+    } catch {
+      return fixed;
     }
-    return fixed;
   }
-  if (import.meta.env.DEV && fixed.startsWith('storage/')) {
+  if (fixed.startsWith('storage/')) {
     return `/${fixed.replace(/^\/+/, '')}`;
   }
   const base = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/api\/?$/i, '');
