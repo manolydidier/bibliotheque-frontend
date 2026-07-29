@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FiMail, FiPhone, FiX, FiBriefcase, FiMapPin } from "react-icons/fi";
 import DOMPurify from "dompurify";
+import useDynamicTranslate from "../../../hooks/useDynamicTranslate";
 
 /* ── helpers ────────────────────────────────────────────────── */
 const MIRADIA = {
@@ -105,7 +106,7 @@ function HeroAvatar({ person, accentColor, enter }) {
       />
 
       <div
-        className="relative h-24 w-24 rounded-3xl overflow-hidden"
+        className="relative h-20 w-20 sm:h-24 sm:w-24 rounded-3xl overflow-hidden"
         style={{
           boxShadow: `0 0 0 3px ${accentColor}, 0 18px 50px ${hexToRgba(accentColor, 0.5)}, 0 6px 20px rgba(0,0,0,0.3)`,
         }}
@@ -219,6 +220,12 @@ export default function Modal({ open, person, onClose }) {
   const [mounted, setMounted] = useState(false);
   const [phase, setPhase] = useState(0); // 0 hidden, 1 backdrop, 2 card, 3 content, -1 exit
   const timerRef = useRef([]);
+  const modalRootRef = useRef(null);
+
+  // ✅ Le modal est rendu via un portail dans document.body, donc en dehors du
+  // DOM observé par le hook de traduction du composant parent : il faut son
+  // propre hook, sinon les infos du membre restent en français en mode EN.
+  useDynamicTranslate(() => modalRootRef.current, [mounted, person?.id]);
 
   const clearTimers = useCallback(() => {
     timerRef.current.forEach(clearTimeout);
@@ -289,7 +296,7 @@ export default function Modal({ open, person, onClose }) {
   ];
 
   const portalNode = (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+    <div ref={modalRootRef} className="fixed inset-0 z-[9999] flex items-center justify-center p-2.5 sm:p-4">
       <button
         className="absolute inset-0 transition-all duration-300"
         onClick={onClose}
@@ -303,7 +310,7 @@ export default function Modal({ open, person, onClose }) {
       />
 
       <div
-        className="relative w-full max-w-[720px] rounded-[32px] overflow-hidden"
+        className="relative w-full max-w-[720px] max-h-[92vh] overflow-y-auto rounded-[24px] sm:rounded-[32px] modal-bio-scroll"
         style={{
           background: "rgba(255,255,255,0.92)",
           backdropFilter: "blur(28px)",
@@ -342,11 +349,11 @@ export default function Modal({ open, person, onClose }) {
             }}
           />
 
-          <div className="relative px-8 pt-8 pb-6 flex items-end gap-6">
+          <div className="relative px-4 sm:px-8 pt-7 sm:pt-8 pb-5 sm:pb-6 flex flex-col sm:flex-row items-center sm:items-end gap-3 sm:gap-6 text-center sm:text-left">
             <HeroAvatar person={person} accentColor={accentColor} enter={contentOpen} />
 
             <div
-              className="flex-1 min-w-0 pb-1"
+              className="flex-1 min-w-0 pb-1 max-w-full"
               style={{
                 opacity: contentOpen ? 1 : 0,
                 transform: contentOpen ? "translateX(0)" : "translateX(-20px)",
@@ -357,14 +364,14 @@ export default function Modal({ open, person, onClose }) {
                 {person.dept || "Équipe"}
               </div>
 
-              <div className="text-white text-[22px] font-black leading-tight">
+              <div className="text-white text-[18px] sm:text-[22px] font-black leading-tight break-words">
                 {person.name}{" "}
                 <span style={{ color: hexToRgba(MIRADIA.yellow, 1) }}>
                   {person.surname}
                 </span>
               </div>
 
-              <div className="text-white/80 text-[14px] font-medium mt-1">
+              <div className="text-white/80 text-[13px] sm:text-[14px] font-medium mt-1 break-words">
                 {person.role || "—"}
               </div>
 
@@ -385,7 +392,7 @@ export default function Modal({ open, person, onClose }) {
 
             <button
               onClick={onClose}
-              className="absolute top-4 right-4 h-9 w-9 rounded-2xl flex items-center justify-center
+              className="absolute top-3 right-3 sm:top-4 sm:right-4 h-8 w-8 sm:h-9 sm:w-9 rounded-2xl flex items-center justify-center
                          bg-white/10 hover:bg-white/25 active:scale-95 transition-all duration-200
                          ring-1 ring-white/20"
               aria-label="Fermer"
@@ -399,7 +406,7 @@ export default function Modal({ open, person, onClose }) {
           </div>
         </div>
 
-        <div className="px-6 py-5 grid gap-4 bg-[#f4f7fb] dark:bg-[#0C1626]">
+        <div className="px-4 sm:px-6 py-4 sm:py-5 grid gap-4 bg-[#f4f7fb] dark:bg-[#0C1626]">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Chip
               icon={FiMail}
