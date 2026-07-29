@@ -13,6 +13,31 @@ import tailwindCssPath from "/src/index.css?url";
 // 🔁 Mets ici l'ID CMS de ta section "Bénéficiaires"
 const CMS_BENEFICIAIRES_ID = 3;
 
+// ⚠️ Cette section contient plusieurs images encodées en base64 (~4 Mo de
+// JSON) : le timeout global axios (15s, voir Dashboard.jsx) est bien trop
+// court pour elle sur une connexion lente. On l'override ici, et on met en
+// cache le dernier contenu chargé pour que la page s'affiche instantanément
+// (coûte que coûte) même si le réseau est lent ou temporairement en échec.
+const FETCH_TIMEOUT_MS = 60000;
+const CACHE_KEY = `mrd_cms_section_${CMS_BENEFICIAIRES_ID}`;
+
+function readCache() {
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(section) {
+  try {
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify(section));
+  } catch {
+    // quota dépassé ou storage indisponible : tant pis, pas bloquant
+  }
+}
+
 /**
  * ✅ Sticky + Iframe:
  * - sticky fonctionne si le scroll se fait DANS l’iframe
@@ -133,11 +158,12 @@ export default function Beneficiaires() {
     []
   );
 
-  const [state, setState] = useState({
-    loading: true,
-    error: "",
-    section: null,
-  });
+  const cached = useMemo(readCache, []);
+  const [state, setState] = useState(() =>
+    cached
+      ? { loading: false, error: "", section: cached }
+      : { loading: true, error: "", section: null }
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -146,30 +172,39 @@ export default function Beneficiaires() {
     const apiBase = String(API_BASE).replace(/\/api\/?$/, "").replace(/\/$/, "");
     const url = `${apiBase}/api/cms-sectionspublic/${CMS_BENEFICIAIRES_ID}`;
 
-    setState({ loading: true, error: "", section: null });
+    // Si on a déjà un contenu en cache, on l'affiche immédiatement et on ne
+    // remontre PAS l'écran "Chargement…" — on rafraîchit juste en tâche de fond.
+    setState((prev) => (prev.section ? prev : { loading: true, error: "", section: null }));
 
     axios
-      .get(url, { headers: { Accept: "application/json" }, signal: controller.signal, baseURL: "" })
+      .get(url, {
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+        baseURL: "",
+        timeout: FETCH_TIMEOUT_MS,
+      })
       .then((res) => {
         const json = res.data;
         const okStatus = String(json?.status || "").toLowerCase() === "published";
         if (!okStatus) {
-          setState({ loading: false, error: "Section CMS non publiée.", section: null });
+          setState((prev) => (prev.section ? prev : { loading: false, error: "Section CMS non publiée.", section: null }));
           return;
         }
 
-        setState({
-          loading: false,
-          error: "",
-          section: { ...json, css: normalizeCss(json?.css || "") },
-        });
+        const section = { ...json, css: normalizeCss(json?.css || "") };
+        writeCache(section);
+        setState({ loading: false, error: "", section });
       })
       .catch((e) => {
         if (e?.name === "CanceledError" || e?.code === "ERR_CANCELED") return;
         const msg = e?.response?.status
           ? `Erreur CMS: HTTP ${e.response.status}`
           : e?.message || "Erreur chargement CMS";
-        setState({ loading: false, error: msg, section: null });
+        // ✅ Coûte que coûte : si on a déjà un contenu (cache ou chargement
+        // précédent), on le garde affiché plutôt que de le remplacer par une
+        // erreur — l'échec du rafraîchissement en fond ne doit pas casser
+        // une page déjà visible.
+        setState((prev) => (prev.section ? prev : { loading: false, error: msg, section: null }));
       });
 
     return () => controller.abort();

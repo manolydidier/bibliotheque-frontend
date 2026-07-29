@@ -43,7 +43,7 @@ const AccordionItem = ({ title = "Autres", apiUrl, isDark = false, compact = fal
       setError("");
       try {
         const apiBase = buildApiBase();
-        const response = await axios.get(`${apiBase}/pagemiradia`);
+        const response = await axios.get(`${apiBase}/pagemiradia`, { baseURL: "" });
         const data = response.data.data;
 
         // Ajouter un élément par défaut si le tableau est vide
