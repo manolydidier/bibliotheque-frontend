@@ -266,12 +266,45 @@ export default function Modal({ open, person, onClose }) {
       if (e.key === "Escape") onClose?.();
     };
 
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    // ✅ `overflow:hidden` seul fait sauter le scroll à 0 sur cette page (le
+    // <body> agit comme conteneur de scroll réel ici) : on fige plutôt le
+    // body en `position:fixed` à sa position actuelle, ce qui bloque le
+    // scroll SANS bouger visuellement la page. On restaure la position
+    // exacte à la fermeture (sans animation, même si `scroll-behavior:
+    // smooth` est actif globalement).
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const prev = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      overflow: body.style.overflow,
+    };
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+    body.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);
 
     return () => {
-      document.body.style.overflow = previousOverflow;
+      body.style.position = prev.position;
+      body.style.top = prev.top;
+      body.style.left = prev.left;
+      body.style.right = prev.right;
+      body.style.width = prev.width;
+      body.style.overflow = prev.overflow;
+      // `scroll-behavior: smooth` est actif globalement (index.css) : sans
+      // ce forçage, { behavior:"auto" } est ignoré et le retour à la
+      // position d'origine se fait avec une animation visible d'~1s.
+      const html = document.documentElement;
+      const prevScrollBehavior = html.style.scrollBehavior;
+      html.style.scrollBehavior = "auto";
+      window.scrollTo(0, scrollY);
+      html.style.scrollBehavior = prevScrollBehavior;
       window.removeEventListener("keydown", onKey);
     };
   }, [open, onClose]);
