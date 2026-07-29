@@ -37,18 +37,20 @@ export default function useDynamicTranslate(getRoot, deps = []) {
     if (!root) return undefined;
 
     const targetLang = i18n.language || SOURCE_LANG;
-    let cancelled = false;
 
     cleanupRef.current();
-    cleanupRef.current = () => {};
-
-    translateSubtree(root, targetLang).then(() => {
-      if (cancelled) return;
-      cleanupRef.current = observeSubtree(root, () => i18n.language || SOURCE_LANG);
-    });
+    // ✅ On observe dès le départ, pas seulement après la 1ère passe : du
+    // contenu peut être ré-inséré (dangerouslySetInnerHTML re-rendu, image
+    // qui charge, animation d'ouverture...) PENDANT que translateSubtree est
+    // encore en train de traduire les premiers nœuds. Si on n'observe qu'une
+    // fois la passe initiale terminée, ces ré-insertions passent inaperçues
+    // et réaffichent le texte source. Le garde-fou de translateNodes (ne pas
+    // retraduire un nœud déjà à jour) évite toute boucle avec nos propres
+    // écritures vues par cet observer.
+    cleanupRef.current = observeSubtree(root, () => i18n.language || SOURCE_LANG);
+    translateSubtree(root, targetLang);
 
     return () => {
-      cancelled = true;
       cleanupRef.current();
       cleanupRef.current = () => {};
     };
