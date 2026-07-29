@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import CmsSectionRenderer from "../../UserManagementDashboard/Components/Backoffice/Miradia/cms/CmsSectionRenderer";
-import { readApiCache, writeApiCache } from "../../../utils/apiCache";
+import { getIdbCache, setIdbCache } from "../../../utils/idbCache";
 
 // ✅ Navbar + Footer (si c’est une page dédiée)
 import NavBarMiradia from "../../../component/navbar/NavbarMiradia"; // adapte si besoin
@@ -92,12 +92,15 @@ export default function DomainesIntervention() {
     []
   );
 
-  const cached = useMemo(() => readApiCache(CACHE_KEY), []);
-  const [state, setState] = useState(() =>
-    cached
-      ? { loading: false, error: "", section: cached }
-      : { loading: true, error: "", section: null }
-  );
+  const [state, setState] = useState({ loading: true, error: "", section: null });
+
+  useEffect(() => {
+    let alive = true;
+    getIdbCache(CACHE_KEY).then((cached) => {
+      if (alive && cached) setState((prev) => (prev.section ? prev : { loading: false, error: "", section: cached }));
+    });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -124,7 +127,7 @@ export default function DomainesIntervention() {
         }
 
         const section = { ...json, css: normalizeCss(json?.css || "") };
-        writeApiCache(CACHE_KEY, section);
+        setIdbCache(CACHE_KEY, section);
         setState({ loading: false, error: "", section });
       })
       .catch((e) => {

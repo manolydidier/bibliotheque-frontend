@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import CmsSectionRenderer from "../../UserManagementDashboard/Components/Backoffice/Miradia/cms/CmsSectionRenderer";
-import { readApiCache, writeApiCache } from "../../../utils/apiCache";
+import { getIdbCache, setIdbCache } from "../../../utils/idbCache";
 
 // ✅ Navbar + Footer
 import NavBarMiradia from "../../../component/navbar/NavbarMiradia"; // ✅ adapte si besoin
@@ -17,8 +17,10 @@ const CMS_BENEFICIAIRES_ID = 3;
 // ⚠️ Cette section contient plusieurs images encodées en base64 (~4 Mo de
 // JSON) : le timeout global axios (15s, voir Dashboard.jsx) est bien trop
 // court pour elle sur une connexion lente. On l'override ici, et on met en
-// cache le dernier contenu chargé pour que la page s'affiche instantanément
-// (coûte que coûte) même si le réseau est lent ou temporairement en échec.
+// cache (IndexedDB — sessionStorage a un quota bien trop petit pour ~4 Mo,
+// surtout partagé avec les autres caches du site) le dernier contenu chargé
+// pour que la page s'affiche instantanément (coûte que coûte) même si le
+// réseau est lent ou temporairement en échec.
 const FETCH_TIMEOUT_MS = 60000;
 const CACHE_KEY = `cms_section_${CMS_BENEFICIAIRES_ID}`;
 
@@ -142,12 +144,17 @@ export default function Beneficiaires() {
     []
   );
 
-  const cached = useMemo(() => readApiCache(CACHE_KEY), []);
-  const [state, setState] = useState(() =>
-    cached
-      ? { loading: false, error: "", section: cached }
-      : { loading: true, error: "", section: null }
-  );
+  const [state, setState] = useState({ loading: true, error: "", section: null });
+
+  // ✅ Cache IndexedDB (async) : dès qu'il répond, on affiche son contenu
+  // sans attendre le réseau — en général quelques ms, donc quasi instantané.
+  useEffect(() => {
+    let alive = true;
+    getIdbCache(CACHE_KEY).then((cached) => {
+      if (alive && cached) setState((prev) => (prev.section ? prev : { loading: false, error: "", section: cached }));
+    });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -176,7 +183,7 @@ export default function Beneficiaires() {
         }
 
         const section = { ...json, css: normalizeCss(json?.css || "") };
-        writeApiCache(CACHE_KEY, section);
+        setIdbCache(CACHE_KEY, section);
         setState({ loading: false, error: "", section });
       })
       .catch((e) => {

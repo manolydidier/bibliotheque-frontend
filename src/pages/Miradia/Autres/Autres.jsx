@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useParams } from "react-router-dom";
 import CmsSectionRenderer from "../../UserManagementDashboard/Components/Backoffice/Miradia/cms/CmsSectionRenderer";
-import { readApiCache, writeApiCache } from "../../../utils/apiCache";
+import { getIdbCache, setIdbCache } from "../../../utils/idbCache";
 
 import NavBarMiradia from "../../../component/navbar/NavbarMiradia";
 import Footer from "../Footer";
@@ -74,13 +74,16 @@ export default function Autres() {
     []
   );
 
-  const cacheKey = id ? `cms_section_${id}` : null;
-  const cached = useMemo(() => (cacheKey ? readApiCache(cacheKey) : null), [cacheKey]);
-  const [state, setState] = useState(() =>
-    cached
-      ? { loading: false, error: "", section: cached }
-      : { loading: true, error: "", section: null }
-  );
+  const [state, setState] = useState({ loading: true, error: "", section: null });
+
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    getIdbCache(`cms_section_${id}`).then((cached) => {
+      if (alive && cached) setState((prev) => (prev.section ? prev : { loading: false, error: "", section: cached }));
+    });
+    return () => { alive = false; };
+  }, [id]);
 
   useEffect(() => {
     if (!id) {
@@ -93,9 +96,11 @@ export default function Autres() {
     const apiBase = String(API_BASE).replace(/\/api\/?$/, "").replace(/\/$/, "");
     const url = `${apiBase}/api/cms-sectionspublic/${id}`; // Utilise l'ID dans l'URL API
 
-    // Contenu déjà en cache pour cet id → pas de "Chargement…", rafraîchi en fond.
-    const fromCache = readApiCache(`cms_section_${id}`);
-    setState(fromCache ? { loading: false, error: "", section: fromCache } : { loading: true, error: "", section: null });
+    // ⚠️ id peut avoir changé (navigation /autres/2 → /autres/5) : on repart
+    // toujours de "Chargement…" ici (pas de prev.section, qui appartiendrait
+    // au id précédent) — le cache IndexedDB pour CE id (effet ci-dessus)
+    // prendra le relais dès qu'il répond, en général quelques ms après.
+    setState({ loading: true, error: "", section: null });
 
     axios
       .get(url, {
@@ -113,7 +118,7 @@ export default function Autres() {
         }
 
         const section = { ...json, css: normalizeCss(json?.css || "") };
-        writeApiCache(`cms_section_${id}`, section);
+        setIdbCache(`cms_section_${id}`, section);
         setState({ loading: false, error: "", section });
       })
       .catch((e) => {
